@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "User": {
+      "title": "Usuário",
+      "description": "Perfil de integrante ou administrador",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "instruments": { "type": "array", "items": { "type": "string" } },
+        "vocalRange": { "type": "string", "enum": ["Soprano", "Contralto", "Mezzo", "Baixo", "Tenor", "Barítono", ""] },
+        "level": { "type": "string", "enum": ["aprendiz", "intermediário", "experiente", ""] },
+        "churchId": { "type": "string", "description": "ID da igreja/ministério relacionada" },
+        "role": { "type": "string", "enum": ["líder", "instrumentista"] },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role", "status"]
+    },
+    "Church": {
+      "title": "Igreja",
+      "description": "Congregação do ministério",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "pastor": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name"]
+    },
+    "Song": {
+      "title": "Música",
+      "description": "Repertório do ministério",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "artist": { "type": "string" },
+        "key": { "type": "string" },
+        "link": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title"]
+    },
+    "Schedule": {
+      "title": "Escala",
+      "description": "Planejamento de louvor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "churchId": { "type": "string" },
+        "songs": { "type": "array" },
+        "members": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "date", "churchId"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": { "schema": "User", "description": "Perfis de usuários" },
+    "churches/{churchId}": { "schema": "Church", "description": "Listagem de igrejas" },
+    "songs/{songId}": { "schema": "Song", "description": "Repertório musical" },
+    "schedules/{scheduleId}": { "schema": "Schedule", "description": "Escalas de louvor" }
+  }
+}

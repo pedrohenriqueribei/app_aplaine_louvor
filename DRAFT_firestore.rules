@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Secure Admin check: Only check if document exists before getting data
+    function isAdmin() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'líder';
+    }
+
+    // --- Validation Helpers ---
+
+    function isValidUser(data) {
+      let requiredFields = ['uid', 'name', 'email', 'role', 'status'];
+      return data.keys().hasAll(requiredFields) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.email is string && data.email.size() <= 100 &&
+             data.role in ['líder', 'instrumentista'] &&
+             data.status in ['active', 'inactive'] &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 20)) &&
+             (!('vocalRange' in data) || (data.vocalRange is string)) &&
+             (!('level' in data) || (data.level is string)) &&
+             (!('churchId' in data) || (data.churchId is string)) &&
+             (!('instruments' in data) || (data.instruments is list && data.instruments.size() <= 20));
+    }
+
+    // --- Match Blocks ---
+
+    match /users/{userId} {
+      // Allow any signed-in user to see team directory
+      allow read: if isSignedIn();
+      
+      allow create: if isOwner(userId) && 
+        isValidId(userId) &&
+        isValidUser(incoming()) &&
+        incoming().uid == userId &&
+        incoming().email == request.auth.token.email &&
+        // Leaders can only be created via Pedro's email (bootstrap) or by existing admins
+        (incoming().role == 'instrumentista' || (incoming().email == 'pedrohenriqueribei@gmail.com' && incoming().role == 'líder'));
+      
+      allow update: if isValidId(userId) && (
+        (isOwner(userId) && isValidUser(incoming()) && (
+          isAdmin() || (
+            incoming().role == existing().role && // Cannot change own role
+            incoming().status == existing().status && // Cannot change own status
+            incoming().email == existing().email && // Cannot change email
+            incoming().uid == existing().uid        // Cannot change UID
+          )
+        )) ||
+        isAdmin()
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /churches/{churchId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /songs/{songId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /schedules/{scheduleId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

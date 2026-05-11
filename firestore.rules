@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Secure Admin check: Only check if document exists before getting data
+    function isAdmin() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'líder';
+    }
+
+    // --- Validation Helpers ---
+
+    function isValidUser(data) {
+      // Allow partial updates if the merged result is valid
+      let requiredFields = ['uid', 'name', 'email', 'role', 'status'];
+      return data.keys().hasAll(requiredFields) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.email is string && data.email.size() <= 100 &&
+             data.role in ['líder', 'instrumentista'] &&
+             data.status in ['active', 'inactive'] &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
+             (!('vocalRange' in data) || (data.vocalRange is string)) &&
+             (!('level' in data) || (data.level is string)) &&
+             (!('churchId' in data) || (data.churchId is string)) &&
+             (!('instruments' in data) || (data.instruments is list && data.instruments.size() <= 50));
+    }
+
+    // --- Match Blocks ---
+
+    match /users/{userId} {
+      // Users can see members of their own church
+      // For list queries, this forces a 'where' clause or filter.
+      // Note: O(n) get() calls in list are forbidden by guidelines, so we check resource.data
+      allow read: if isSignedIn() && (
+        isOwner(userId) || 
+        isAdmin() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.churchId == resource.data.churchId)
+      );
+      
+      allow create: if (isOwner(userId) || isAdmin()) && 
+        isValidId(userId) &&
+        isValidUser(incoming()) &&
+        (isOwner(userId) ? (
+          incoming().uid == userId &&
+          incoming().email == request.auth.token.email &&
+          (incoming().role == 'instrumentista' || (incoming().email == 'pedrohenriqueribei@gmail.com' && incoming().role == 'líder'))
+        ) : true); // Admin can create others
+      
+      allow update: if (isOwner(userId) || isAdmin()) && 
+        isValidId(userId) && 
+        isValidUser(incoming()) && (
+          isAdmin() || (
+            // Non-admin owners can only update specific profile fields
+            incoming().role == existing().role &&
+            incoming().status == existing().status &&
+            incoming().email == existing().email &&
+            incoming().uid == existing().uid
+          )
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    match /churches/{churchId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /songs/{songId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /schedules/{scheduleId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
