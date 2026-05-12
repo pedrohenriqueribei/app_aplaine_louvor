@@ -256,6 +256,13 @@ export default function SongsPage() {
     }));
   };
 
+  const getYoutubeId = (url: string) => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
   const filteredSongs = songs.filter(song => {
     const matchesSearch = 
       song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -483,19 +490,34 @@ export default function SongsPage() {
                       <p className="text-xl font-black">{viewingSong.timeSignature}</p>
                     </div>
                   )}
-                  <a 
-                    href={viewingSong.link} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="ml-auto flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-8 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-red-900/20 transition-all"
-                  >
-                    <Youtube className="w-4 h-4" /> Ouvir no YouTube
-                  </a>
                 </div>
               </div>
 
               {/* Content */}
               <div className="flex-1 overflow-y-auto p-8 md:p-12 space-y-10">
+                {getYoutubeId(viewingSong.link) ? (
+                  <div className="aspect-video w-full rounded-[2rem] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 bg-black">
+                    <iframe
+                      width="100%"
+                      height="100%"
+                      src={`https://www.youtube.com/embed/${getYoutubeId(viewingSong.link)}`}
+                      title="YouTube video player"
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    ></iframe>
+                  </div>
+                ) : (
+                  <a 
+                    href={viewingSong.link} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-3 w-full py-6 bg-slate-50 dark:bg-slate-800 rounded-[2rem] text-sm font-black uppercase tracking-widest text-slate-800 dark:text-slate-200 hover:bg-blue-800 hover:text-white transition-all border border-slate-100 dark:border-slate-800"
+                  >
+                    <ExternalLink className="w-5 h-5" /> Abrir Link da Música
+                  </a>
+                )}
+
                 {viewingSong.tags && viewingSong.tags.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {viewingSong.tags.map(tag => (
