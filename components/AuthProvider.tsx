@@ -11,7 +11,7 @@ interface AuthContextType {
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
-  signUpWithEmail: (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string }) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithEmailAndPassword(auth, email, pass);
   };
 
-  const signUpWithEmail = async (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string }) => {
+  const signUpWithEmail = async (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string }) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
     const user = userCredential.user;
     
@@ -99,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       phone: data.phone,
       instruments: data.instruments,
       vocalRange: data.vocalRange,
+      churchId: data.churchId || '',
       role: isAdminEmail ? 'líder' : 'instrumentista',
       status: 'active',
       createdAt: serverTimestamp()

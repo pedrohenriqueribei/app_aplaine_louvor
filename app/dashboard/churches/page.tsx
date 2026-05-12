@@ -80,7 +80,7 @@ export default function ChurchesPage() {
           <input 
             type="text" 
             placeholder="Buscar igreja..." 
-            className="w-full pl-12 pr-4 py-3.5 bg-white rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-800 transition-all text-slate-700 outline-none shadow-sm"
+            className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/20 focus:border-blue-800 transition-all text-slate-700 dark:text-slate-200 outline-none shadow-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -107,35 +107,35 @@ export default function ChurchesPage() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-all relative group overflow-hidden"
+              className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all relative group overflow-hidden"
             >
               <div 
                 className="p-6 cursor-pointer"
                 onClick={() => router.push(`/dashboard/churches/${church.id}`)}
               >
-                <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-800 mb-6 group-hover:scale-110 transition-transform">
+                <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-blue-800 dark:text-blue-400 mb-6 group-hover:scale-110 transition-transform">
                   <Church className="w-6 h-6" />
                 </div>
                 
-                <h3 className="text-xl font-display font-bold text-slate-800 mb-4">{church.name}</h3>
+                <h3 className="text-xl font-display font-bold text-slate-800 dark:text-slate-100 mb-4">{church.name}</h3>
                 
                 <div className="space-y-3 mb-2">
-                  <div className="flex items-center gap-3 text-slate-500 text-sm">
-                    <PastorIcon className="w-4 h-4 text-blue-400" />
+                  <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 text-sm">
+                    <PastorIcon className="w-4 h-4 text-blue-400 dark:text-blue-500" />
                     <span className="font-medium">{church.pastor || 'Pastor não informado'}</span>
                   </div>
-                  <div className="flex items-start gap-3 text-slate-400 text-xs">
-                    <MapPin className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
+                  <div className="flex items-start gap-3 text-slate-400 dark:text-slate-500 text-xs">
+                    <MapPin className="w-4 h-4 text-slate-300 dark:text-slate-700 mt-0.5 shrink-0" />
                     <span className="leading-relaxed line-clamp-2">{church.address || 'Endereço não informado'}</span>
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center gap-2 text-blue-800 text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="mt-4 flex items-center gap-2 text-blue-800 dark:text-blue-400 text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
                   Ver detalhes <ArrowRight className="w-3 h-3" />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end p-4 bg-slate-50/50 border-t border-slate-50">
+              <div className="flex items-center justify-end p-4 bg-slate-50/50 dark:bg-slate-800/50 border-t border-slate-50 dark:border-slate-800">
                 <button 
                   onClick={() => {
                     setEditingChurch(church);
@@ -157,12 +157,12 @@ export default function ChurchesPage() {
       </div>
 
       {filteredChurches.length === 0 && !loading && (
-        <div className="bg-white p-20 rounded-[3rem] border border-slate-200 border-dashed flex flex-col items-center text-center">
-          <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center mb-6 text-slate-300">
+        <div className="bg-white dark:bg-slate-900 p-20 rounded-[3rem] border border-slate-200 dark:border-slate-800 border-dashed flex flex-col items-center text-center">
+          <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-[2rem] flex items-center justify-center mb-6 text-slate-300 dark:text-slate-700">
             <Waves size={40} />
           </div>
-          <h3 className="text-xl font-bold text-slate-800 mb-2">Nenhuma igreja cadastrada</h3>
-          <p className="text-slate-500 max-w-sm">Comece cadastrando as congregações do seu ministério.</p>
+          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Nenhuma igreja cadastrada</h3>
+          <p className="text-slate-500 dark:text-slate-400 max-w-sm">Comece cadastrando as congregações do seu ministério.</p>
         </div>
       )}
 
@@ -180,21 +180,21 @@ export default function ChurchesPage() {
               initial={{ opacity: 0, scale: 0.9, y: 40 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 40 }}
-              className="relative w-full max-w-xl bg-white rounded-[3rem] shadow-2xl p-12 overflow-hidden"
+              className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl p-12 overflow-hidden"
             >
               <div className="absolute top-0 right-0 w-64 h-64 bg-blue-800/10 blur-[100px] -mr-32 -mt-32"></div>
               
-              <h2 className="text-3xl font-display font-bold text-slate-800 mb-10">
+              <h2 className="text-3xl font-display font-bold text-slate-800 dark:text-slate-100 mb-10">
                 {editingChurch ? 'Editar Igreja' : 'Nova Igreja'}
               </h2>
 
               <form onSubmit={handleSave} className="space-y-8 relative z-10 text-sm">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Nome da Igreja</label>
+                  <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Nome da Igreja</label>
                   <input 
                     required
                     type="text" 
-                    className="w-full px-5 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white outline-none transition-all placeholder:text-slate-300 font-medium"
+                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white dark:focus:bg-slate-700 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 font-medium text-slate-800 dark:text-slate-100"
                     value={formData.name}
                     onChange={e => setFormData({...formData, name: e.target.value})}
                     placeholder="Ex: Assembleia de Deus Central"
@@ -202,10 +202,10 @@ export default function ChurchesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Pastor Resposável</label>
+                  <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Pastor Resposável</label>
                   <input 
                     type="text" 
-                    className="w-full px-5 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white outline-none transition-all placeholder:text-slate-300 font-medium"
+                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white dark:focus:bg-slate-700 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 font-medium text-slate-800 dark:text-slate-100"
                     value={formData.pastor}
                     onChange={e => setFormData({...formData, pastor: e.target.value})}
                     placeholder="Nome do pastor"
@@ -213,10 +213,10 @@ export default function ChurchesPage() {
                 </div>
                 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Endereço</label>
+                  <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Endereço</label>
                   <textarea 
                     rows={3}
-                    className="w-full px-5 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white outline-none transition-all placeholder:text-slate-300 font-medium resize-none"
+                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white dark:focus:bg-slate-700 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 font-medium resize-none text-slate-800 dark:text-slate-100"
                     value={formData.address}
                     onChange={e => setFormData({...formData, address: e.target.value})}
                     placeholder="Rua, Número, Bairro, Cidade"

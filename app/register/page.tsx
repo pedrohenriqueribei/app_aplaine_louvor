@@ -1,15 +1,17 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, Lock, User as UserIcon, ArrowRight, Music, CheckCircle2, Phone, Mic2, Home } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, ArrowRight, Music, CheckCircle2, Phone, Mic2, Home, Church } from 'lucide-react';
 
-export default function RegisterPage() {
+function RegisterForm() {
   const { user, signUpWithEmail, signInWithGoogle, loading } = useAuth();
   const router = useRouter();
-  
+  const searchParams = useSearchParams();
+  const churchIdFromUrl = searchParams.get('churchId');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -31,7 +33,8 @@ export default function RegisterPage() {
       await signUpWithEmail(email, password, name, {
         phone,
         instruments: instrumentsSelected,
-        vocalRange
+        vocalRange,
+        churchId: churchIdFromUrl || ''
       });
       router.push('/dashboard');
     } catch (err: any) {
@@ -110,6 +113,18 @@ export default function RegisterPage() {
               Preencha os dados abaixo para se juntar ao ministério.
             </p>
           </div>
+
+          {churchIdFromUrl && (
+            <div className="mb-8 p-6 bg-blue-50 border border-blue-100 rounded-3xl flex items-center gap-4">
+              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-blue-800 shadow-sm">
+                <Church className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-1">Convite Ativo</div>
+                <div className="text-sm font-bold text-slate-700">Vínculo automático com a igreja</div>
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 rounded-2xl text-sm font-medium">
@@ -266,6 +281,18 @@ export default function RegisterPage() {
         </motion.div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-800 rounded-full animate-spin"></div>
+      </div>
+    }>
+      <RegisterForm />
+    </Suspense>
   );
 }
 

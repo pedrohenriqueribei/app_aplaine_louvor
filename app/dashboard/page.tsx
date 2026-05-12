@@ -39,9 +39,11 @@ export default function DashboardPage() {
           ? collection(db, 'users')
           : query(collection(db, 'users'), where('churchId', '==', userData.churchId));
 
+        const songsQuery = query(collection(db, 'songs'), where('ownerId', '==', userData.uid));
+
         const [membersSnap, songsSnap, schedulesSnap, churchesSnap] = await Promise.all([
           getDocs(membersQuery),
-          getDocs(collection(db, 'songs')),
+          getDocs(songsQuery),
           getDocs(collection(db, 'schedules')),
           getDocs(collection(db, 'churches'))
         ]);
@@ -53,7 +55,7 @@ export default function DashboardPage() {
           churches: churchesSnap.size
         });
       } catch (err: any) {
-        console.error('Dashboard Data Fetch Error:', err);
+        handleFirestoreError(err, OperationType.LIST, 'dashboard');
       }
     }
     fetchData();
@@ -75,13 +77,13 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.1 }}
-            className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group"
+            className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group"
           >
-            <div className={`w-14 h-14 ${card.bg} rounded-2xl flex items-center justify-center ${card.color} mb-6 group-hover:scale-110 transition-transform`}>
+            <div className={`w-14 h-14 ${card.bg} dark:bg-opacity-20 rounded-2xl flex items-center justify-center ${card.color} dark:text-opacity-90 mb-6 group-hover:scale-110 transition-transform`}>
               <card.icon className="w-7 h-7" />
             </div>
-            <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-1">{card.label}</p>
-            <h3 className="text-4xl font-display font-black text-slate-800 tracking-tight">{card.value}</h3>
+            <p className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest text-[10px] mb-1">{card.label}</p>
+            <h3 className="text-4xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tight">{card.value}</h3>
           </motion.div>
         ))}
       </div>
@@ -89,22 +91,22 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         <div className="lg:col-span-2 space-y-8">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-display font-black text-slate-800 tracking-tight">Próximas Escalas</h2>
-            <button className="text-sm font-bold text-blue-800 hover:underline px-4 py-2 hover:bg-blue-50 rounded-lg transition-all">Ver todas</button>
+            <h2 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tight">Próximas Escalas</h2>
+            <button className="text-sm font-bold text-blue-800 dark:text-blue-400 hover:underline px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all">Ver todas</button>
           </div>
           
-          <div className="bg-white rounded-[3rem] border border-slate-200 p-8 shadow-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-200 dark:border-slate-800 p-8 shadow-sm">
              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 mb-4">
+                <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-slate-300 dark:text-slate-600 mb-4">
                   <Calendar size={32} />
                 </div>
-                <p className="text-slate-500 font-medium">Nenhuma escala para os próximos dias.</p>
+                <p className="text-slate-500 dark:text-slate-400 font-medium">Nenhuma escala para os próximos dias.</p>
              </div>
           </div>
         </div>
 
         <div className="space-y-8">
-          <h2 className="text-2xl font-display font-black text-slate-800 tracking-tight">Novidades</h2>
+          <h2 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tight">Novidades</h2>
           <div className="bg-gradient-to-br from-blue-800 to-indigo-900 rounded-[3rem] p-8 text-white shadow-2xl relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 blur-3xl -mr-16 -mt-16 group-hover:bg-white/20 transition-all"></div>
             <BarChart3 className="w-12 h-12 mb-6 text-blue-200" />
@@ -115,11 +117,11 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="pt-12 border-t border-slate-100 mt-20">
-        <div className="bg-slate-50 rounded-[3rem] p-12 flex flex-col md:flex-row items-center justify-between gap-8 border border-white">
+      <div className="pt-12 border-t border-slate-100 dark:border-slate-800 mt-20">
+        <div className="bg-slate-50 dark:bg-slate-900 rounded-[3rem] p-12 flex flex-col md:flex-row items-center justify-between gap-8 border border-white dark:border-slate-800">
           <div className="space-y-4 text-center md:text-left">
-            <h3 className="text-2xl font-display font-black text-slate-800 tracking-tight">Segurança da Conta</h3>
-            <p className="text-slate-500 text-sm max-w-md">
+            <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tight">Segurança da Conta</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm max-w-md">
               Mantenha sua conta segura. Se você deseja alterar sua senha, clicando no botão ao lado enviaremos um link de redefinição para o seu e-mail cadastrado.
             </p>
           </div>
@@ -128,8 +130,8 @@ export default function DashboardPage() {
             onClick={handleResetPassword}
             className={`flex items-center gap-3 px-8 py-5 rounded-3xl font-black uppercase tracking-widest text-xs transition-all shadow-xl active:scale-95 ${
               resetSent 
-                ? 'bg-emerald-100 text-emerald-600 shadow-emerald-500/10' 
-                : 'bg-white text-slate-800 hover:bg-slate-800 hover:text-white shadow-slate-200'
+                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 shadow-emerald-500/10' 
+                : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-800 dark:hover:bg-slate-700 hover:text-white shadow-slate-200 dark:shadow-none'
             }`}
           >
             {resetSent ? (

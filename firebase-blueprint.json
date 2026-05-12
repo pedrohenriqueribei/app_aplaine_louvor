@@ -34,7 +34,7 @@
     },
     "Song": {
       "title": "Música",
-      "description": "Repertório do ministério",
+      "description": "Repertório musical do usuário",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -42,9 +42,15 @@
         "artist": { "type": "string" },
         "key": { "type": "string" },
         "link": { "type": "string" },
+        "sheet": { "type": "string", "description": "Cifra da música" },
+        "bpm": { "type": "string" },
+        "timeSignature": { "type": "string", "description": "Compasso" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "observations": { "type": "string" },
+        "ownerId": { "type": "string", "description": "UID do usuário que cadastrou" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "title"]
+      "required": ["id", "title", "artist", "key", "link", "ownerId"]
     },
     "Schedule": {
       "title": "Escala",

@@ -54,17 +54,37 @@ service cloud.firestore {
              (!('instruments' in data) || (data.instruments is list && data.instruments.size() <= 50));
     }
 
+    function isValidSong(data) {
+      let requiredFields = ['id', 'title', 'artist', 'key', 'link', 'ownerId', 'createdAt', 'updatedAt'];
+      return data.keys().hasAll(requiredFields) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.title is string && data.title.size() <= 200 &&
+             data.artist is string && data.artist.size() <= 200 &&
+             data.key is string && data.key.size() <= 20 &&
+             data.link is string && data.link.size() <= 500 &&
+             data.ownerId == request.auth.uid &&
+             (!('sheet' in data) || (data.sheet is string && data.sheet.size() <= 10000)) &&
+             (!('bpm' in data) || (data.bpm is string && data.bpm.size() <= 10)) &&
+             (!('timeSignature' in data) || (data.timeSignature is string && data.timeSignature.size() <= 20)) &&
+             (!('tags' in data) || (data.tags is list && data.tags.size() <= 20)) &&
+             (!('observations' in data) || (data.observations is string && data.observations.size() <= 2000));
+    }
+
     // --- Match Blocks ---
 
     match /users/{userId} {
-      // Users can see members of their own church
-      // For list queries, this forces a 'where' clause or filter.
-      // Note: O(n) get() calls in list are forbidden by guidelines, so we check resource.data
-      allow read: if isSignedIn() && (
+      // Split read into get and list for better security and performance
+      allow get: if isSignedIn() && (
         isOwner(userId) || 
         isAdmin() || 
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.churchId == resource.data.churchId)
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.churchId == get(/databases/$(database)/documents/users/$(userId)).data.churchId)
+      );
+
+      allow list: if isSignedIn() && (
+        isAdmin() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         resource.data.churchId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.churchId)
       );
       
       allow create: if (isOwner(userId) || isAdmin()) && 
@@ -73,14 +93,13 @@ service cloud.firestore {
         (isOwner(userId) ? (
           incoming().uid == userId &&
           incoming().email == request.auth.token.email &&
-          (incoming().role == 'instrumentista' || (incoming().email == 'pedrohenriqueribei@gmail.com' && incoming().role == 'líder'))
-        ) : true); // Admin can create others
+          (incoming().role == 'instrumentista' || (incoming().role == 'líder' && incoming().email == 'pedrohenriqueribei@gmail.com'))
+        ) : true);
       
       allow update: if (isOwner(userId) || isAdmin()) && 
         isValidId(userId) && 
         isValidUser(incoming()) && (
           isAdmin() || (
-            // Non-admin owners can only update specific profile fields
             incoming().role == existing().role &&
             incoming().status == existing().status &&
             incoming().email == existing().email &&
@@ -97,8 +116,15 @@ service cloud.firestore {
     }
 
     match /songs/{songId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(songId) && isValidSong(incoming()) && 
+                    incoming().id == songId && incoming().createdAt == request.time && 
+                    incoming().updatedAt == request.time;
+      allow update: if isSignedIn() && isValidId(songId) && resource.data.ownerId == request.auth.uid && 
+                    isValidSong(incoming()) && incoming().createdAt == existing().createdAt && 
+                    incoming().updatedAt == request.time && incoming().ownerId == existing().ownerId &&
+                    incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(songId) && resource.data.ownerId == request.auth.uid;
     }
 
     match /schedules/{scheduleId} {

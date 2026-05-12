@@ -162,7 +162,7 @@ export default function MembersPage() {
           <input 
             type="text" 
             placeholder="Buscar integrante..." 
-            className="w-full pl-12 pr-4 py-3.5 bg-white rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-800 transition-all text-slate-700 outline-none shadow-sm"
+            className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/20 focus:border-blue-800 transition-all text-slate-700 dark:text-slate-200 outline-none shadow-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -182,14 +182,14 @@ export default function MembersPage() {
         )}
       </div>
 
-      <div className="bg-white rounded-[3rem] border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-slate-50/50">
-              <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Integrante</th>
-              <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Instrumento</th>
-              <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Cargo</th>
-              <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 text-right">Ações</th>
+            <tr className="bg-slate-50/50 dark:bg-slate-800/50">
+              <th className="px-10 py-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">Integrante</th>
+              <th className="px-10 py-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">Instrumento</th>
+              <th className="px-10 py-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">Cargo</th>
+              <th className="px-10 py-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 text-right">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -201,51 +201,51 @@ export default function MembersPage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="group hover:bg-slate-50/50 transition-colors"
+                  className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors"
                 >
-                  <td className="px-10 py-6 border-b border-dashed border-slate-100">
+                  <td className="px-10 py-6 border-b border-dashed border-slate-100 dark:border-slate-800">
                     <Link href={`/dashboard/members/${member.uid}`} className="flex items-center gap-4 hover:opacity-80 transition-opacity group/link">
-                      <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-800 font-black group-hover/link:bg-blue-100 transition-colors">
+                      <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-blue-800 dark:text-blue-400 font-black group-hover/link:bg-blue-100 dark:group-hover/link:bg-blue-900/50 transition-colors">
                         {member.name.charAt(0)}
                       </div>
                       <div>
-                        <p className="font-bold text-slate-800 flex items-center gap-2 group-hover/link:text-blue-800 transition-colors">
+                        <p className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 group-hover/link:text-blue-800 dark:group-hover/link:text-blue-400 transition-colors">
                           {member.name}
                           {member.status === 'active' ? (
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                           ) : (
-                            <XCircle className="w-3.5 h-3.5 text-slate-300" />
+                            <XCircle className="w-3.5 h-3.5 text-slate-300 dark:text-slate-700" />
                           )}
                         </p>
-                        <p className="text-xs text-slate-400 font-medium">{member.email}</p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">{member.email}</p>
                       </div>
                     </Link>
                   </td>
-                  <td className="px-10 py-6 border-b border-dashed border-slate-100 text-sm">
+                  <td className="px-10 py-6 border-b border-dashed border-slate-100 dark:border-slate-800 text-sm">
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap gap-1">
                         {member.instruments && member.instruments.length > 0 ? (
                           member.instruments.map(inst => (
-                            <span key={inst} className="font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded text-xs">
+                            <span key={inst} className="font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-xs">
                               {inst}
                             </span>
                           ))
                         ) : (
-                          <span className="font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg text-xs">
+                          <span className="font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-lg text-xs">
                             {member.instrument || '---'}
                           </span>
                         )}
                       </div>
                       {member.level && (
-                        <span className="inline-block w-fit px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[9px] font-black uppercase tracking-wider border border-emerald-100">
+                        <span className="inline-block w-fit px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded text-[9px] font-black uppercase tracking-wider border border-emerald-100 dark:border-emerald-800">
                           {member.level}
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="px-10 py-6 border-b border-dashed border-slate-100">
+                  <td className="px-10 py-6 border-b border-dashed border-slate-100 dark:border-slate-800">
                     <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center gap-2 text-sm font-bold text-slate-500">
+                      <div className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400">
                         {member.role === 'líder' ? (
                           <Shield className="w-4 h-4 text-amber-500" />
                         ) : (
@@ -254,13 +254,13 @@ export default function MembersPage() {
                         {member.role === 'líder' ? 'Líder' : 'Instrumentista'}
                       </div>
                       {member.churchId && (
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider pl-6">
+                        <span className="text-[10px] text-slate-400 dark:text-slate-600 font-bold uppercase tracking-wider pl-6">
                           {churches.find(c => c.id === member.churchId)?.name || '...'}
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="px-10 py-6 border-b border-dashed border-slate-100 text-right">
+                  <td className="px-10 py-6 border-b border-dashed border-slate-100 dark:border-slate-800 text-right">
                     {userProfile?.role === 'líder' && (
                       <button 
                         onClick={() => {
@@ -279,7 +279,7 @@ export default function MembersPage() {
                           });
                           setIsModalOpen(true);
                         }}
-                        className="p-3 text-slate-300 hover:text-blue-800 transition-colors hover:bg-blue-50 rounded-2xl"
+                        className="p-3 text-slate-300 dark:text-slate-700 hover:text-blue-800 dark:hover:text-blue-400 transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-2xl"
                       >
                         <Edit2 className="w-5 h-5" />
                       </button>
@@ -313,33 +313,33 @@ export default function MembersPage() {
               initial={{ opacity: 0, scale: 0.9, y: 40 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 40 }}
-              className="relative w-full max-w-xl bg-white rounded-[3rem] shadow-2xl p-12 overflow-hidden"
+              className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl p-12 overflow-hidden"
             >
               <div className="absolute top-0 right-0 w-64 h-64 bg-blue-800/10 blur-[100px] -mr-32 -mt-32"></div>
               
-              <h2 className="text-3xl font-display font-bold text-slate-800 mb-10">
+              <h2 className="text-3xl font-display font-bold text-slate-800 dark:text-slate-100 mb-10">
                 {editingMember ? 'Editar Integrante' : 'Novo Integrante'}
               </h2>
 
               <form onSubmit={handleSave} className="space-y-6 relative z-10 text-sm max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Nome Completo</label>
+                    <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Nome Completo</label>
                     <input 
                       required
                       type="text" 
-                      className="w-full px-5 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white outline-none transition-all placeholder:text-slate-300 font-medium"
+                      className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white dark:focus:bg-slate-700 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 font-medium text-slate-800 dark:text-slate-100"
                       value={formData.name}
                       onChange={e => setFormData({...formData, name: e.target.value})}
                       placeholder="Ex: João Silva"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">E-mail</label>
+                    <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">E-mail</label>
                     <input 
                       required
                       type="email" 
-                      className="w-full px-5 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white outline-none transition-all placeholder:text-slate-300 font-medium"
+                      className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white dark:focus:bg-slate-700 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 font-medium text-slate-800 dark:text-slate-100"
                       value={formData.email}
                       onChange={e => setFormData({...formData, email: e.target.value})}
                       placeholder="email@exemplo.com"
@@ -349,10 +349,10 @@ export default function MembersPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Telefone</label>
+                    <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Telefone</label>
                     <input 
                       type="tel" 
-                      className="w-full px-5 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white outline-none transition-all placeholder:text-slate-300 font-medium"
+                      className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white dark:focus:bg-slate-700 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 font-medium text-slate-800 dark:text-slate-100"
                       value={formData.phone}
                       onChange={e => setFormData({...formData, phone: e.target.value})}
                       placeholder="(00) 00000-0000"
