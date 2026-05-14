@@ -6,6 +6,7 @@ import { db, handleFirestoreError, OperationType } from '@/lib/firebase';
 import { Plus, Search, Edit2, MapPin, Church, User as PastorIcon, Waves, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/components/AuthProvider';
 
 interface ChurchType {
   id: string;
@@ -16,6 +17,7 @@ interface ChurchType {
 
 export default function ChurchesPage() {
   const router = useRouter();
+  const { userData } = useAuth();
   const [churches, setChurches] = useState<ChurchType[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -85,17 +87,19 @@ export default function ChurchesPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <button 
-          onClick={() => {
-            setEditingChurch(null);
-            setFormData({ name: '', address: '', pastor: '' });
-            setIsModalOpen(true);
-          }}
-          className="bg-blue-800 hover:bg-blue-900 text-white px-8 py-3.5 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-xl shadow-blue-800/20 active:scale-95 w-full md:w-auto justify-center"
-        >
-          <Plus className="w-5 h-5" />
-          Cadastrar Igreja
-        </button>
+        {userData?.role === 'líder' && (
+          <button 
+            onClick={() => {
+              setEditingChurch(null);
+              setFormData({ name: '', address: '', pastor: '' });
+              setIsModalOpen(true);
+            }}
+            className="bg-blue-800 hover:bg-blue-900 text-white px-8 py-3.5 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-xl shadow-blue-800/20 active:scale-95 w-full md:w-auto justify-center"
+          >
+            <Plus className="w-5 h-5" />
+            Cadastrar Igreja
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

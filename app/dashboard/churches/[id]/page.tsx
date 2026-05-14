@@ -2,15 +2,16 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/lib/firebase';
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Church, MapPin, User as PastorIcon, Users, 
   Music, Mic2, Shield, Calendar, Mail, Phone, ExternalLink, Waves,
-  Copy, Check
+  Copy, Check, Clock, Plus, X
 } from 'lucide-react';
 import Link from 'next/link';
+import { useAuth } from '@/components/AuthProvider';
 
 interface Musician {
   uid: string;
@@ -31,13 +32,35 @@ interface ChurchType {
   pastor: string;
 }
 
+interface ServiceType {
+  id: string;
+  churchId: string;
+  name: string;
+  description: string;
+  startTime: string;
+  endTime: string;
+  dayOfWeek: string;
+}
+
 export default function ChurchDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const { userData } = useAuth();
   const [church, setChurch] = useState<ChurchType | null>(null);
   const [members, setMembers] = useState<Musician[]>([]);
+  const [services, setServices] = useState<ServiceType[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [savingService, setSavingService] = useState(false);
+  const [serviceFormData, setServiceFormData] = useState({
+    name: '',
+    description: '',
+    startTime: '',
+    endTime: '',
+    dayOfWeek: 'Domingo'
+  });
 
   const handleCopyLink = () => {
     const inviteUrl = `${window.location.origin}/register?churchId=${id}`;
@@ -64,6 +87,14 @@ export default function ChurchDetailPage() {
         const memberSnap = await getDocs(q);
         setMembers(memberSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() } as Musician)));
 
+        // Fetch Services
+        const servicesQ = query(
+          collection(db, 'services'),
+          where('churchId', '==', id)
+        );
+        const servicesSnap = await getDocs(servicesQ);
+        setServices(servicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceType)));
+
       } catch (err) {
         handleFirestoreError(err, OperationType.GET, `churches/${id}`);
       } finally {
@@ -73,6 +104,24 @@ export default function ChurchDetailPage() {
 
     if (id) fetchData();
   }, [id]);
+
+  const handleSaveService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingService(true);
+    try {
+      const docRef = await addDoc(collection(db, 'services'), {
+        ...serviceFormData,
+        churchId: id,
+        createdAt: serverTimestamp()
+      });
+      setServices([...services, { id: docRef.id, churchId: id as string, ...serviceFormData }]);
+      setIsServiceModalOpen(false);
+    } catch (err: any) {
+      alert('Erro ao salvar culto: ' + err.message);
+    } finally {
+      setSavingService(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -315,6 +364,159 @@ export default function ChurchDetailPage() {
           </section>
         </div>
       </div>
+
+      <section className="bg-white dark:bg-slate-900 rounded-[4rem] p-12 border border-slate-100 dark:border-slate-800 shadow-sm relative mt-12">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
+          <div className="space-y-2">
+            <h2 className="text-3xl font-display font-black text-slate-800 dark:text-slate-100 flex items-center gap-4">
+              <Church className="w-8 h-8 text-blue-800 dark:text-blue-400" />
+              Cultos da Igreja
+            </h2>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Veja todos os cultos e horários associados a esta igreja.</p>
+          </div>
+          {userData?.role === 'líder' && userData?.churchId === id && (
+            <button 
+              onClick={() => {
+                setServiceFormData({ name: '', description: '', startTime: '', endTime: '', dayOfWeek: 'Domingo' });
+                setIsServiceModalOpen(true);
+              }}
+              className="bg-blue-800 hover:bg-blue-900 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-xl shadow-blue-800/20 active:scale-95"
+            >
+              <Plus className="w-5 h-5" />
+              Cadastrar Culto
+            </button>
+          )}
+        </div>
+
+        {services.length === 0 ? (
+          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-[3rem] p-16 text-center border border-dashed border-slate-200 dark:border-slate-700">
+            <Calendar className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-6" />
+            <p className="text-lg text-slate-500 dark:text-slate-400 font-medium">Nenhum culto cadastrado para esta igreja.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {services.map(service => (
+              <div key={service.id} className="bg-slate-50 dark:bg-slate-800 rounded-[2rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-lg transition-all group">
+                <div className="flex justify-between items-start mb-6">
+                  <div className="w-14 h-14 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center text-blue-800 dark:text-blue-400 shadow-sm">
+                    <Clock className="w-7 h-7" />
+                  </div>
+                  <span className="px-4 py-2 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 rounded-full text-xs font-black uppercase tracking-widest">
+                    {service.dayOfWeek}
+                  </span>
+                </div>
+                <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-2">{service.name}</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px] truncate">{service.description || 'Sem descrição'}</p>
+                <div className="flex items-center gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
+                  <div className="flex-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Início</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">{service.startTime}</span>
+                  </div>
+                  <div className="w-px h-8 bg-slate-200 dark:bg-slate-700"></div>
+                  <div className="flex-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Término</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">{service.endTime}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {isServiceModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white dark:bg-slate-800 rounded-[3rem] w-full max-w-xl overflow-hidden shadow-2xl relative"
+          >
+            <div className="p-8 md:p-12">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100">Cadastrar Culto</h3>
+                <button 
+                  onClick={() => setIsServiceModalOpen(false)}
+                  className="w-10 h-10 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full flex items-center justify-center text-slate-500 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveService} className="space-y-6">
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Nome do Culto *</label>
+                  <input 
+                    required
+                    type="text"
+                    value={serviceFormData.name}
+                    onChange={(e) => setServiceFormData({...serviceFormData, name: e.target.value})}
+                    placeholder="Ex: Culto de Celebração"
+                    className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Descrição</label>
+                  <input 
+                    type="text"
+                    value={serviceFormData.description}
+                    onChange={(e) => setServiceFormData({...serviceFormData, description: e.target.value})}
+                    placeholder="Opcional"
+                    className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Hora de Início *</label>
+                    <input 
+                      required
+                      type="time"
+                      value={serviceFormData.startTime}
+                      onChange={(e) => setServiceFormData({...serviceFormData, startTime: e.target.value})}
+                      className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Hora de Término *</label>
+                    <input 
+                      required
+                      type="time"
+                      value={serviceFormData.endTime}
+                      onChange={(e) => setServiceFormData({...serviceFormData, endTime: e.target.value})}
+                      className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Dia da Semana *</label>
+                  <select
+                    required
+                    value={serviceFormData.dayOfWeek}
+                    onChange={(e) => setServiceFormData({...serviceFormData, dayOfWeek: e.target.value})}
+                    className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
+                  >
+                    {['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'].map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="pt-6">
+                  <button 
+                    disabled={savingService}
+                    type="submit" 
+                    className="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-blue-800/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {savingService ? 'Salvando...' : 'Salvar Culto'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

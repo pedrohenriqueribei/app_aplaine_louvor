@@ -15,6 +15,7 @@ interface AvailabilityRecord {
   year: number;
   days: number[];
   userName?: string;
+  memberInfo?: any;
 }
 
 export default function AvailabilityPage() {
@@ -51,6 +52,7 @@ export default function AvailabilityPage() {
   useEffect(() => {
     async function loadAvailability() {
       if (!userData) return;
+      setSelectedDays([]); // Reset state early when month changes
       setLoading(true);
       try {
         const docId = `${userData.uid}_${year}_${month}`;
@@ -76,11 +78,12 @@ export default function AvailabilityPage() {
 
   async function loadTeamAvailability() {
     if (!userData?.churchId) return;
+    setTeamAvailability([]); // Reset state early when month changes
     setTeamLoading(true);
     try {
       const q = query(
         collection(db, 'availability'),
-        where('churchId', '==', userData.churchId),
+        where('churchId', '==', userData?.churchId || ''),
         where('month', '==', month),
         where('year', '==', year)
       );
@@ -89,14 +92,18 @@ export default function AvailabilityPage() {
       
       const membersQ = query(
         collection(db, 'users'),
-        where('churchId', '==', userData.churchId)
+        where('churchId', '==', userData?.churchId || '')
       );
       const membersSnap = await getDocs(membersQ);
       const members = membersSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
 
       const enrichedRecords = records.map(rec => {
         const member = members.find(m => m.uid === rec.userId);
-        return { ...rec, userName: (member as any)?.name || 'Integrante' };
+        return { 
+          ...rec, 
+          userName: (member as any)?.name || 'Integrante',
+          memberInfo: member
+        };
       });
 
       setTeamAvailability(enrichedRecords);
@@ -163,10 +170,38 @@ export default function AvailabilityPage() {
     return teamAvailability.filter(rec => rec.days.includes(day)).length;
   };
 
-  const getAvailableNames = (day: number) => {
+  const getAvailableMembersDetails = (day: number) => {
     return teamAvailability
       .filter(rec => rec.days.includes(day))
-      .map(rec => rec.userName);
+      .map(rec => {
+        const member = rec.memberInfo as any;
+        const vocal = member?.vocalRange || '';
+        const insts = member?.instruments || [];
+        
+        const hasVocal = vocal.trim().length > 0;
+        const numInst = insts.length;
+
+        let txt = '';
+        
+        if (hasVocal && numInst > 0) {
+          txt = `${vocal} e ${insts[0]}`;
+          if (numInst > 1) {
+            txt += ` (+${numInst - 1})`;
+          }
+        } else if (hasVocal) {
+          txt = vocal;
+        } else if (numInst > 0) {
+          txt = insts[0];
+          if (numInst > 1) {
+            txt += ` (+${numInst - 1})`;
+          }
+        }
+        
+        return {
+          name: rec.userName || 'Integrante',
+          skills: txt
+        };
+      });
   };
 
   return (
@@ -302,11 +337,12 @@ export default function AvailabilityPage() {
                     <button onClick={() => setSelectedDayDetail(null)} className="text-indigo-400 hover:text-indigo-600 font-bold text-xs">Fechar</button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {getAvailableNames(selectedDayDetail).length > 0 ? (
-                      getAvailableNames(selectedDayDetail).map((name, i) => (
-                        <span key={i} className="px-4 py-2 bg-white rounded-xl text-sm font-bold text-slate-700 shadow-sm border border-indigo-100">
-                          {name}
-                        </span>
+                    {getAvailableMembersDetails(selectedDayDetail).length > 0 ? (
+                      getAvailableMembersDetails(selectedDayDetail).map((member, i) => (
+                        <div key={i} className="flex flex-col px-4 py-2 bg-white rounded-xl shadow-sm border border-indigo-100">
+                          <span className="text-sm font-bold text-slate-700">{member.name}</span>
+                          {member.skills && <span className="text-xs font-medium text-indigo-500 mt-0.5">{member.skills}</span>}
+                        </div>
                       ))
                     ) : (
                       <p className="text-slate-400 italic text-sm">Nenhum integrante disponível para este dia.</p>

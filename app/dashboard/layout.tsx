@@ -89,7 +89,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   {userData?.name || user.displayName || 'Usuário'}
                 </p>
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mt-1">
-                  {userData?.role || 'Visitante'}
+                  {(() => {
+                    if (!userData) return 'Visitante';
+                    if (userData.role === 'líder') return 'Líder';
+                    
+                    const vocal = userData.vocalRange || '';
+                    const insts = (userData.instruments && userData.instruments.length > 0) 
+                      ? userData.instruments 
+                      : (userData.instrument ? [userData.instrument] : []);
+                    
+                    const hasVocal = vocal.trim().length > 0;
+                    const numInst = insts.length;
+                    
+                    if (hasVocal && numInst > 0) {
+                      return `${vocal} e ${insts[0]}${numInst > 1 ? ` (+${numInst - 1})` : ''}`;
+                    } else if (hasVocal) {
+                      return vocal;
+                    } else if (numInst > 0) {
+                      return `${insts[0]}${numInst > 1 ? ` (+${numInst - 1})` : ''}`;
+                    }
+                    return userData.role || 'Visitante';
+                  })()}
                 </p>
               </div>
             </div>

@@ -39,9 +39,9 @@ export default function DashboardPage() {
         // Members query is restricted by church for non-leaders
         const membersQuery = userData.role === 'líder' 
           ? collection(db, 'users')
-          : query(collection(db, 'users'), where('churchId', '==', userData.churchId));
+          : query(collection(db, 'users'), where('churchId', '==', userData.churchId || ''));
 
-        const songsQuery = query(collection(db, 'songs'), where('ownerId', '==', userData.uid));
+        const songsQuery = query(collection(db, 'songs'), where('ownerId', '==', userData.uid || ''));
 
         const [membersSnap, songsSnap, schedulesSnap, churchesSnap] = await Promise.all([
           getDocs(membersQuery),

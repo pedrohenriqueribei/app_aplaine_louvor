@@ -361,24 +361,34 @@ export default function MembersPage() {
                   <td className="px-10 py-6 border-b border-dashed border-slate-100 dark:border-slate-800 text-sm">
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap gap-1.5">
-                        {member.vocalRange && (
-                          <span className="font-black text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1 rounded-lg text-[10px] uppercase tracking-wider border border-indigo-100 dark:border-indigo-800/50">
-                            {member.vocalRange}
-                          </span>
-                        )}
-                        {member.instruments && member.instruments.length > 0 ? (
-                          member.instruments.map(inst => (
-                            <span key={inst} className="font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg text-[10px]">
-                              {inst}
+                        {(() => {
+                          const vocal = member.vocalRange || '';
+                          const insts = (member.instruments && member.instruments.length > 0) 
+                            ? member.instruments 
+                            : (member.instrument ? [member.instrument] : []);
+                          
+                          const hasVocal = vocal.trim().length > 0;
+                          const numInst = insts.length;
+                          let txt = '';
+                          
+                          if (hasVocal && numInst > 0) {
+                            txt = `${vocal} e ${insts[0]}${numInst > 1 ? ` (+${numInst - 1})` : ''}`;
+                          } else if (hasVocal) {
+                            txt = vocal;
+                          } else if (numInst > 0) {
+                            txt = `${insts[0]}${numInst > 1 ? ` (+${numInst - 1})` : ''}`;
+                          } else {
+                            txt = '---';
+                          }
+                          
+                          return txt !== '---' ? (
+                            <span className="font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-lg text-[11px]">
+                              {txt}
                             </span>
-                          ))
-                        ) : member.instrument ? (
-                          <span className="font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg text-[10px]">
-                            {member.instrument}
-                          </span>
-                        ) : !member.vocalRange && (
-                          <span className="text-slate-300 dark:text-slate-700">---</span>
-                        )}
+                          ) : (
+                            <span className="text-slate-300 dark:text-slate-700 font-bold">---</span>
+                          );
+                        })()}
                       </div>
                       {member.level && (
                         <span className="inline-block w-fit px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded text-[9px] font-black uppercase tracking-wider border border-emerald-100 dark:border-emerald-800">

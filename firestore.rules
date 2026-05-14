@@ -32,8 +32,11 @@ service cloud.firestore {
     // Secure Admin check: Handles missing user document gracefully
     function isAdmin() {
       return isSignedIn() && 
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'líder';
+             (
+               request.auth.token.email == 'pedrohenriqueribei@gmail.com' ||
+               (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'líder')
+             );
     }
 
     function getUserChurch(uid) {
@@ -81,12 +84,12 @@ service cloud.firestore {
       allow get: if isSignedIn() && (
         isOwner(userId) || 
         isAdmin() || 
-        (resource != null && resource.data.get('churchId', '') != '' && resource.data.get('churchId', '') == getUserChurch(request.auth.uid))
+        resource.data.get('churchId', '') == getUserChurch(request.auth.uid)
       );
 
       allow list: if isSignedIn() && (
         isAdmin() || 
-        (resource != null && resource.data.get('churchId', '') != '' && resource.data.get('churchId', '') == getUserChurch(request.auth.uid))
+        resource.data.get('churchId', '') == getUserChurch(request.auth.uid)
       );
       
       allow create: if isSignedIn() && (isOwner(userId) || isAdmin()) && 
@@ -123,8 +126,8 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         resource.data.ownerId == request.auth.uid ||
         isAdmin() ||
-        (resource.data.get('churchId', '') != '' && resource.data.get('churchId', '') == getUserChurch(request.auth.uid)) ||
-        (getUserChurch(resource.data.ownerId) != '' && getUserChurch(resource.data.ownerId) == getUserChurch(request.auth.uid))
+        resource.data.get('churchId', '') == getUserChurch(request.auth.uid) ||
+        getUserChurch(resource.data.ownerId) == getUserChurch(request.auth.uid)
       );
       
       allow create: if isSignedIn() && isValidId(songId) && isValidSong(incoming()) && 
@@ -135,6 +138,11 @@ service cloud.firestore {
                     incoming().updatedAt == request.time && incoming().ownerId == existing().ownerId &&
                     incoming().id == existing().id;
       allow delete: if isSignedIn() && isValidId(songId) && (resource.data.ownerId == request.auth.uid || isAdmin());
+    }
+
+    match /services/{serviceId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     match /schedules/{scheduleId} {
@@ -155,14 +163,14 @@ service cloud.firestore {
       }
 
       allow get: if isSignedIn() && (
-        availId.startsWith(request.auth.uid + "_") || 
+        availId.split('_')[0] == request.auth.uid || 
         isAdmin() ||
-        (resource != null && resource.data.churchId != '' && resource.data.churchId == getUserChurch(request.auth.uid))
+        (resource != null && resource.data.churchId == getUserChurch(request.auth.uid))
       );
 
       allow list: if isSignedIn() && (
         isAdmin() ||
-        (getUserChurch(request.auth.uid) != '' && resource.data.churchId == getUserChurch(request.auth.uid)) ||
+        resource.data.churchId == getUserChurch(request.auth.uid) ||
         resource.data.userId == request.auth.uid
       );
       
