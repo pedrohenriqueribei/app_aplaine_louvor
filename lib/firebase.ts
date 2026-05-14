@@ -1,11 +1,20 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getMessaging, isSupported } from 'firebase/messaging';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
 export const auth = getAuth(app);
+
+// Messaging initialization - check for browser support and window existence
+export const messaging = typeof window !== 'undefined' 
+  ? async () => {
+      const supported = await isSupported();
+      return supported ? getMessaging(app) : null;
+    }
+  : null;
 
 export enum OperationType {
   CREATE = 'create',

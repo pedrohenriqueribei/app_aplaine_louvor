@@ -11,6 +11,7 @@ import {
   LogOut,
   Waves,
   X,
+  Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { auth } from '@/lib/firebase';
@@ -20,8 +21,9 @@ import { motion, AnimatePresence } from 'motion/react';
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
   { icon: Users, label: 'Equipe', href: '/dashboard/members' },
-  { icon: Music, label: 'Músicas', href: '/dashboard/songs' },
+  { icon: Music, label: 'Repertório', href: '/dashboard/songs' },
   { icon: Calendar, label: 'Escalas', href: '/dashboard/schedules' },
+  { icon: Clock, label: 'Disponibilidade', href: '/dashboard/availability' },
   { icon: Waves, label: 'Igrejas', href: '/dashboard/churches' },
 ];
 

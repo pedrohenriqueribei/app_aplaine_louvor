@@ -38,7 +38,7 @@ const AVAILABLE_TAGS = [
 ];
 
 export default function SongsPage() {
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -71,6 +71,8 @@ export default function SongsPage() {
     if (!user) return;
     setLoading(true);
     try {
+      // In this app, we fetch songs owned by the user
+      // But rules now allow church members to see each other's songs
       const q = query(
         collection(db, 'songs'), 
         where('ownerId', '==', user.uid),
@@ -98,6 +100,7 @@ export default function SongsPage() {
         const songRef = doc(db, 'songs', editingSong.id);
         await updateDoc(songRef, {
           ...formData,
+          churchId: userData?.churchId || '',
           updatedAt: serverTimestamp()
         });
       } else {
@@ -105,6 +108,7 @@ export default function SongsPage() {
         const songData = {
           ...formData,
           ownerId: user.uid,
+          churchId: userData?.churchId || '',
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
           id: songRef.id

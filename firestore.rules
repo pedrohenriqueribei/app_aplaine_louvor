@@ -29,11 +29,15 @@ service cloud.firestore {
       return id is string && id.size() > 0 && id.size() <= 128;
     }
 
-    // Secure Admin check: Only check if document exists before getting data
+    // Secure Admin check: Handles missing user document gracefully
     function isAdmin() {
       return isSignedIn() && 
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'líder';
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'líder';
+    }
+
+    function getUserChurch(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid)) ? get(/databases/$(database)/documents/users/$(uid)).data.get('churchId', '') : '';
     }
 
     // --- Validation Helpers ---
@@ -42,27 +46,28 @@ service cloud.firestore {
       // Allow partial updates if the merged result is valid
       let requiredFields = ['uid', 'name', 'email', 'role', 'status'];
       return data.keys().hasAll(requiredFields) &&
-             data.uid is string && data.uid.size() <= 128 &&
-             data.name is string && data.name.size() <= 100 &&
-             data.email is string && data.email.size() <= 100 &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 100 &&
              data.role in ['líder', 'instrumentista'] &&
              data.status in ['active', 'inactive'] &&
              (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
              (!('vocalRange' in data) || (data.vocalRange is string)) &&
              (!('level' in data) || (data.level is string)) &&
              (!('churchId' in data) || (data.churchId is string)) &&
-             (!('instruments' in data) || (data.instruments is list && data.instruments.size() <= 50));
+             (!('instruments' in data) || (data.instruments is list && data.instruments.size() <= 60));
     }
 
     function isValidSong(data) {
       let requiredFields = ['id', 'title', 'artist', 'key', 'link', 'ownerId', 'createdAt', 'updatedAt'];
       return data.keys().hasAll(requiredFields) &&
-             data.id is string && data.id.size() <= 128 &&
-             data.title is string && data.title.size() <= 200 &&
-             data.artist is string && data.artist.size() <= 200 &&
-             data.key is string && data.key.size() <= 20 &&
-             data.link is string && data.link.size() <= 500 &&
+             data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.artist is string && data.artist.size() > 0 && data.artist.size() <= 200 &&
+             data.key is string && data.key.size() > 0 && data.key.size() <= 20 &&
+             data.link is string && data.link.size() > 0 && data.link.size() <= 500 &&
              data.ownerId == request.auth.uid &&
+             (!('churchId' in data) || (data.churchId is string)) &&
              (!('sheet' in data) || (data.sheet is string && data.sheet.size() <= 10000)) &&
              (!('bpm' in data) || (data.bpm is string && data.bpm.size() <= 10)) &&
              (!('timeSignature' in data) || (data.timeSignature is string && data.timeSignature.size() <= 20)) &&
@@ -73,30 +78,29 @@ service cloud.firestore {
     // --- Match Blocks ---
 
     match /users/{userId} {
-      // Split read into get and list for better security and performance
       allow get: if isSignedIn() && (
         isOwner(userId) || 
         isAdmin() || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.churchId == get(/databases/$(database)/documents/users/$(userId)).data.churchId)
+        (resource != null && resource.data.get('churchId', '') != '' && resource.data.get('churchId', '') == getUserChurch(request.auth.uid))
       );
 
       allow list: if isSignedIn() && (
         isAdmin() || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         resource.data.churchId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.churchId)
+        (resource != null && resource.data.get('churchId', '') != '' && resource.data.get('churchId', '') == getUserChurch(request.auth.uid))
       );
       
-      allow create: if (isOwner(userId) || isAdmin()) && 
+      allow create: if isSignedIn() && (isOwner(userId) || isAdmin()) && 
         isValidId(userId) &&
-        isValidUser(incoming()) &&
-        (isOwner(userId) ? (
-          incoming().uid == userId &&
-          incoming().email == request.auth.token.email &&
-          (incoming().role == 'instrumentista' || (incoming().role == 'líder' && incoming().email == 'pedrohenriqueribei@gmail.com'))
-        ) : true);
+        isValidUser(incoming()) && (
+          isAdmin() || (
+            isOwner(userId) &&
+            incoming().uid == userId &&
+            incoming().email == request.auth.token.email &&
+            (incoming().role == 'instrumentista' || (incoming().role == 'líder' && incoming().email == 'pedrohenriqueribei@gmail.com'))
+          )
+        );
       
-      allow update: if (isOwner(userId) || isAdmin()) && 
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin()) && 
         isValidId(userId) && 
         isValidUser(incoming()) && (
           isAdmin() || (
@@ -116,7 +120,13 @@ service cloud.firestore {
     }
 
     match /songs/{songId} {
-      allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow read: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        isAdmin() ||
+        (resource.data.get('churchId', '') != '' && resource.data.get('churchId', '') == getUserChurch(request.auth.uid)) ||
+        (getUserChurch(resource.data.ownerId) != '' && getUserChurch(resource.data.ownerId) == getUserChurch(request.auth.uid))
+      );
+      
       allow create: if isSignedIn() && isValidId(songId) && isValidSong(incoming()) && 
                     incoming().id == songId && incoming().createdAt == request.time && 
                     incoming().updatedAt == request.time;
@@ -124,12 +134,40 @@ service cloud.firestore {
                     isValidSong(incoming()) && incoming().createdAt == existing().createdAt && 
                     incoming().updatedAt == request.time && incoming().ownerId == existing().ownerId &&
                     incoming().id == existing().id;
-      allow delete: if isSignedIn() && isValidId(songId) && resource.data.ownerId == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(songId) && (resource.data.ownerId == request.auth.uid || isAdmin());
     }
 
     match /schedules/{scheduleId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    match /availability/{availId} {
+      function isValidAvailability(data) {
+        let requiredFields = ["id", "userId", "churchId", "month", "year", "days"];
+        return data.keys().hasAll(requiredFields) &&
+               data.id is string &&
+               data.userId == request.auth.uid &&
+               data.churchId is string &&
+               data.month is int &&
+               data.year is int &&
+               data.days is list;
+      }
+
+      allow get: if isSignedIn() && (
+        availId.startsWith(request.auth.uid + "_") || 
+        isAdmin() ||
+        (resource != null && resource.data.churchId != '' && resource.data.churchId == getUserChurch(request.auth.uid))
+      );
+
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        (getUserChurch(request.auth.uid) != '' && resource.data.churchId == getUserChurch(request.auth.uid)) ||
+        resource.data.userId == request.auth.uid
+      );
+      
+      allow write: if isSignedIn() && isValidAvailability(incoming()) && 
+                    (availId == incoming().id);
     }
   }
 }

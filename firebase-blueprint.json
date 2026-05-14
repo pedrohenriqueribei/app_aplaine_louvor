@@ -10,11 +10,12 @@
         "email": { "type": "string" },
         "phone": { "type": "string" },
         "instruments": { "type": "array", "items": { "type": "string" } },
-        "vocalRange": { "type": "string", "enum": ["Soprano", "Contralto", "Mezzo", "Baixo", "Tenor", "Barítono", ""] },
+        "vocalRange": { "type": "string", "enum": ["Soprano", "Contralto", "Mezzo", "Baixo", "Tenor", "Baixo", "Tenor", "Barítono", ""] },
         "level": { "type": "string", "enum": ["aprendiz", "intermediário", "experiente", ""] },
         "churchId": { "type": "string", "description": "ID da igreja/ministério relacionada" },
         "role": { "type": "string", "enum": ["líder", "instrumentista"] },
         "status": { "type": "string", "enum": ["active", "inactive"] },
+        "fcmTokens": { "type": "array", "items": { "type": "string" }, "description": "Tokens FCM para notificações push" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "name", "email", "role", "status"]
@@ -65,12 +66,28 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "date", "churchId"]
+    },
+    "Availability": {
+      "title": "Disponibilidade",
+      "description": "Dias disponíveis de um integrante no mês",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "userId_year_month" },
+        "userId": { "type": "string" },
+        "churchId": { "type": "string" },
+        "month": { "type": "integer" },
+        "year": { "type": "integer" },
+        "days": { "type": "array", "items": { "type": "integer" } },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "churchId", "month", "year", "days"]
     }
   },
   "firestore": {
     "users/{userId}": { "schema": "User", "description": "Perfis de usuários" },
     "churches/{churchId}": { "schema": "Church", "description": "Listagem de igrejas" },
     "songs/{songId}": { "schema": "Song", "description": "Repertório musical" },
-    "schedules/{scheduleId}": { "schema": "Schedule", "description": "Escalas de louvor" }
+    "schedules/{scheduleId}": { "schema": "Schedule", "description": "Escalas de louvor" },
+    "availability/{availableId}": { "schema": "Availability", "description": "Disponibilidade dos membros" }
   }
 }

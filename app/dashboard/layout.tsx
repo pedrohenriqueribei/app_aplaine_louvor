@@ -6,9 +6,11 @@ import { useAuth } from '@/components/AuthProvider';
 import { usePathname, useRouter } from 'next/navigation';
 import { Bell, Search, User as UserIcon } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { useNotifications } from '@/hooks/useNotifications';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, userData, loading } = useAuth();
+  const { token } = useNotifications();
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
@@ -30,6 +32,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (pathname.includes('/members')) return 'Equipe';
     if (pathname.includes('/songs')) return 'Repertório';
     if (pathname.includes('/schedules')) return 'Escalas';
+    if (pathname.includes('/availability')) return 'Disponibilidade';
     if (pathname.includes('/churches')) return 'Igrejas';
     return 'Dashboard';
   };
@@ -82,8 +85,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 )}
               </div>
               <div className="hidden md:block">
-                <p className="text-xs font-black text-slate-800 dark:text-slate-200 leading-tight">{user.displayName || 'Usuário'}</p>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{user.email}</p>
+                <p className="text-sm font-black text-slate-800 dark:text-slate-200 leading-tight">
+                  {userData?.name || user.displayName || 'Usuário'}
+                </p>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mt-1">
+                  {userData?.role || 'Visitante'}
+                </p>
               </div>
             </div>
           </div>

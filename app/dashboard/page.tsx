@@ -7,9 +7,11 @@ import { db, auth, handleFirestoreError, OperationType } from '@/lib/firebase';
 import { Calendar, Users, Music, Clock as ClockIcon, MapPin, Link as LinkIcon, BarChart3, Waves, KeyRound, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '@/components/AuthProvider';
+import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
   const { userData } = useAuth();
+  const router = useRouter();
   const [stats, setStats] = useState({
     members: 0,
     songs: 0,
@@ -92,7 +94,21 @@ export default function DashboardPage() {
         <div className="lg:col-span-2 space-y-8">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tight">Próximas Escalas</h2>
-            <button className="text-sm font-bold text-blue-800 dark:text-blue-400 hover:underline px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all">Ver todas</button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => router.push('/dashboard/availability')}
+                className="flex items-center gap-2 text-sm font-black uppercase tracking-widest bg-blue-800 text-white px-6 py-2.5 rounded-xl hover:bg-blue-900 transition-all shadow-lg shadow-blue-800/20 active:scale-95"
+              >
+                <Calendar className="w-4 h-4" />
+                Lançar Disponibilidade
+              </button>
+              <button 
+                onClick={() => router.push('/dashboard/schedules')}
+                className="text-sm font-bold text-blue-800 dark:text-blue-400 hover:underline px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all"
+              >
+                Ver todas
+              </button>
+            </div>
           </div>
           
           <div className="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-200 dark:border-slate-800 p-8 shadow-sm">

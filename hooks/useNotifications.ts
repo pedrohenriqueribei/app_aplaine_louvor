@@ -1,0 +1,70 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { messaging, db } from '@/lib/firebase';
+import { getToken, onMessage } from 'firebase/messaging';
+import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { useAuth } from '@/components/AuthProvider';
+
+export function useNotifications() {
+  const { user } = useAuth();
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function requestPermission() {
+      if (typeof window === 'undefined' || !user) return;
+
+      try {
+        const messagingInstance = await messaging?.();
+        if (!messagingInstance) {
+          console.warn('Messaging not supported in this browser');
+          return;
+        }
+
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          // You need to replace this VAPID key with your own from Firebase Console
+          // Settings > Cloud Messaging > Web configuration > Web Push certificates
+          const fcmToken = await getToken(messagingInstance, {
+            vapidKey: process.env.NEXT_PUBLIC_VAPID_KEY
+          });
+
+          if (fcmToken) {
+            setToken(fcmToken);
+            // Save token to user profile
+            await updateDoc(doc(db, 'users', user.uid), {
+              fcmTokens: arrayUnion(fcmToken)
+            });
+            console.log('FCM Token registered:', fcmToken);
+          }
+        }
+      } catch (error) {
+        console.error('Error requesting notification permission:', error);
+      }
+    }
+
+    requestPermission();
+
+    // Foreground message listener
+    let unsubscribe: (() => void) | undefined;
+    async function setupForegroundListener() {
+      const messagingInstance = await messaging?.();
+      if (messagingInstance) {
+        unsubscribe = onMessage(messagingInstance, (payload) => {
+          console.log('Message received in foreground:', payload);
+          // You can show a custom toast or UI notification here
+          if (payload.notification?.title) {
+             alert(`${payload.notification.title}: ${payload.notification.body}`);
+          }
+        });
+      }
+    }
+    setupForegroundListener();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [user]);
+
+  return { token };
+}

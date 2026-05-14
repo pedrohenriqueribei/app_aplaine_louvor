@@ -39,6 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               phone: '',
               instruments: [],
               vocalRange: '',
+              churchId: '',
               role: isAdminEmail ? 'líder' : 'instrumentista',
               status: 'active',
               createdAt: serverTimestamp()
