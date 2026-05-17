@@ -12,11 +12,11 @@ import {
   Waves,
   X,
   Clock,
+  Bell,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { auth } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
-import { motion, AnimatePresence } from 'motion/react';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
@@ -25,6 +25,7 @@ const menuItems = [
   { icon: Calendar, label: 'Escalas', href: '/dashboard/schedules' },
   { icon: Clock, label: 'Disponibilidade', href: '/dashboard/availability' },
   { icon: Waves, label: 'Igrejas', href: '/dashboard/churches' },
+  { icon: Bell, label: 'Notificações', href: '/dashboard/notifications' },
 ];
 
 interface SidebarProps {
@@ -91,28 +92,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       <div className="hidden lg:block shrink-0">
         {SidebarContent}
       </div>
-      <AnimatePresence>
-        {isOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={onClose}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="relative w-72 h-full"
-            >
-              {SidebarContent}
-            </motion.div>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div
+            onClick={onClose}
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+          />
+          <div
+            className="relative w-72 h-full"
+          >
+            {SidebarContent}
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
     </>
   );
 }

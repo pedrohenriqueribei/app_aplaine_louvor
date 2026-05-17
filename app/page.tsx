@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'motion/react';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Music, Users, Calendar, ShieldCheck } from 'lucide-react';
@@ -53,17 +52,13 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="pt-40 pb-20 px-6">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-          <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
-          >
+          <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-bold mb-6 border border-blue-100">
-              <ShieldCheck className="w-4 h-4" />
-              Gestão Ministerial Profissional
+              <Music className="w-4 h-4" />
+              Gestão para Ministério de Louvor
             </div>
             <h1 className="text-6xl lg:text-7xl font-display font-black text-slate-900 mb-6 leading-[1.1] tracking-tight">
-              Sua igreja em <span className="text-blue-800 italic">harmonia</span> perfeita.
+              Sua igreja em <span className="bg-gradient-to-r from-blue-700 via-blue-500 to-blue-900 bg-clip-text text-transparent italic drop-shadow-[0_2px_2px_rgba(0,0,0,0.05)]">harmonia</span> perfeita.
             </h1>
             <p className="text-xl text-slate-500 mb-10 leading-relaxed max-w-lg">
               A plataforma definitiva para gerir ministérios de louvor, escalas, repertórios e equipes de forma integrada e intuitiva.
@@ -86,12 +81,9 @@ export default function HomePage() {
                 Já tenho conta
               </button>
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
+          <div 
             className="relative"
             id="hero-visual"
           >
@@ -127,7 +119,7 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
       </section>
 
@@ -157,8 +149,7 @@ export default function HomePage() {
 
 function FeatureCard({ icon: Icon, iconColor, title, desc }: { icon: any, iconColor: string, title: string, desc: string }) {
   return (
-    <motion.div 
-      whileHover={{ y: -5 }}
+    <div 
       className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"
     >
       <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mb-4">
@@ -166,6 +157,6 @@ function FeatureCard({ icon: Icon, iconColor, title, desc }: { icon: any, iconCo
       </div>
       <h3 className="font-display font-black text-slate-800 mb-2">{title}</h3>
       <p className="text-sm text-slate-500 leading-relaxed">{desc}</p>
-    </motion.div>
+    </div>
   );
 }

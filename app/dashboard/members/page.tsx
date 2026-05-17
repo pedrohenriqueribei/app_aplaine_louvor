@@ -5,7 +5,6 @@ import { collection, getDocs, doc, getDoc, setDoc, updateDoc, query, orderBy, wh
 import { db, handleFirestoreError, OperationType } from '@/lib/firebase';
 import { UserPlus, Search, Edit2, Shield, User, CheckCircle2, XCircle, Bell, Link2 } from 'lucide-react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '@/components/AuthProvider';
 
 interface Member {
@@ -169,6 +168,31 @@ export default function MembersPage() {
   const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const targetMembers = broadcastData.churchOnly 
+        ? members.filter(m => m.churchId === userProfile?.churchId && m.status === 'active')
+        : members.filter(m => m.status === 'active');
+
+      if (targetMembers.length === 0) {
+        alert('Nenhum destinatário encontrado.');
+        return;
+      }
+
+      // Save internal notifications via client
+      const savePromises = targetMembers.map(async (m) => {
+        const notifId = `broadcast_${Date.now()}_${m.uid}`;
+        return setDoc(doc(db, 'notifications', notifId), {
+          id: notifId,
+          userId: m.uid,
+          title: broadcastData.title,
+          body: broadcastData.body,
+          type: 'broadcast',
+          read: false,
+          createdAt: serverTimestamp()
+        });
+      });
+      await Promise.all(savePromises);
+
+      // Trigger Push via API
       await fetch('/api/notifications/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -176,7 +200,8 @@ export default function MembersPage() {
           type: 'broadcast',
           title: broadcastData.title,
           body: broadcastData.body,
-          churchId: broadcastData.churchOnly ? userProfile?.churchId : null
+          churchId: broadcastData.churchOnly ? userProfile?.churchId : null,
+          memberIds: targetMembers.map(m => m.uid) // Explicitly provide member IDs to avoid server-side fetch if it's still failing
         })
       });
       setIsBroadcastModalOpen(false);
@@ -261,17 +286,13 @@ export default function MembersPage() {
                   Novo Integrante
                 </button>
 
-                <AnimatePresence>
-                  {isAddMenuOpen && (
+                {isAddMenuOpen && (
                     <>
                       <div 
                         className="fixed inset-0 z-10" 
                         onClick={() => setIsAddMenuOpen(false)}
                       />
-                      <motion.div 
-                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      <div 
                         className="absolute right-0 mt-3 w-64 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-2 z-20 overflow-hidden"
                       >
                         <button 
@@ -309,10 +330,9 @@ export default function MembersPage() {
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking_wider">Buscar por Nome</p>
                           </div>
                         </button>
-                      </motion.div>
+                      </div>
                     </>
                   )}
-                </AnimatePresence>
               </div>
             </>
           )}
@@ -330,14 +350,9 @@ export default function MembersPage() {
             </tr>
           </thead>
           <tbody>
-            <AnimatePresence mode="popLayout">
               {filteredMembers.map((member) => (
-                <motion.tr 
+                <tr 
                   key={member.uid}
-                  layout
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
                   className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors"
                 >
                   <td className="px-10 py-6 border-b border-dashed border-slate-100 dark:border-slate-800">
@@ -439,9 +454,8 @@ export default function MembersPage() {
                       </button>
                     )}
                   </td>
-                </motion.tr>
+                </tr>
               ))}
-            </AnimatePresence>
           </tbody>
         </table>
 
@@ -453,20 +467,13 @@ export default function MembersPage() {
         )}
       </div>
 
-      <AnimatePresence>
-        {isModalOpen && (
+      {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div 
               onClick={() => setIsModalOpen(false)}
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 40 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 40 }}
+            <div 
               className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl p-12 overflow-hidden"
             >
               <div className="absolute top-0 right-0 w-64 h-64 bg-blue-800/10 blur-[100px] -mr-32 -mt-32"></div>
@@ -628,25 +635,17 @@ export default function MembersPage() {
                   </button>
                 </div>
               </form>
-            </motion.div>
+            </div>
           </div>
         )}
-      </AnimatePresence>
 
-      <AnimatePresence>
-        {isLinkModalOpen && (
+      {isLinkModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div 
               onClick={() => setIsLinkModalOpen(false)}
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 40 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 40 }}
+            <div 
               className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl p-12 overflow-hidden flex flex-col max-h-[85vh]"
             >
               <h2 className="text-3xl font-display font-bold text-slate-800 dark:text-slate-100 mb-6">Vincular Integrante</h2>
@@ -704,25 +703,17 @@ export default function MembersPage() {
                   Fechar
                 </button>
               </div>
-            </motion.div>
+            </div>
           </div>
         )}
-      </AnimatePresence>
 
-      <AnimatePresence>
-        {isBroadcastModalOpen && (
+      {isBroadcastModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div 
               onClick={() => setIsBroadcastModalOpen(false)}
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 40 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 40 }}
+            <div 
               className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl p-12 overflow-hidden"
             >
               <h2 className="text-3xl font-display font-bold text-slate-800 dark:text-slate-100 mb-8">Enviar Comunicado</h2>
@@ -776,10 +767,9 @@ export default function MembersPage() {
                   </button>
                 </div>
               </form>
-            </motion.div>
+            </div>
           </div>
         )}
-      </AnimatePresence>
     </div>
   );
 }

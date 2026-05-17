@@ -29,18 +29,33 @@ service cloud.firestore {
       return id is string && id.size() > 0 && id.size() <= 128;
     }
 
-    // Secure Admin check: Handles missing user document gracefully
+    // Secure user data helper: Handles missing user document gracefully
+    function myData() {
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(path) ? get(path).data : {"role": "", "churchId": ""};
+    }
+
     function isAdmin() {
       return isSignedIn() && 
              (
                request.auth.token.email == 'pedrohenriqueribei@gmail.com' ||
-               (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'líder')
+               myData().get('role', '') == 'líder'
              );
     }
 
-    function getUserChurch(uid) {
-      return exists(/databases/$(database)/documents/users/$(uid)) ? get(/databases/$(database)/documents/users/$(uid)).data.get('churchId', '') : '';
+    function getMyChurch() {
+      return myData().get('churchId', '');
+    }
+
+    function isValidNotification(data) {
+      let requiredFields = ['id', 'userId', 'title', 'body', 'type', 'read', 'createdAt'];
+      return data.keys().hasAll(requiredFields) &&
+             data.id is string &&
+             data.userId is string &&
+             data.title is string && data.title.size() <= 200 &&
+             data.body is string && data.body.size() <= 1000 &&
+             data.type is string &&
+             data.read is bool;
     }
 
     // --- Validation Helpers ---
@@ -84,12 +99,13 @@ service cloud.firestore {
       allow get: if isSignedIn() && (
         isOwner(userId) || 
         isAdmin() || 
-        resource.data.get('churchId', '') == getUserChurch(request.auth.uid)
+        resource.data.get('churchId', '') == getMyChurch()
       );
 
       allow list: if isSignedIn() && (
         isAdmin() || 
-        resource.data.get('churchId', '') == getUserChurch(request.auth.uid)
+        resource.data.get('churchId', '') == getMyChurch() ||
+        (myData().get('role', '') == 'líder' && resource.data.get('churchId', '') == '')
       );
       
       allow create: if isSignedIn() && (isOwner(userId) || isAdmin()) && 
@@ -126,8 +142,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         resource.data.ownerId == request.auth.uid ||
         isAdmin() ||
-        resource.data.get('churchId', '') == getUserChurch(request.auth.uid) ||
-        getUserChurch(resource.data.ownerId) == getUserChurch(request.auth.uid)
+        (resource.data.get('churchId', '') != '' && resource.data.get('churchId', '') == getMyChurch())
       );
       
       allow create: if isSignedIn() && isValidId(songId) && isValidSong(incoming()) && 
@@ -150,6 +165,10 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /fcm_tokens/{tokenId} {
+      allow read, write: if isSignedIn() && (tokenId == request.auth.uid || isAdmin());
+    }
+
     match /availability/{availId} {
       function isValidAvailability(data) {
         let requiredFields = ["id", "userId", "churchId", "month", "year", "days"];
@@ -165,17 +184,27 @@ service cloud.firestore {
       allow get: if isSignedIn() && (
         availId.split('_')[0] == request.auth.uid || 
         isAdmin() ||
-        (resource != null && resource.data.churchId == getUserChurch(request.auth.uid))
+        (resource != null && resource.data.churchId == getMyChurch())
       );
 
       allow list: if isSignedIn() && (
         isAdmin() ||
-        resource.data.churchId == getUserChurch(request.auth.uid) ||
+        resource.data.churchId == getMyChurch() ||
         resource.data.userId == request.auth.uid
       );
       
       allow write: if isSignedIn() && isValidAvailability(incoming()) && 
                     (availId == incoming().id);
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin()) &&
+                    isValidNotification(incoming()) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['read']) &&
+                    incoming().id == existing().id &&
+                    incoming().userId == existing().userId;
+      allow create, delete: if isAdmin();
     }
   }
 }

@@ -7,6 +7,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Bell, Search, User as UserIcon } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, userData, loading } = useAuth();
@@ -14,6 +16,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [unreadCount, setUnreadCount] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!user) return;
+    
+    const q = query(
+      collection(db, 'notifications'), 
+      where('userId', '==', user.uid),
+      where('read', '==', false)
+    );
+    
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setUnreadCount(snap.size);
+    }, (err) => {
+      console.error('Error listening for unread notifications:', err);
+    });
+    
+    return () => unsubscribe();
+  }, [user]);
 
   React.useEffect(() => {
     if (!loading) {
@@ -69,9 +90,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
             </div>
             <ThemeToggle />
-            <button className="p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-blue-800 dark:hover:text-blue-400 transition-all shadow-sm relative shrink-0">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+            <button 
+              onClick={() => router.push('/dashboard/notifications')}
+              className={`p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-blue-800 dark:hover:text-blue-400 transition-all shadow-sm relative shrink-0 ${unreadCount > 0 ? 'ring-2 ring-blue-500/20' : ''}`}
+            >
+              <Bell className="w-5 h-5 text-slate-400 dark:text-slate-500" />
+              {unreadCount > 0 && (
+                <>
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-ping opacity-75"></span>
+                </>
+              )}
             </button>
             
             <div className="h-10 w-[1px] bg-slate-200 dark:bg-slate-800 mx-2 shrink-0"></div>

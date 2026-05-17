@@ -23,10 +23,15 @@ export function useNotifications() {
 
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
+          // Register service worker explicitly to avoid registration issues in iframe/proxy environments
+          await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          const registration = await navigator.serviceWorker.ready;
+          
           // You need to replace this VAPID key with your own from Firebase Console
           // Settings > Cloud Messaging > Web configuration > Web Push certificates
           const fcmToken = await getToken(messagingInstance, {
-            vapidKey: process.env.NEXT_PUBLIC_VAPID_KEY
+            vapidKey: process.env.NEXT_PUBLIC_VAPID_KEY,
+            serviceWorkerRegistration: registration
           });
 
           if (fcmToken) {
@@ -64,7 +69,7 @@ export function useNotifications() {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [user]);
+  }, [user?.uid]);
 
   return { token };
 }

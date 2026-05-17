@@ -7,7 +7,6 @@ import {
   BarChart2, Clock, Tags, FileText, ChevronRight,
   Sparkles, Loader2
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { 
   collection, query, where, getDocs, addDoc, 
@@ -167,7 +166,7 @@ export default function SongsPage() {
       const prompt = `Analise a música "${formData.title}" do artista "${formData.artist}" e retorne o tom original (key), BPM aproximado e o compasso (time signature).`;
       
       const response = await ai.models.generateContent({
-        model: "gemini-flash-latest",
+        model: "gemini-3-flash-preview",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -233,7 +232,7 @@ export default function SongsPage() {
       Responda APENAS o conteúdo da cifra, sem explicações.`;
       
       const response = await ai.models.generateContent({
-        model: "gemini-flash-latest",
+        model: "gemini-3-flash-preview",
         contents: prompt,
       });
 
@@ -294,15 +293,14 @@ export default function SongsPage() {
           />
         </div>
         
-        {userData?.role === 'líder' && (
-          <button 
-            onClick={() => { resetForm(); setIsModalOpen(true); }}
-            className="w-full md:w-auto flex items-center justify-center gap-3 bg-blue-800 text-white px-8 py-4 rounded-2xl font-bold shadow-xl shadow-blue-800/20 hover:scale-105 active:scale-95 transition-all"
-          >
-            <Plus className="w-5 h-5" />
-            Adicionar Música
-          </button>
-        )}
+        {/* Removed role check to allow all musicians to add songs */}
+        <button 
+          onClick={() => { resetForm(); setIsModalOpen(true); }}
+          className="w-full md:w-auto flex items-center justify-center gap-3 bg-blue-800 text-white px-8 py-4 rounded-2xl font-bold shadow-xl shadow-blue-800/20 hover:scale-105 active:scale-95 transition-all"
+        >
+          <Plus className="w-5 h-5" />
+          Adicionar Música
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -339,14 +337,9 @@ export default function SongsPage() {
         </div>
       ) : filteredSongs.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          <AnimatePresence>
             {filteredSongs.map((song, idx) => (
-              <motion.div
+              <div
                 key={song.id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ delay: idx * 0.05 }}
                 className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl transition-all group overflow-hidden cursor-pointer"
                 onClick={() => setViewingSong(song)}
               >
@@ -396,7 +389,7 @@ export default function SongsPage() {
 
                   <div className="grid grid-cols-2 gap-4 mb-6">
                     <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-100 dark:border-slate-800">
-                      <div className="text-[9px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest mb-1">Tom</div>
+                      <div className="text-[9px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest mb-1">Tom Pessoal</div>
                       <div className="text-sm font-black text-blue-800 dark:text-blue-400">{song.key}</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-100 dark:border-slate-800">
@@ -422,9 +415,8 @@ export default function SongsPage() {
                     <Youtube className="w-4 h-4" /> Ver no YouTube
                   </a>
                 </div>
-              </motion.div>
+              </div>
             ))}
-          </AnimatePresence>
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-900 p-20 rounded-[3rem] border border-slate-200 dark:border-slate-800 border-dashed flex flex-col items-center text-center">
@@ -442,22 +434,14 @@ export default function SongsPage() {
         </div>
       )}
 
-      <AnimatePresence>
-        {/* View Modal */}
         {viewingSong && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div 
               onClick={() => setViewingSong(null)}
               className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm"
-            ></motion.div>
+            ></div>
             
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 40 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 40 }}
+            <div 
               className="relative w-full max-w-4xl bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
             >
               {/* Header */}
@@ -481,7 +465,7 @@ export default function SongsPage() {
 
                 <div className="flex flex-wrap gap-4 mt-8">
                   <div className="bg-white/10 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-200">Tom</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-200">Tom Pessoal</p>
                     <p className="text-xl font-black">{viewingSong.key}</p>
                   </div>
                   {viewingSong.bpm && (
@@ -560,25 +544,19 @@ export default function SongsPage() {
                   </section>
                 )}
               </div>
-            </motion.div>
+            </div>
           </div>
         )}
 
         {/* Form Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div 
               onClick={() => setIsModalOpen(false)}
               className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm"
-            ></motion.div>
+            ></div>
             
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 40 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 40 }}
+            <div 
               className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl p-8 md:p-12 overflow-y-auto max-h-[90vh]"
             >
               <button 
@@ -591,7 +569,7 @@ export default function SongsPage() {
               <h2 className="text-3xl font-display font-black text-slate-800 dark:text-slate-100 mb-2">
                 {editingSong ? 'Editar Música' : 'Nova Música'}
               </h2>
-              <p className="text-slate-400 dark:text-slate-500 font-medium mb-10">Preencha os detalhes para organizar seu repertório.</p>
+              <p className="text-slate-400 dark:text-slate-500 font-medium mb-10">Cadastre a música em seu tom pessoal para organizar seu repertório.</p>
 
               <form onSubmit={handleSave} className="space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -627,7 +605,7 @@ export default function SongsPage() {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center pr-2">
                        <label className="text-[10px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest flex items-center gap-2">
-                          Tom *
+                          Tom Pessoal *
                        </label>
                        <button
                          type="button"
@@ -640,7 +618,7 @@ export default function SongsPage() {
                          ) : (
                            <Sparkles className="w-3 h-3" />
                          )}
-                         Tom Original
+                         Consultar Tom Original
                        </button>
                     </div>
                     <select
@@ -775,10 +753,9 @@ export default function SongsPage() {
                    </button>
                 </div>
               </form>
-            </motion.div>
+            </div>
           </div>
         )}
-      </AnimatePresence>
     </div>
   );
 }

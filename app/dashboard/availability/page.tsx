@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthProvider';
-import { motion, AnimatePresence } from 'motion/react';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Save, CheckCircle2, Clock, AlertCircle, Users, Eye } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -288,10 +287,8 @@ export default function AvailabilityPage() {
                 const isDetailSelected = selectedDayDetail === day;
 
                 return (
-                  <motion.button
+                  <button
                     key={day}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
                     onClick={() => toggleDay(day)}
                     className={`
                       aspect-square rounded-2xl md:rounded-[1.25rem] flex flex-col items-center justify-center gap-1 transition-all border-2 relative group
@@ -317,17 +314,13 @@ export default function AvailabilityPage() {
                     {!showTeamView && isSelected && (
                       <CheckCircle2 size={12} className="text-blue-200" />
                     )}
-                  </motion.button>
+                  </button>
                 );
               })}
             </div>
             
-            <AnimatePresence>
-              {selectedDayDetail && showTeamView && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
+            {selectedDayDetail && showTeamView && (
+                <div 
                   className="mt-12 p-8 bg-indigo-50/50 rounded-[2.5rem] border border-indigo-100"
                 >
                   <div className="flex items-center justify-between mb-6">
@@ -348,9 +341,8 @@ export default function AvailabilityPage() {
                       <p className="text-slate-400 italic text-sm">Nenhum integrante disponível para este dia.</p>
                     )}
                   </div>
-                </motion.div>
+                </div>
               )}
-            </AnimatePresence>
           </div>
         )}
       </div>

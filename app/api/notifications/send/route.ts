@@ -7,14 +7,15 @@ export async function POST(req: NextRequest) {
 
     let tokens: string[] = [];
 
-    if (type === 'schedule') {
+    if (type === 'schedule' || (type === 'broadcast' && memberIds && memberIds.length > 0)) {
       // Fetch tokens for specific members
-      if (!memberIds || memberIds.length === 0) {
+      const targetIds = memberIds || [];
+      if (targetIds.length === 0) {
         return NextResponse.json({ error: 'No members specified' }, { status: 400 });
       }
 
       const usersSnap = await adminDb.collection('users')
-        .where('uid', 'in', memberIds)
+        .where('uid', 'in', targetIds)
         .get();
 
       usersSnap.forEach(doc => {
@@ -24,14 +25,13 @@ export async function POST(req: NextRequest) {
         }
       });
     } else if (type === 'broadcast') {
-      // Fetch all active users' tokens
-      // If churchId is provided, filter by church
-      let query = adminDb.collection('users').where('status', '==', 'active');
+      // Fallback: Fetch all active users' tokens if memberIds not provided
+      let q = adminDb.collection('users').where('status', '==', 'active');
       if (churchId) {
-        query = query.where('churchId', '==', churchId);
+        q = q.where('churchId', '==', churchId);
       }
 
-      const usersSnap = await query.get();
+      const usersSnap = await q.get();
       usersSnap.forEach(doc => {
         const data = doc.data();
         if (data.fcmTokens && Array.isArray(data.fcmTokens)) {
@@ -44,7 +44,10 @@ export async function POST(req: NextRequest) {
     tokens = [...new Set(tokens)];
 
     if (tokens.length === 0) {
-      return NextResponse.json({ message: 'No recipients with registered tokens found' }, { status: 200 });
+      return NextResponse.json({ 
+        message: 'No recipients with registered tokens found.',
+        success: true 
+      }, { status: 200 });
     }
 
     // Multicast sends message to multiple tokens
@@ -68,7 +71,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Error sending notification:', error);
+    console.error('Error sending push notification:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
