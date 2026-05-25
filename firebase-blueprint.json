@@ -10,15 +10,57 @@
         "email": { "type": "string" },
         "phone": { "type": "string" },
         "instruments": { "type": "array", "items": { "type": "string" } },
-        "vocalRange": { "type": "string", "enum": ["Soprano", "Contralto", "Mezzo", "Baixo", "Tenor", "Baixo", "Tenor", "Barítono", ""] },
-        "level": { "type": "string", "enum": ["aprendiz", "intermediário", "experiente", ""] },
+        "vocalRange": { "type": "string" },
+        "level": { "type": "string" },
         "churchId": { "type": "string", "description": "ID da igreja/ministério relacionada" },
-        "role": { "type": "string", "enum": ["líder", "instrumentista"] },
+        "roles": {
+          "type": "object",
+          "properties": {
+            "worship": { "type": "array", "items": { "type": "string" } },
+            "multimedia": { "type": "array", "items": { "type": "string" } },
+            "secretariat": { "type": "array", "items": { "type": "string" } }
+          }
+        },
         "status": { "type": "string", "enum": ["active", "inactive"] },
         "fcmTokens": { "type": "array", "items": { "type": "string" }, "description": "Tokens FCM para notificações push" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "name", "email", "role", "status"]
+      "required": ["uid", "name", "email", "status"]
+    },
+    "Visitor": {
+      "title": "Visitante",
+      "description": "Visitante da congregação",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "firstVisit": { "type": "string", "format": "date-time" },
+        "followupStatus": { "type": "string", "enum": ["pending", "contacted", "member"] },
+        "churchId": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "churchId", "followupStatus"]
+    },
+    "Appointment": {
+      "title": "Atendimento Pastoral",
+      "description": "Agendamento de gabinete",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "churchId": { "type": "string" },
+        "personId": { "type": "string", "description": "UID do usuário ou ID do visitante" },
+        "personName": { "type": "string" },
+        "pastorId": { "type": "string" },
+        "type": { "type": "string", "enum": ["counseling", "prayer", "visit", "other"] },
+        "scheduledAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["scheduled", "completed", "cancelled"] },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "churchId", "personId", "personName", "type", "scheduledAt", "status"]
     },
     "Church": {
       "title": "Igreja",
@@ -29,9 +71,24 @@
         "name": { "type": "string" },
         "address": { "type": "string" },
         "pastor": { "type": "string" },
+        "worshipMinistryName": { "type": "string" },
+        "worshipMinistryAcronym": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "name"]
+    },
+    "Band": {
+      "title": "Banda",
+      "description": "Banda interna de um ministério",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "churchId": { "type": "string" },
+        "memberIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "churchId", "memberIds"]
     },
     "Song": {
       "title": "Música",
@@ -63,6 +120,7 @@
         "churchId": { "type": "string" },
         "songs": { "type": "array" },
         "members": { "type": "array" },
+        "roles": { "type": "object" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "date", "churchId"]
@@ -96,14 +154,42 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "userId", "title", "body", "read", "createdAt"]
+    },
+    "Department": {
+      "title": "Departamento",
+      "description": "Departamentos ou Ministérios de uma igreja",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "churchId": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "churchId", "name"]
+    },
+    "DepartmentMember": {
+      "title": "Membro do Departamento",
+      "description": "Participante de um departamento com escopo de papéis",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "ID do membro = UID do usuário" },
+        "roles": { "type": "array", "items": { "type": "string" }, "description": "Lista de papéis (ex: leader, musician, member)" },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "roles"]
     }
   },
   "firestore": {
     "users/{userId}": { "schema": "User", "description": "Perfis de usuários" },
     "churches/{churchId}": { "schema": "Church", "description": "Listagem de igrejas" },
+    "churches/{churchId}/departments/{departmentId}": { "schema": "Department", "description": "Departamentos da Igreja" },
+    "churches/{churchId}/departments/{departmentId}/members/{userUid}": { "schema": "DepartmentMember", "description": "Papéis dos membros escopados no respectivo departamento" },
+    "visitors/{visitorId}": { "schema": "Visitor", "description": "Visitantes" },
+    "appointments/{appointmentId}": { "schema": "Appointment", "description": "Atendimentos" },
     "songs/{songId}": { "schema": "Song", "description": "Repertório musical" },
     "schedules/{scheduleId}": { "schema": "Schedule", "description": "Escalas de louvor" },
     "availability/{availableId}": { "schema": "Availability", "description": "Disponibilidade dos membros" },
-    "notifications/{notificationId}": { "schema": "Notification", "description": "Notificações internas do sistema" }
+    "notifications/{notificationId}": { "schema": "Notification", "description": "Notificações internas do sistema" },
+    "bands/{bandId}": { "schema": "Band", "description": "Bandas internas dos ministérios" }
   }
 }

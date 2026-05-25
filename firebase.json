@@ -1,0 +1,8 @@
+{
+  "firestore": [
+    {
+      "database": "applaine-db-v2",
+      "rules": "firestore.rules"
+    }
+  ]
+}

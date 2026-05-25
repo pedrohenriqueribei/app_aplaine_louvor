@@ -9,22 +9,28 @@ import {
   Calendar, 
   LayoutDashboard, 
   LogOut,
-  Waves,
+  Church,
   X,
   Clock,
   Bell,
+  UserCheck,
+  BookHeart,
+  ShieldAlert
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { auth } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
+import { useAuth } from '@/components/AuthProvider';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
-  { icon: Users, label: 'Equipe', href: '/dashboard/members' },
-  { icon: Music, label: 'Repertório', href: '/dashboard/songs' },
+  { icon: Users, label: 'Membros', href: '/dashboard/members' },
+  { icon: UserCheck, label: 'Visitantes', href: '/dashboard/visitors' },
+  { icon: BookHeart, label: 'Atendimentos', href: '/dashboard/appointments' },
   { icon: Calendar, label: 'Escalas', href: '/dashboard/schedules' },
+  { icon: Music, label: 'Repertório', href: '/dashboard/songs' },
   { icon: Clock, label: 'Disponibilidade', href: '/dashboard/availability' },
-  { icon: Waves, label: 'Igrejas', href: '/dashboard/churches' },
+  { icon: Church, label: 'Igrejas', href: '/dashboard/churches' },
   { icon: Bell, label: 'Notificações', href: '/dashboard/notifications' },
 ];
 
@@ -35,19 +41,32 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const { isSuperAdmin } = useAuth();
+
+  const allItems = [...menuItems];
+  if (isSuperAdmin) {
+    allItems.push({ icon: ShieldAlert, label: 'Admin', href: '/dashboard/admin' });
+  }
 
   const SidebarContent = (
     <aside className={cn(
       "w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 h-screen sticky top-0 flex flex-col p-8 transition-colors duration-300 z-50",
       !isOpen && "hidden lg:flex"
     )}>
-      <div className="flex items-center justify-between mb-16">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-blue-800 rounded-xl flex items-center justify-center text-white font-display font-black text-xl shadow-lg shadow-blue-800/20">
-            A
-          </div>
-          <span className="font-display font-black text-2xl text-slate-800 dark:text-slate-100 tracking-tight">Aplaine</span>
-        </div>
+      <div className="flex items-center justify-between mb-8">
+        <Link 
+          href="/" 
+          id="logo-link"
+          onClick={onClose} 
+          className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity"
+        >
+          <img 
+            src="https://lh3.googleusercontent.com/d/1lKzsn9yPg-jpcH5Lw1x5QwCyH_W9btXq?v=2" 
+            alt="Aplaine Logo" 
+            className="h-10 w-auto"
+            referrerPolicy="no-referrer"
+          />
+        </Link>
         {onClose && (
           <button onClick={onClose} className="lg:hidden p-2 text-slate-400">
             <X size={24} />
@@ -55,16 +74,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         )}
       </div>
 
-      <nav className="flex-1 space-y-3">
-        {menuItems.map((item) => (
+      <nav className="flex-1 space-y-2 overflow-y-auto pr-2 pb-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        {allItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}
             onClick={onClose}
             className={cn(
-              "flex items-center gap-4 px-6 py-4 rounded-2xl transition-all font-bold group",
+              "flex items-center gap-4 px-5 py-3 rounded-2xl transition-all font-bold group",
               pathname === item.href 
-                ? "bg-blue-800 text-white shadow-xl shadow-blue-800/20" 
+                ? "bg-blue-800 text-white shadow-lg shadow-blue-800/20" 
                 : "text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800"
             )}
           >
@@ -77,13 +96,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         ))}
       </nav>
 
-      <button 
-        onClick={() => signOut(auth)}
-        className="mt-auto flex items-center gap-4 px-6 py-4 rounded-2xl text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all font-bold group"
-      >
-        <LogOut className="w-5 h-5 text-slate-300 dark:text-slate-700 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors" />
-        Sair
-      </button>
+      <div className="pt-4 mt-auto">
+        <button 
+          onClick={() => signOut(auth)}
+          className="w-full flex items-center gap-4 px-5 py-3 rounded-2xl text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all font-bold group"
+        >
+          <LogOut className="w-5 h-5 text-slate-300 dark:text-slate-700 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors" />
+          Sair
+        </button>
+      </div>
     </aside>
   );
 

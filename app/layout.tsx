@@ -1,26 +1,34 @@
-import type { Metadata } from 'next';
-import { Outfit, Inter } from 'next/font/google';
-import { AuthProvider } from '@/components/AuthProvider';
-import '@/app/globals.css';
+import type { Metadata } from "next";
+import { Outfit, Inter } from "next/font/google";
+import { AuthProvider } from "@/components/AuthProvider";
+import "@/app/globals.css";
 
 const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
+  subsets: ["latin"],
+  variable: "--font-inter",
 });
 
 const outfit = Outfit({
-  subsets: ['latin'],
-  variable: '--font-outfit',
+  subsets: ["latin"],
+  variable: "--font-outfit",
 });
 
 export const metadata: Metadata = {
-  title: 'Aplaine',
-  description: 'Sistema de gestão de ministério de louvor',
+  title: "Aplaine",
+  description: "Sistema de gestão de ministério de louvor",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="pt-br" suppressHydrationWarning className={`${inter.variable} ${outfit.variable}`}>
+    <html
+      lang="pt-br"
+      suppressHydrationWarning
+      className={`${inter.variable} ${outfit.variable}`}
+    >
       <body suppressHydrationWarning className="antialiased">
         <AuthProvider>
           <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-300">

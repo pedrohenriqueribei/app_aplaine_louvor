@@ -9,6 +9,7 @@ interface AuthContextType {
   user: User | null;
   userData: any;
   loading: boolean;
+  isSuperAdmin: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string }) => Promise<void>;
@@ -20,16 +21,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       if (user) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          const tokenResult = await user.getIdTokenResult();
+          const superAdmin = tokenResult.claims.super_admin === true || user.email === 'pedrohenriqueribei@gmail.com';
+          setIsSuperAdmin(superAdmin);
+
+          let userDoc;
+          try {
+            userDoc = await getDoc(doc(db, 'users', user.uid));
+          } catch (e) {
+            console.error('Auth User Data Error on getDoc:', e);
+            throw e;
+          }
           let currentData = userDoc.exists() ? userDoc.data() : null;
-          
-          const isAdminEmail = user.email === 'pedrohenriqueribei@gmail.com';
           
           if (!currentData) {
             const newUserData = {
@@ -40,38 +50,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               instruments: [],
               vocalRange: '',
               churchId: '',
-              role: isAdminEmail ? 'líder' : 'instrumentista',
               status: 'active',
+              roles: user.email === 'pedrohenriqueribei@gmail.com' ? { worship: ['leader'], multimedia: [], secretariat: [] } : { worship: [], multimedia: [], secretariat: [] },
               createdAt: serverTimestamp()
             };
-            await setDoc(doc(db, 'users', user.uid), newUserData);
+            try {
+              await setDoc(doc(db, 'users', user.uid), newUserData);
+            } catch (e) {
+              console.error('Auth User Data Error on setDoc:', e);
+              throw e;
+            }
             setUserData({ ...newUserData, createdAt: new Date().toISOString() });
           } else {
-            // Force role migration if using old or unknown role names
-            let updated = false;
-            if (isAdminEmail && currentData.role !== 'líder') {
-              currentData.role = 'líder';
-              updated = true;
-            } else if (!isAdminEmail && !['líder', 'instrumentista'].includes(currentData.role)) {
-              currentData.role = 'instrumentista';
-              updated = true;
+            let updates: any = {};
+            let needsUpdate = false;
+
+            if (!currentData.uid) {
+              updates.uid = user.uid;
+              needsUpdate = true;
             }
-            
-            if (updated) {
-              await updateDoc(doc(db, 'users', user.uid), { role: currentData.role });
+            if (!currentData.email) {
+              updates.email = user.email;
+              needsUpdate = true;
+            }
+            if (!currentData.name) {
+              updates.name = user.displayName || 'Novo Integrante';
+              needsUpdate = true;
+            }
+            if (!currentData.status) {
+              updates.status = 'active';
+              needsUpdate = true;
+            }
+            if (!currentData.roles) {
+              updates.roles = user.email === 'pedrohenriqueribei@gmail.com' ? { worship: ['leader'], multimedia: [], secretariat: [] } : { worship: [], multimedia: [], secretariat: [] };
+              needsUpdate = true;
+            }
+
+            if (needsUpdate) {
+              try {
+                await updateDoc(doc(db, 'users', user.uid), updates);
+              } catch (e) {
+                console.error('Auth User Data Error on updateDoc:', e);
+                throw e;
+              }
+              currentData = { ...currentData, ...updates };
             }
             setUserData(currentData);
           }
         } catch (error) {
-          console.error('Auth User Data Error:', error);
-          // Don't throw here to avoid blocking loading state indefinitely
-          // We can still try to set something or leave it as null
+          console.error('Auth User Data Error (general):', error);
           setUserData(null);
         } finally {
           setLoading(false);
         }
       } else {
         setUserData(null);
+        setIsSuperAdmin(false);
         setLoading(false);
       }
     });
@@ -101,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       instruments: data.instruments,
       vocalRange: data.vocalRange,
       churchId: data.churchId || '',
-      role: isAdminEmail ? 'líder' : 'instrumentista',
+      roles: isAdminEmail ? { worship: ['leader'], multimedia: [], secretariat: [] } : { worship: [], multimedia: [], secretariat: [] },
       status: 'active',
       createdAt: serverTimestamp()
     };
@@ -109,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, userData, loading, signInWithGoogle, signInWithEmail, signUpWithEmail }}>
+    <AuthContext.Provider value={{ user, userData, loading, isSuperAdmin, signInWithGoogle, signInWithEmail, signUpWithEmail }}>
       {children}
     </AuthContext.Provider>
   );

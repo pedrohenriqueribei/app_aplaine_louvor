@@ -35,16 +35,26 @@ service cloud.firestore {
       return exists(path) ? get(path).data : {"role": "", "churchId": ""};
     }
 
+    function isSuperAdmin() {
+      return isSignedIn() && ('super_admin' in request.auth.token) && request.auth.token.super_admin == true;
+    }
+
     function isAdmin() {
       return isSignedIn() && 
              (
-               request.auth.token.email == 'pedrohenriqueribei@gmail.com' ||
+               isSuperAdmin() ||
+               (('email' in request.auth.token) && request.auth.token.email == 'pedrohenriqueribei@gmail.com') ||
                myData().get('role', '') == 'líder'
              );
     }
 
     function getMyChurch() {
       return myData().get('churchId', '');
+    }
+
+    function hasDepartmentRole(churchId, departmentId, roleString) {
+      let path = /databases/$(database)/documents/churches/$(churchId)/departments/$(departmentId)/members/$(request.auth.uid);
+      return exists(path) && get(path).data.roles.hasAny([roleString]);
     }
 
     function isValidNotification(data) {
@@ -61,19 +71,19 @@ service cloud.firestore {
     // --- Validation Helpers ---
 
     function isValidUser(data) {
-      // Allow partial updates if the merged result is valid
-      let requiredFields = ['uid', 'name', 'email', 'role', 'status'];
-      return data.keys().hasAll(requiredFields) &&
+      return data.keys().hasAll(['uid']) &&
              data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
-             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-             data.email is string && data.email.size() > 0 && data.email.size() <= 100 &&
-             data.role in ['líder', 'instrumentista'] &&
-             data.status in ['active', 'inactive'] &&
+             (!('status' in data) || data.status in ['active', 'inactive']) &&
+             (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
+             (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 100)) &&
              (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
              (!('vocalRange' in data) || (data.vocalRange is string)) &&
              (!('level' in data) || (data.level is string)) &&
              (!('churchId' in data) || (data.churchId is string)) &&
-             (!('instruments' in data) || (data.instruments is list && data.instruments.size() <= 60));
+             (!('role' in data) || (data.role is string)) &&
+             (!('roles' in data) || (data.roles is map)) &&
+             (!('instruments' in data) || (data.instruments is list && data.instruments.size() <= 60)) &&
+             (!('createdAt' in data) || (data.createdAt is string || data.createdAt is timestamp));
     }
 
     function isValidSong(data) {
@@ -95,54 +105,63 @@ service cloud.firestore {
 
     // --- Match Blocks ---
 
-    match /users/{userId} {
-      allow get: if isSignedIn() && (
-        isOwner(userId) || 
-        isAdmin() || 
-        resource.data.get('churchId', '') == getMyChurch()
-      );
+    match /churches/{churchId} {
+      allow read: if true;
+      allow write: if isSignedIn();
 
-      allow list: if isSignedIn() && (
-        isAdmin() || 
-        resource.data.get('churchId', '') == getMyChurch() ||
-        (myData().get('role', '') == 'líder' && resource.data.get('churchId', '') == '')
-      );
-      
-      allow create: if isSignedIn() && (isOwner(userId) || isAdmin()) && 
-        isValidId(userId) &&
-        isValidUser(incoming()) && (
-          isAdmin() || (
-            isOwner(userId) &&
-            incoming().uid == userId &&
-            incoming().email == request.auth.token.email &&
-            (incoming().role == 'instrumentista' || (incoming().role == 'líder' && incoming().email == 'pedrohenriqueribei@gmail.com'))
-          )
-        );
-      
-      allow update: if isSignedIn() && (isOwner(userId) || isAdmin()) && 
-        isValidId(userId) && 
-        isValidUser(incoming()) && (
-          isAdmin() || (
-            incoming().role == existing().role &&
-            incoming().status == existing().status &&
-            incoming().email == existing().email &&
-            incoming().uid == existing().uid
-          )
-        );
+      match /departments/{departmentId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && (isAdmin() || getMyChurch() == churchId);
+        
+        match /members/{memberUid} {
+          function isValidMember(data) {
+            return data.keys().hasAll(['userId', 'roles']) &&
+                   data.userId is string &&
+                   data.roles is list && data.roles.size() <= 20 &&
+                   (!('joinedAt' in data) || data.joinedAt is string);
+          }
 
-      allow delete: if isAdmin();
+          allow read: if isSignedIn() && (
+             memberUid == request.auth.uid ||
+             isAdmin() || 
+             getMyChurch() == churchId ||
+             hasDepartmentRole(churchId, departmentId, 'leader')
+          );
+          
+          allow create: if isSignedIn() && isValidMember(incoming()) && 
+             incoming().userId == memberUid &&
+             (
+               isAdmin() || 
+               hasDepartmentRole(churchId, departmentId, 'leader') || 
+               getMyChurch() == churchId // Allow any church member to join for now depending on your exact business rule
+             );
+
+          allow update: if isSignedIn() && isValidMember(incoming()) &&
+             incoming().userId == existing().userId &&
+             (
+               isAdmin() || 
+               hasDepartmentRole(churchId, departmentId, 'leader')
+             );
+
+          allow delete: if isSignedIn() && (
+             isAdmin() || 
+             hasDepartmentRole(churchId, departmentId, 'leader')
+          );
+        }
+      }
     }
 
-    match /churches/{churchId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+    match /users/{userId} {
+      allow read, write: if true;
     }
 
     match /songs/{songId} {
       allow read: if isSignedIn() && (
-        resource.data.ownerId == request.auth.uid ||
         isAdmin() ||
-        (resource.data.get('churchId', '') != '' && resource.data.get('churchId', '') == getMyChurch())
+        (resource != null && (
+          resource.data.ownerId == request.auth.uid ||
+          (resource.data.get('churchId', '') != '' && resource.data.get('churchId', '') == getMyChurch())
+        ))
       );
       
       allow create: if isSignedIn() && isValidId(songId) && isValidSong(incoming()) && 
@@ -156,13 +175,60 @@ service cloud.firestore {
     }
 
     match /services/{serviceId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow read, write: if isSignedIn();
+    }
+
+    match /bands/{bandId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /visitors/{visitorId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        (resource != null && resource.data.get('churchId', '') != '' && resource.data.get('churchId', '') == getMyChurch())
+      );
+      allow create: if isSignedIn() && isValidId(visitorId) && incoming().id == visitorId;
+      allow update: if isSignedIn() && isValidId(visitorId) && existing().id == incoming().id;
+      allow delete: if isAdmin();
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        (resource != null && (
+          (resource.data.get('churchId', '') != '' && resource.data.get('churchId', '') == getMyChurch()) ||
+          resource.data.get('personId', '') == request.auth.uid
+        ))
+      );
+      allow create: if isSignedIn() && isValidId(appointmentId) && incoming().id == appointmentId;
+      allow update: if isSignedIn() && isValidId(appointmentId) && existing().id == incoming().id;
+      allow delete: if isAdmin();
+    }
+
+    function isValidSchedule(data) {
+      let requiredFields = ['id', 'date', 'churchId', 'songs', 'members', 'roles'];
+      return data.keys().hasAll(requiredFields) &&
+             data.id is string &&
+             data.date is string &&
+             data.churchId is string &&
+             data.songs is list &&
+             data.members is list &&
+             data.roles is map;
     }
 
     match /schedules/{scheduleId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow read: if isSignedIn() && (
+        isAdmin() || (resource != null && resource.data.churchId == getMyChurch())
+      );
+      allow create: if isSignedIn() && isValidId(scheduleId) && 
+                    isValidSchedule(incoming()) && 
+                    incoming().id == scheduleId &&
+                    (incoming().churchId == getMyChurch() || isAdmin());
+      allow update: if isSignedIn() && isValidId(scheduleId) && 
+                    isValidSchedule(incoming()) && 
+                    (existing().churchId == getMyChurch() || isAdmin()) &&
+                    (incoming().churchId == existing().churchId || isAdmin());
+      allow delete: if isAdmin();
     }
 
     match /fcm_tokens/{tokenId} {
@@ -198,13 +264,26 @@ service cloud.firestore {
     }
 
     match /notifications/{notificationId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read: if isSignedIn() && (isAdmin() || (resource != null && resource.data.userId == request.auth.uid));
       allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin()) &&
                     isValidNotification(incoming()) &&
                     incoming().diff(existing()).affectedKeys().hasOnly(['read']) &&
                     incoming().id == existing().id &&
                     incoming().userId == existing().userId;
-      allow create, delete: if isAdmin();
+      allow create: if isSignedIn() && 
+                    isValidNotification(incoming()) &&
+                    incoming().id == notificationId &&
+                    (
+                      isAdmin() || 
+                      myData().get('role', '') == 'líder' ||
+                      (('email' in request.auth.token) && request.auth.token.email == 'pedrohenriqueribei@gmail.com') ||
+                      (
+                        getMyChurch() != '' && 
+                        exists(/databases/$(database)/documents/users/$(incoming().userId)) &&
+                        getMyChurch() == get(/databases/$(database)/documents/users/$(incoming().userId)).data.get('churchId', '')
+                      )
+                    );
+      allow delete: if isAdmin();
     }
   }
 }

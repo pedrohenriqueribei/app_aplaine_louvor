@@ -1,17 +1,49 @@
-'use client';
+"use client";
 
-import React, { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, collection, query, where, getDocs, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '@/lib/firebase';
-import { motion } from 'motion/react';
-import { 
-  ArrowLeft, Church, MapPin, User as PastorIcon, Users, 
-  Music, Mic2, Shield, Calendar, Mail, Phone, ExternalLink, Waves,
-  Copy, Check, Clock, Plus, X
-} from 'lucide-react';
-import Link from 'next/link';
-import { useAuth } from '@/components/AuthProvider';
+import React, { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+
+export const dynamic = "force-dynamic";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  addDoc,
+  serverTimestamp,
+  updateDoc,
+} from "firebase/firestore";
+import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
+import { motion } from "motion/react";
+import {
+  ArrowLeft,
+  Church,
+  MapPin,
+  User as PastorIcon,
+  Users,
+  Music,
+  Mic2,
+  Shield,
+  Calendar,
+  Mail,
+  Phone,
+  ExternalLink,
+  Waves,
+  Copy,
+  Check,
+  Clock,
+  Plus,
+  X,
+  LayoutGrid,
+  Monitor,
+  Briefcase,
+} from "lucide-react";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/AuthProvider";
 
 interface Musician {
   uid: string;
@@ -21,8 +53,20 @@ interface Musician {
   instruments?: string[];
   vocalRange?: string;
   level?: string;
-  role: 'líder' | 'instrumentista';
-  status: 'active' | 'inactive';
+  roles?: {
+    worship?: string[];
+    multimedia?: string[];
+    secretariat?: string[];
+  };
+  status: "active" | "inactive";
+}
+
+interface Band {
+  id: string;
+  name: string;
+  churchId: string;
+  memberIds: string[];
+  leaderId: string;
 }
 
 interface ChurchType {
@@ -30,6 +74,8 @@ interface ChurchType {
   name: string;
   address: string;
   pastor: string;
+  worshipMinistryName?: string;
+  worshipMinistryAcronym?: string;
 }
 
 interface ServiceType {
@@ -45,21 +91,37 @@ interface ServiceType {
 export default function ChurchDetailPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { userData } = useAuth();
+  const { userData, isSuperAdmin, user } = useAuth();
   const [church, setChurch] = useState<ChurchType | null>(null);
   const [members, setMembers] = useState<Musician[]>([]);
+  const [bands, setBands] = useState<Band[]>([]);
   const [services, setServices] = useState<ServiceType[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [isMinistryModalOpen, setIsMinistryModalOpen] = useState(false);
+  const [selectedMinistry, setSelectedMinistry] = useState<
+    "louvor" | "multimidia" | "secretaria" | null
+  >(null);
+  const [isEditingWorship, setIsEditingWorship] = useState(false);
+  const [worshipEditData, setWorshipEditData] = useState({
+    name: "",
+    acronym: "",
+  });
+  const [savingWorship, setSavingWorship] = useState(false);
 
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [isBandModalOpen, setIsBandModalOpen] = useState(false);
+  const [isBandDetailOpen, setIsBandDetailOpen] = useState(false);
+  const [selectedBand, setSelectedBand] = useState<Band | null>(null);
   const [savingService, setSavingService] = useState(false);
+  const [savingBand, setSavingBand] = useState(false);
+  const [bandName, setBandName] = useState("");
   const [serviceFormData, setServiceFormData] = useState({
-    name: '',
-    description: '',
-    startTime: '',
-    endTime: '',
-    dayOfWeek: 'Domingo'
+    name: "",
+    description: "",
+    startTime: "",
+    endTime: "",
+    dayOfWeek: "Domingo",
   });
 
   const handleCopyLink = () => {
@@ -73,28 +135,51 @@ export default function ChurchDetailPage() {
     async function fetchData() {
       try {
         // Fetch Church
-        const churchDoc = await getDoc(doc(db, 'churches', id as string));
+        const churchDoc = await getDoc(doc(db, "churches", id as string));
         if (churchDoc.exists()) {
           setChurch({ ...churchDoc.data() } as ChurchType);
         }
 
-        // Fetch Members
-        const q = query(
-          collection(db, 'users'), 
-          where('churchId', '==', id),
-          orderBy('name', 'asc')
+        // Fetch Members for church display
+        const usersQ = query(
+          collection(db, "users"),
+          where("churchId", "==", id),
         );
-        const memberSnap = await getDocs(q);
-        setMembers(memberSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() } as Musician)));
+        const usersSnap = await getDocs(usersQ);
+
+        const membersData: Musician[] = usersSnap.docs.map((docSnap) => {
+          const userData = docSnap.data();
+          return {
+            uid: docSnap.id,
+            ...userData,
+          } as Musician;
+        });
+
+        // Ensure members are sorted by name for UI mapping simplicity
+        membersData.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        setMembers(membersData);
 
         // Fetch Services
         const servicesQ = query(
-          collection(db, 'services'),
-          where('churchId', '==', id)
+          collection(db, "services"),
+          where("churchId", "==", id),
         );
         const servicesSnap = await getDocs(servicesQ);
-        setServices(servicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceType)));
+        setServices(
+          servicesSnap.docs.map(
+            (doc) => ({ id: doc.id, ...doc.data() }) as ServiceType,
+          ),
+        );
 
+        // Fetch Bands
+        const bandsQ = query(
+          collection(db, "bands"),
+          where("churchId", "==", id),
+        );
+        const bandsSnap = await getDocs(bandsQ);
+        setBands(
+          bandsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Band),
+        );
       } catch (err) {
         handleFirestoreError(err, OperationType.GET, `churches/${id}`);
       } finally {
@@ -105,21 +190,104 @@ export default function ChurchDetailPage() {
     if (id) fetchData();
   }, [id]);
 
+  const handleSaveBand = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bandName.trim()) return;
+    setSavingBand(true);
+    try {
+      const docRef = await addDoc(collection(db, "bands"), {
+        name: bandName,
+        churchId: id,
+        memberIds: [],
+        leaderId: userData?.uid || "",
+        createdAt: serverTimestamp(),
+        createdBy: user?.uid,
+        updatedAt: serverTimestamp(),
+        updatedBy: user?.uid,
+      });
+      const newBand: Band = {
+        id: docRef.id,
+        name: bandName,
+        churchId: id as string,
+        memberIds: [],
+        leaderId: userData?.uid || "",
+      };
+      setBands([...bands, newBand]);
+      setBandName("");
+      setIsBandModalOpen(false);
+    } catch (err: any) {
+      alert("Erro ao salvar banda: " + err.message);
+    } finally {
+      setSavingBand(false);
+    }
+  };
+
+  const handleUpdateBandMembers = async (
+    bandId: string,
+    newMemberIds: string[],
+  ) => {
+    try {
+      const bandRef = doc(db, "bands", bandId);
+      await updateDoc(bandRef, { memberIds: newMemberIds });
+      setBands(
+        bands.map((b) =>
+          b.id === bandId ? { ...b, memberIds: newMemberIds } : b,
+        ),
+      );
+      if (selectedBand?.id === bandId) {
+        setSelectedBand({ ...selectedBand, memberIds: newMemberIds });
+      }
+    } catch (err: any) {
+      alert("Erro ao atualizar integrantes da banda: " + err.message);
+    }
+  };
+
   const handleSaveService = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     setSavingService(true);
     try {
-      const docRef = await addDoc(collection(db, 'services'), {
+      const docRef = await addDoc(collection(db, "services"), {
         ...serviceFormData,
         churchId: id,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        createdBy: user.uid,
+        updatedAt: serverTimestamp(),
+        updatedBy: user.uid,
       });
-      setServices([...services, { id: docRef.id, churchId: id as string, ...serviceFormData }]);
+      setServices([
+        ...services,
+        { id: docRef.id, churchId: id as string, ...serviceFormData },
+      ]);
       setIsServiceModalOpen(false);
     } catch (err: any) {
-      alert('Erro ao salvar culto: ' + err.message);
+      alert("Erro ao salvar culto: " + err.message);
     } finally {
       setSavingService(false);
+    }
+  };
+
+  const handleUpdateWorshipInfo = async () => {
+    if (!church || !user) return;
+    setSavingWorship(true);
+    try {
+      const churchRef = doc(db, "churches", id as string);
+      await updateDoc(churchRef, {
+        worshipMinistryName: worshipEditData.name,
+        worshipMinistryAcronym: worshipEditData.acronym,
+        updatedAt: serverTimestamp(),
+        updatedBy: user.uid,
+      });
+      setChurch({
+        ...church,
+        worshipMinistryName: worshipEditData.name,
+        worshipMinistryAcronym: worshipEditData.acronym,
+      });
+      setIsEditingWorship(false);
+    } catch (err: any) {
+      alert("Erro ao atualizar informações: " + err.message);
+    } finally {
+      setSavingWorship(false);
     }
   };
 
@@ -128,7 +296,9 @@ export default function ChurchDetailPage() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="relative">
           <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-800 rounded-full animate-spin"></div>
-          <div className="absolute inset-x-0 top-20 text-center text-xs font-black text-slate-400 uppercase tracking-widest">Carregando...</div>
+          <div className="absolute inset-x-0 top-20 text-center text-xs font-black text-slate-400 uppercase tracking-widest">
+            Carregando...
+          </div>
         </div>
       </div>
     );
@@ -138,8 +308,13 @@ export default function ChurchDetailPage() {
     return (
       <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-100 dark:border-slate-800">
         <Church className="w-16 h-16 text-slate-200 dark:text-slate-800 mx-auto mb-6" />
-        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4">Igreja não encontrada</h2>
-        <button onClick={() => router.back()} className="text-blue-800 dark:text-blue-400 font-bold flex items-center gap-2 mx-auto">
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4">
+          Igreja não encontrada
+        </h2>
+        <button
+          onClick={() => router.back()}
+          className="text-blue-800 dark:text-blue-400 font-bold flex items-center gap-2 mx-auto"
+        >
           <ArrowLeft className="w-4 h-4" /> Voltar
         </button>
       </div>
@@ -150,10 +325,10 @@ export default function ChurchDetailPage() {
   const groupMembers = () => {
     const groups: { [key: string]: Musician[] } = {};
 
-    members.forEach(m => {
+    members.forEach((m) => {
       // If has instruments list
       if (m.instruments && m.instruments.length > 0) {
-        m.instruments.forEach(inst => {
+        m.instruments.forEach((inst) => {
           if (!groups[inst]) groups[inst] = [];
           groups[inst].push(m);
         });
@@ -166,15 +341,15 @@ export default function ChurchDetailPage() {
       // Vocal range
       if (m.vocalRange) {
         if (!groups[m.vocalRange]) groups[m.vocalRange] = [];
-        // Prevent duplicate if already added by instrument? 
+        // Prevent duplicate if already added by instrument?
         // No, user requested "vocal type" to be visible too.
         groups[m.vocalRange].push(m);
       }
 
       // If nothing defined
       if (!m.instruments?.length && !m.instrument && !m.vocalRange) {
-        if (!groups['Outros']) groups['Outros'] = [];
-        groups['Outros'].push(m);
+        if (!groups["Outros"]) groups["Outros"] = [];
+        groups["Outros"].push(m);
       }
     });
 
@@ -184,9 +359,9 @@ export default function ChurchDetailPage() {
   const groupedData = groupMembers();
 
   return (
-    <div className="max-w-6xl space-y-12 pb-20">
+    <div className="max-w-6xl space-y-12 pb-20 text-slate-800 dark:text-slate-100">
       <header className="flex items-center justify-between">
-        <button 
+        <button
           onClick={() => router.back()}
           className="flex items-center gap-2 text-slate-400 dark:text-slate-500 hover:text-blue-800 dark:hover:text-blue-400 font-bold transition-colors group"
         >
@@ -215,17 +390,21 @@ export default function ChurchDetailPage() {
             <div className="flex flex-wrap gap-8 pt-4">
               <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 font-medium">
                 <PastorIcon className="w-5 h-5 text-blue-400 dark:text-blue-500" />
-                <span>{church.pastor || 'Pastor não informado'}</span>
+                <span>{church.pastor || "Pastor não informado"}</span>
               </div>
               <div className="flex items-start gap-3 text-slate-500 dark:text-slate-400 font-medium max-w-md">
                 <MapPin className="w-5 h-5 text-blue-400 dark:text-blue-500 mt-0.5 shrink-0" />
-                <span>{church.address || 'Endereço não informado'}</span>
+                <span>{church.address || "Endereço não informado"}</span>
               </div>
             </div>
           </div>
           <div className="w-full md:w-auto flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-800 rounded-[3rem] border border-white dark:border-slate-700">
-            <div className="text-4xl font-display font-black text-blue-800 dark:text-blue-400 mb-1">{members.length}</div>
-            <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Integrantes</div>
+            <div className="text-4xl font-display font-black text-blue-800 dark:text-blue-400 mb-1">
+              {members.length}
+            </div>
+            <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+              Integrantes
+            </div>
           </div>
         </div>
       </section>
@@ -240,29 +419,38 @@ export default function ChurchDetailPage() {
           <div className="space-y-6">
             {Object.keys(groupedData).length > 0 ? (
               Object.entries(groupedData).map(([group, list]) => (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
-                  key={group} 
+                  key={group}
                   className="bg-white dark:bg-slate-900 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-800 shadow-sm"
                 >
                   <div className="flex items-center gap-3 mb-6">
                     <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-slate-400">
-                      {group.includes('Soprano') || group.includes('Contralto') || group.includes('Mezzo') || group.includes('Baixo') || group.includes('Tenor') || group.includes('Barítono') ? (
+                      {group.includes("Soprano") ||
+                      group.includes("Contralto") ||
+                      group.includes("Mezzo") ||
+                      group.includes("Baixo") ||
+                      group.includes("Tenor") ||
+                      group.includes("Barítono") ? (
                         <Mic2 className="w-5 h-5 text-emerald-500" />
                       ) : (
                         <Music className="w-5 h-5 text-blue-500 dark:text-blue-400" />
                       )}
                     </div>
-                    <h3 className="font-display font-black text-slate-800 dark:text-slate-100 text-lg capitalize">{group}</h3>
-                    <span className="ml-auto text-[10px] font-bold text-slate-300 dark:text-slate-600 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full">{list.length}</span>
+                    <h3 className="font-display font-black text-slate-800 dark:text-slate-100 text-lg capitalize">
+                      {group}
+                    </h3>
+                    <span className="ml-auto text-[10px] font-bold text-slate-300 dark:text-slate-600 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full">
+                      {list.length}
+                    </span>
                   </div>
 
                   <div className="space-y-4">
-                    {list.map(m => (
-                      <Link 
-                        key={m.uid} 
+                    {list.map((m) => (
+                      <Link
+                        key={m.uid}
                         href={`/dashboard/members/${m.uid}`}
                         className="group flex items-center gap-4 p-4 rounded-[2rem] hover:bg-slate-50 dark:hover:bg-slate-800 transition-all border border-transparent hover:border-slate-100 dark:hover:border-slate-700"
                       >
@@ -270,8 +458,13 @@ export default function ChurchDetailPage() {
                           {m.name.charAt(0)}
                         </div>
                         <div className="flex-1">
-                          <div className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-800 dark:group-hover:text-blue-400 transition-colors">{m.name}</div>
-                          <div className="text-xs text-slate-400 dark:text-slate-500 capitalize">{m.role} {m.level ? `• ${m.level}` : ''}</div>
+                          <div className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-800 dark:group-hover:text-blue-400 transition-colors">
+                            {m.name}
+                          </div>
+                          <div className="text-xs text-slate-400 dark:text-slate-500 capitalize">
+                            {(m.roles?.worship?.includes("leader") || m.roles?.multimedia?.includes("leader") || m.roles?.secretariat?.includes("leader")) ? "Líder" : "Integrante"}
+                            {m.level && ` • ${m.level}`}
+                          </div>
                         </div>
                         <div className="w-10 h-10 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-blue-800 dark:text-blue-400 shadow-sm">
                           <ExternalLink className="w-4 h-4" />
@@ -284,7 +477,9 @@ export default function ChurchDetailPage() {
             ) : (
               <div className="bg-slate-50 dark:bg-slate-900 rounded-[3rem] p-12 text-center border border-dashed border-slate-200 dark:border-slate-800">
                 <Users className="w-12 h-12 text-slate-200 dark:text-slate-800 mx-auto mb-4" />
-                <p className="text-slate-500 dark:text-slate-400 font-medium">Nenhum integrante vinculado a esta igreja ainda.</p>
+                <p className="text-slate-500 dark:text-slate-400 font-medium">
+                  Nenhum integrante vinculado a esta igreja ainda.
+                </p>
               </div>
             )}
           </div>
@@ -293,16 +488,22 @@ export default function ChurchDetailPage() {
         <div className="space-y-12">
           <section className="bg-slate-900 rounded-[3.5rem] p-12 text-white shadow-2xl relative overflow-hidden">
             <div className="absolute bottom-0 right-0 w-64 h-64 bg-blue-600/20 blur-[80px] -mb-32 -mr-32"></div>
-            <h3 className="text-xs font-black text-blue-400 uppercase tracking-[0.2em] mb-10">Informações Rápidas</h3>
-            
+            <h3 className="text-xs font-black text-blue-400 uppercase tracking-[0.2em] mb-10">
+              Informações Rápidas
+            </h3>
+
             <div className="space-y-8">
               <div className="flex gap-6">
                 <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center shrink-0 border border-white/10">
                   <PastorIcon className="w-6 h-6 text-blue-400" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Pastor Responsável</div>
-                  <div className="font-display font-bold text-lg">{church.pastor || '---'}</div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                    Pastor Responsável
+                  </div>
+                  <div className="font-display font-bold text-lg">
+                    {church.pastor || "---"}
+                  </div>
                 </div>
               </div>
 
@@ -311,8 +512,12 @@ export default function ChurchDetailPage() {
                   <MapPin className="w-6 h-6 text-blue-400" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Localização</div>
-                  <div className="font-display font-bold text-lg leading-snug">{church.address || '---'}</div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                    Localização
+                  </div>
+                  <div className="font-display font-bold text-lg leading-snug">
+                    {church.address || "---"}
+                  </div>
                 </div>
               </div>
 
@@ -321,9 +526,12 @@ export default function ChurchDetailPage() {
                   <Shield className="w-6 h-6 text-blue-400" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Líderes de Louvor</div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                    Líderes de Louvor
+                  </div>
                   <div className="font-display font-bold text-lg">
-                    {members.filter(m => m.role === 'líder').length} Integrantes
+                    {members.filter((m) => m.roles?.worship?.includes("leader") || m.roles?.multimedia?.includes("leader") || m.roles?.secretariat?.includes("leader")).length}{" "}
+                    Integrantes
                   </div>
                 </div>
               </div>
@@ -331,22 +539,33 @@ export default function ChurchDetailPage() {
           </section>
 
           <section className="bg-blue-600 rounded-[3.5rem] p-12 text-white shadow-2xl shadow-blue-500/20 relative overflow-hidden">
-           <Waves className="absolute right-0 bottom-0 text-white/5 transform translate-x-1/4 translate-y-1/4 scale-150" size={300} />
-           <div className="relative z-10">
-              <h3 className="text-2xl font-display font-black leading-tight mb-6">Convite para<br />Integrantes</h3>
+            <Waves
+              className="absolute right-0 bottom-0 text-white/5 transform translate-x-1/4 translate-y-1/4 scale-150"
+              size={300}
+            />
+            <div className="relative z-10">
+              <h3 className="text-2xl font-display font-black leading-tight mb-6">
+                Convite para
+                <br />
+                Integrantes
+              </h3>
               <p className="text-blue-100 text-sm mb-10 leading-relaxed font-medium">
-                Deseja adicionar mais músicos ou vocalistas a esta igreja? Compartilhe o link de convite ou realize o cadastro manual.
+                Deseja adicionar mais músicos ou vocalistas a esta igreja?
+                Compartilhe o link de convite ou realize o cadastro manual.
               </p>
               <div className="flex flex-wrap gap-4">
-                <Link href="/dashboard/members" className="inline-flex items-center gap-3 bg-white text-blue-800 px-8 py-4 rounded-[2rem] font-bold shadow-xl shadow-black/10 hover:scale-105 active:scale-95 transition-all">
+                <Link
+                  href="/dashboard/members"
+                  className="inline-flex items-center gap-3 bg-white text-blue-800 px-8 py-4 rounded-[2rem] font-bold shadow-xl shadow-black/10 hover:scale-105 active:scale-95 transition-all"
+                >
                   Cadastrar Manualmente
                 </Link>
-                <button 
+                <button
                   onClick={handleCopyLink}
                   className={`inline-flex items-center gap-3 px-8 py-4 rounded-[2rem] font-bold transition-all hover:scale-105 active:scale-95 border ${
-                    copied 
-                      ? 'bg-emerald-500 text-white border-emerald-400 shadow-xl shadow-emerald-500/20' 
-                      : 'bg-blue-700/50 text-white border-white/20 hover:bg-blue-700 shadow-xl shadow-black/10'
+                    copied
+                      ? "bg-emerald-500 text-white border-emerald-400 shadow-xl shadow-emerald-500/20"
+                      : "bg-blue-700/50 text-white border-white/20 hover:bg-blue-700 shadow-xl shadow-black/10"
                   }`}
                 >
                   {copied ? (
@@ -360,7 +579,7 @@ export default function ChurchDetailPage() {
                   )}
                 </button>
               </div>
-           </div>
+            </div>
           </section>
         </div>
       </div>
@@ -372,12 +591,22 @@ export default function ChurchDetailPage() {
               <Church className="w-8 h-8 text-blue-800 dark:text-blue-400" />
               Cultos da Igreja
             </h2>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">Veja todos os cultos e horários associados a esta igreja.</p>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">
+              Veja todos os cultos e horários associados a esta igreja.
+            </p>
           </div>
-          {userData?.role === 'líder' && userData?.churchId === id && (
-            <button 
+          {(isSuperAdmin ||
+            ((userData?.roles?.worship?.includes("leader") || userData?.roles?.multimedia?.includes("leader") || userData?.roles?.secretariat?.includes("leader")) &&
+              userData?.churchId === id)) && (
+            <button
               onClick={() => {
-                setServiceFormData({ name: '', description: '', startTime: '', endTime: '', dayOfWeek: 'Domingo' });
+                setServiceFormData({
+                  name: "",
+                  description: "",
+                  startTime: "",
+                  endTime: "",
+                  dayOfWeek: "Domingo",
+                });
                 setIsServiceModalOpen(true);
               }}
               className="bg-blue-800 hover:bg-blue-900 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-xl shadow-blue-800/20 active:scale-95"
@@ -391,12 +620,17 @@ export default function ChurchDetailPage() {
         {services.length === 0 ? (
           <div className="bg-slate-50 dark:bg-slate-800/50 rounded-[3rem] p-16 text-center border border-dashed border-slate-200 dark:border-slate-700">
             <Calendar className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-6" />
-            <p className="text-lg text-slate-500 dark:text-slate-400 font-medium">Nenhum culto cadastrado para esta igreja.</p>
+            <p className="text-lg text-slate-500 dark:text-slate-400 font-medium">
+              Nenhum culto cadastrado para esta igreja.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {services.map(service => (
-              <div key={service.id} className="bg-slate-50 dark:bg-slate-800 rounded-[2rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-lg transition-all group">
+            {services.map((service) => (
+              <div
+                key={service.id}
+                className="bg-slate-50 dark:bg-slate-800 rounded-[2rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-lg transition-all group"
+              >
                 <div className="flex justify-between items-start mb-6">
                   <div className="w-14 h-14 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center text-blue-800 dark:text-blue-400 shadow-sm">
                     <Clock className="w-7 h-7" />
@@ -405,17 +639,29 @@ export default function ChurchDetailPage() {
                     {service.dayOfWeek}
                   </span>
                 </div>
-                <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-2">{service.name}</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px] truncate">{service.description || 'Sem descrição'}</p>
+                <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-2">
+                  {service.name}
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px] truncate">
+                  {service.description || "Sem descrição"}
+                </p>
                 <div className="flex items-center gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
                   <div className="flex-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Início</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-300">{service.startTime}</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                      Início
+                    </span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                      {service.startTime}
+                    </span>
                   </div>
                   <div className="w-px h-8 bg-slate-200 dark:bg-slate-700"></div>
                   <div className="flex-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Término</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-300">{service.endTime}</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                      Término
+                    </span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                      {service.endTime}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -424,17 +670,124 @@ export default function ChurchDetailPage() {
         )}
       </section>
 
+      {/* Seção de Ministérios */}
+      <section className="bg-white dark:bg-slate-900 rounded-[4rem] p-12 border border-slate-100 dark:border-slate-800 shadow-sm relative mt-12 overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-50 dark:bg-emerald-900/10 blur-[100px] -mr-32 -mt-32 opacity-50"></div>
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12 relative z-10">
+          <div className="space-y-2">
+            <h2 className="text-3xl font-display font-black text-slate-800 dark:text-slate-100 flex items-center gap-4">
+              <LayoutGrid className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+              Ministérios
+            </h2>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">
+              Explore as frentes de atuação e serviço desta comunidade.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
+          {/* Ministério de Louvor */}
+          <motion.div
+            whileHover={{ y: -5 }}
+            onClick={() =>
+              router.push(`/dashboard/churches/${id}/ministries/louvor`)
+            }
+            className="bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-xl transition-all group cursor-pointer"
+          >
+            <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm mb-6 group-hover:scale-110 transition-transform">
+              <Mic2 className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-blue-600 transition-colors">
+              Ministério de Louvor
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
+              Equipe dedicada à adoração através da música, instrumentos e vozes
+              em nossos cultos.
+            </p>
+            <div className="flex items-center text-[10px] font-black text-blue-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
+              Ver Detalhes <ExternalLink className="w-3 h-3" />
+            </div>
+            {bands.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-100 dark:border-slate-700">
+                {bands.slice(0, 3).map((band) => (
+                  <span
+                    key={band.id}
+                    className="text-[9px] font-black uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded-md"
+                  >
+                    {band.name}
+                  </span>
+                ))}
+                {bands.length > 3 && (
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 py-1">
+                    +{bands.length - 3} mais
+                  </span>
+                )}
+              </div>
+            )}
+          </motion.div>
+
+          {/* Ministério de Multimídia */}
+          <motion.div
+            whileHover={{ y: -5 }}
+            onClick={() =>
+              router.push(`/dashboard/churches/${id}/ministries/multimidia`)
+            }
+            className="bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-xl transition-all group cursor-pointer"
+          >
+            <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-purple-600 dark:text-purple-400 shadow-sm mb-6 group-hover:scale-110 transition-transform">
+              <Monitor className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-purple-600 transition-colors">
+              Ministério de Multimídia
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
+              Gestão de som, projeção, transmissões ao vivo e toda a
+              infraestrutura tecnológica da igreja.
+            </p>
+            <div className="flex items-center text-[10px] font-black text-purple-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
+              Ver Detalhes <ExternalLink className="w-3 h-3" />
+            </div>
+          </motion.div>
+
+          {/* Secretaria */}
+          <motion.div
+            whileHover={{ y: -5 }}
+            onClick={() =>
+              router.push(`/dashboard/churches/${id}/ministries/secretaria`)
+            }
+            className="bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-xl transition-all group cursor-pointer"
+          >
+            <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm mb-6 group-hover:scale-110 transition-transform">
+              <Briefcase className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-emerald-600 transition-colors">
+              Secretaria
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
+              Organização administrativa, cadastro de membros, atas e suporte
+              pastoral estratégico.
+            </p>
+            <div className="flex items-center text-[10px] font-black text-emerald-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
+              Ver Detalhes <ExternalLink className="w-3 h-3" />
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
       {isServiceModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white dark:bg-slate-800 rounded-[3rem] w-full max-w-xl overflow-hidden shadow-2xl relative"
           >
             <div className="p-8 md:p-12">
               <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100">Cadastrar Culto</h3>
-                <button 
+                <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100">
+                  Cadastrar Culto
+                </h3>
+                <button
                   onClick={() => setIsServiceModalOpen(false)}
                   className="w-10 h-10 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full flex items-center justify-center text-slate-500 transition-colors"
                 >
@@ -444,23 +797,37 @@ export default function ChurchDetailPage() {
 
               <form onSubmit={handleSaveService} className="space-y-6">
                 <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Nome do Culto *</label>
-                  <input 
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
+                    Nome do Culto *
+                  </label>
+                  <input
                     required
                     type="text"
                     value={serviceFormData.name}
-                    onChange={(e) => setServiceFormData({...serviceFormData, name: e.target.value})}
+                    onChange={(e) =>
+                      setServiceFormData({
+                        ...serviceFormData,
+                        name: e.target.value,
+                      })
+                    }
                     placeholder="Ex: Culto de Celebração"
                     className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
                   />
                 </div>
-                
+
                 <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Descrição</label>
-                  <input 
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
+                    Descrição
+                  </label>
+                  <input
                     type="text"
                     value={serviceFormData.description}
-                    onChange={(e) => setServiceFormData({...serviceFormData, description: e.target.value})}
+                    onChange={(e) =>
+                      setServiceFormData({
+                        ...serviceFormData,
+                        description: e.target.value,
+                      })
+                    }
                     placeholder="Opcional"
                     className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
                   />
@@ -468,50 +835,128 @@ export default function ChurchDetailPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Hora de Início *</label>
-                    <input 
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
+                      Hora de Início *
+                    </label>
+                    <input
                       required
                       type="time"
                       value={serviceFormData.startTime}
-                      onChange={(e) => setServiceFormData({...serviceFormData, startTime: e.target.value})}
+                      onChange={(e) =>
+                        setServiceFormData({
+                          ...serviceFormData,
+                          startTime: e.target.value,
+                        })
+                      }
                       className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Hora de Término *</label>
-                    <input 
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
+                      Hora de Término *
+                    </label>
+                    <input
                       required
                       type="time"
                       value={serviceFormData.endTime}
-                      onChange={(e) => setServiceFormData({...serviceFormData, endTime: e.target.value})}
+                      onChange={(e) =>
+                        setServiceFormData({
+                          ...serviceFormData,
+                          endTime: e.target.value,
+                        })
+                      }
                       className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Dia da Semana *</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
+                    Dia da Semana *
+                  </label>
                   <select
                     required
                     value={serviceFormData.dayOfWeek}
-                    onChange={(e) => setServiceFormData({...serviceFormData, dayOfWeek: e.target.value})}
-                    className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
+                    onChange={(e) =>
+                      setServiceFormData({
+                        ...serviceFormData,
+                        dayOfWeek: e.target.value,
+                      })
+                    }
+                    className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium appearance-none"
                   >
-                    {['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'].map(d => (
-                      <option key={d} value={d}>{d}</option>
+                    {[
+                      "Domingo",
+                      "Segunda-feira",
+                      "Terça-feira",
+                      "Quarta-feira",
+                      "Quinta-feira",
+                      "Sexta-feira",
+                      "Sábado",
+                    ].map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
                     ))}
                   </select>
                 </div>
 
                 <div className="pt-6">
-                  <button 
+                  <button
                     disabled={savingService}
-                    type="submit" 
+                    type="submit"
                     className="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-blue-800/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {savingService ? 'Salvando...' : 'Salvar Culto'}
+                    {savingService ? "Salvando..." : "Salvar Culto"}
                   </button>
                 </div>
+              </form>
+            </div>
+          </motion.div>
+        </div>
+      )}
+      {isBandModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white dark:bg-slate-800 rounded-[3rem] w-full max-w-md overflow-hidden shadow-2xl relative"
+          >
+            <div className="p-8 md:p-12">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100">
+                  Nova Banda
+                </h3>
+                <button
+                  onClick={() => setIsBandModalOpen(false)}
+                  className="w-10 h-10 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full flex items-center justify-center text-slate-500 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveBand} className="space-y-6">
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
+                    Nome da Banda *
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={bandName}
+                    onChange={(e) => setBandName(e.target.value)}
+                    placeholder="Ex: Banda Alpha"
+                    className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
+                  />
+                </div>
+
+                <button
+                  disabled={savingBand}
+                  type="submit"
+                  className="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-blue-800/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest text-xs"
+                >
+                  {savingBand ? "Salvando..." : "Criar Banda"}
+                </button>
               </form>
             </div>
           </motion.div>

@@ -7,12 +7,12 @@ import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { useAuth } from '@/components/AuthProvider';
 
 export function useNotifications() {
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
     async function requestPermission() {
-      if (typeof window === 'undefined' || !user) return;
+      if (typeof window === 'undefined' || !user || !userData) return;
 
       try {
         const messagingInstance = await messaging?.();

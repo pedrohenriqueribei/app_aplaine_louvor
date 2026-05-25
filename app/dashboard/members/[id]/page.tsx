@@ -1,15 +1,34 @@
-'use client';
+"use client";
 
-import React, { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '@/lib/firebase';
-import { motion } from 'motion/react';
-import { 
-  ArrowLeft, Mail, Phone, Music, Mic2, Shield, 
-  Calendar, CheckCircle2, XCircle, User, Edit2, Waves,
-  Youtube, ChevronRight
-} from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+} from "firebase/firestore";
+import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
+import { motion } from "motion/react";
+import {
+  ArrowLeft,
+  Mail,
+  Phone,
+  Music,
+  Mic2,
+  Shield,
+  Calendar,
+  CheckCircle2,
+  XCircle,
+  User,
+  Edit2,
+  Waves,
+  Youtube,
+  ChevronRight,
+} from "lucide-react";
 
 interface Musician {
   uid: string;
@@ -20,8 +39,13 @@ interface Musician {
   vocalRange: string;
   level?: string;
   churchId?: string;
-  role: 'líder' | 'instrumentista';
-  status: 'active' | 'inactive';
+  role?: string;
+  roles?: {
+    worship?: string[];
+    secretariat?: string[];
+    multimedia?: string[];
+  };
+  status: "active" | "inactive";
   createdAt: any;
 }
 
@@ -33,27 +57,34 @@ interface Song {
   link: string;
 }
 
+interface Band {
+  id: string;
+  name: string;
+  churchId: string;
+}
+
 export default function MusicianProfilePage() {
   const { id } = useParams();
   const router = useRouter();
   const [musician, setMusician] = useState<Musician | null>(null);
-  const [churchName, setChurchName] = useState<string>('---');
+  const [churchName, setChurchName] = useState<string>("---");
   const [songs, setSongs] = useState<Song[]>([]);
+  const [bands, setBands] = useState<Band[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'info' | 'songs'>('info');
+  const [activeTab, setActiveTab] = useState<"info" | "songs">("info");
 
   useEffect(() => {
     async function fetchMusician() {
       if (!id) return;
       try {
-        const docRef = doc(db, 'users', id as string);
+        const docRef = doc(db, "users", id as string);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data() as Musician;
           setMusician(data);
-          
+
           if (data.churchId) {
-            const churchRef = doc(db, 'churches', data.churchId);
+            const churchRef = doc(db, "churches", data.churchId);
             const churchSnap = await getDoc(churchRef);
             if (churchSnap.exists()) {
               setChurchName(churchSnap.data().name);
@@ -62,12 +93,24 @@ export default function MusicianProfilePage() {
 
           // Fetch songs for this user
           const songsQuery = query(
-            collection(db, 'songs'),
-            where('ownerId', '==', id),
-            orderBy('createdAt', 'desc')
+            collection(db, "songs"),
+            where("ownerId", "==", id),
+            orderBy("createdAt", "desc"),
           );
           const songsSnap = await getDocs(songsQuery);
-          setSongs(songsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Song)));
+          setSongs(
+            songsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Song),
+          );
+
+          // Fetch bands this user is part of
+          const bandsQuery = query(
+            collection(db, "bands"),
+            where("memberIds", "array-contains", id),
+          );
+          const bandsSnap = await getDocs(bandsQuery);
+          setBands(
+            bandsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Band),
+          );
         }
       } catch (err) {
         handleFirestoreError(err, OperationType.GET, `users/${id}`);
@@ -89,8 +132,10 @@ export default function MusicianProfilePage() {
   if (!musician) {
     return (
       <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-100 dark:border-slate-800">
-        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4">Músico não encontrado</h2>
-        <button 
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4">
+          Músico não encontrado
+        </h2>
+        <button
           onClick={() => router.back()}
           className="text-blue-800 dark:text-blue-400 font-bold hover:underline flex items-center gap-2 mx-auto"
         >
@@ -100,9 +145,31 @@ export default function MusicianProfilePage() {
     );
   }
 
+  const isLeader = musician.roles?.worship?.includes("leader") || musician.roles?.multimedia?.includes("leader") || musician.roles?.secretariat?.includes("leader");
+  const isMultimedia = (musician.roles?.multimedia?.length ?? 0) > 0;
+  const isSecretariat = (musician.roles?.secretariat?.length ?? 0) > 0;
+
+  let displayRole = "Instrumentista Integrante";
+  let displayRoleShort = "Instrumentista";
+  let shieldColor = "text-blue-400";
+
+  if (isLeader) {
+    displayRole = "Líder de Ministério";
+    displayRoleShort = "Líder";
+    shieldColor = "text-amber-500";
+  } else if (isMultimedia && (musician.roles?.worship?.length ?? 0) === 0 && (musician.roles?.secretariat?.length ?? 0) === 0) {
+    displayRole = "Multimídia";
+    displayRoleShort = "Multimídia";
+    shieldColor = "text-purple-500";
+  } else if (isSecretariat) {
+    displayRole = "Secretaria";
+    displayRoleShort = "Secretaria";
+    shieldColor = "text-slate-500";
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20 px-4">
-      <button 
+      <button
         onClick={() => router.back()}
         className="flex items-center gap-2 text-slate-500 hover:text-blue-800 font-bold transition-all group"
       >
@@ -110,7 +177,7 @@ export default function MusicianProfilePage() {
         <span>Voltar para Listagem</span>
       </button>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden"
@@ -132,125 +199,213 @@ export default function MusicianProfilePage() {
             <div className="pb-4">
               <h1 className="text-4xl font-display font-black text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-3">
                 {musician.name}
-                {musician.status === 'active' ? (
+                {musician.status === "active" ? (
                   <CheckCircle2 className="w-6 h-6 text-emerald-500" />
                 ) : (
                   <XCircle className="w-6 h-6 text-slate-300 dark:text-slate-700" />
                 )}
               </h1>
               <p className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2">
-                <Shield className={`w-4 h-4 ${musician.role === 'líder' ? 'text-amber-500' : 'text-blue-400'}`} />
-                {musician.role === 'líder' ? 'Líder de Ministério' : 'Instrumentista Integrante'}
+                <Shield
+                  className={`w-4 h-4 ${shieldColor}`}
+                />
+                {displayRole}
               </p>
             </div>
             <div className="md:ml-auto pb-4">
-               <button className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-6 py-3 rounded-2xl font-bold flex items-center gap-2 transition-all">
-                 <Edit2 className="w-4 h-4" />
-                 Editar Perfil
-               </button>
+              <button className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-6 py-3 rounded-2xl font-bold flex items-center gap-2 transition-all">
+                <Edit2 className="w-4 h-4" />
+                Editar Perfil
+              </button>
             </div>
           </div>
 
           {/* Tabs */}
           <div className="flex gap-8 border-b border-slate-100 dark:border-slate-800 mb-12">
-            <button 
-              onClick={() => setActiveTab('info')}
+            <button
+              onClick={() => setActiveTab("info")}
               className={`pb-4 text-sm font-black uppercase tracking-widest transition-all relative ${
-                activeTab === 'info' ? 'text-blue-800 dark:text-blue-400' : 'text-slate-300 dark:text-slate-700'
+                activeTab === "info"
+                  ? "text-blue-800 dark:text-blue-400"
+                  : "text-slate-300 dark:text-slate-700"
               }`}
             >
               Informações
-              {activeTab === 'info' && <motion.div layoutId="tab" className="absolute bottom-0 left-0 right-0 h-1 bg-blue-800 dark:bg-blue-400 rounded-full" />}
+              {activeTab === "info" && (
+                <motion.div
+                  layoutId="tab"
+                  className="absolute bottom-0 left-0 right-0 h-1 bg-blue-800 dark:bg-blue-400 rounded-full"
+                />
+              )}
             </button>
-            <button 
-              onClick={() => setActiveTab('songs')}
+            <button
+              onClick={() => setActiveTab("songs")}
               className={`pb-4 text-sm font-black uppercase tracking-widest transition-all relative flex items-center gap-2 ${
-                activeTab === 'songs' ? 'text-blue-800 dark:text-blue-400' : 'text-slate-300 dark:text-slate-700'
+                activeTab === "songs"
+                  ? "text-blue-800 dark:text-blue-400"
+                  : "text-slate-300 dark:text-slate-700"
               }`}
             >
               Músicas
-              <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-                activeTab === 'songs' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
-              }`}>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] ${
+                  activeTab === "songs"
+                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                }`}
+              >
                 {songs.length}
               </span>
-              {activeTab === 'songs' && <motion.div layoutId="tab" className="absolute bottom-0 left-0 right-0 h-1 bg-blue-800 dark:bg-blue-400 rounded-full" />}
+              {activeTab === "songs" && (
+                <motion.div
+                  layoutId="tab"
+                  className="absolute bottom-0 left-0 right-0 h-1 bg-blue-800 dark:bg-blue-400 rounded-full"
+                />
+              )}
             </button>
           </div>
 
-          {activeTab === 'info' ? (
+          {activeTab === "info" ? (
             /* Grid Information */
             <div className="grid md:grid-cols-2 gap-12">
               <div className="space-y-8">
                 <section>
-                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">Contatos</h3>
+                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">
+                    Contatos
+                  </h3>
                   <div className="space-y-4">
-                    <InfoItem icon={Mail} label="E-mail" value={musician.email} />
-                    <InfoItem icon={Phone} label="Telefone" value={musician.phone || 'Não informado'} />
+                    <InfoItem
+                      icon={Mail}
+                      label="E-mail"
+                      value={musician.email}
+                    />
+                    <InfoItem
+                      icon={Phone}
+                      label="Telefone"
+                      value={musician.phone || "Não informado"}
+                    />
                   </div>
                 </section>
 
                 <section>
-                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">Ministério</h3>
+                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">
+                    Ministério
+                  </h3>
                   <div className="space-y-4">
-                    <InfoItem icon={User} label="Função" value={musician.role === 'líder' ? 'Líder' : 'Instrumentista'} />
-                    <InfoItem icon={Waves} label="Ministério" value={churchName} />
-                    <InfoItem icon={Calendar} label="Membro desde" value={musician.createdAt?.toDate().toLocaleDateString('pt-BR') || '---'} />
+                    <InfoItem
+                      icon={User}
+                      label="Função"
+                      value={displayRoleShort}
+                    />
+                    <InfoItem
+                      icon={Waves}
+                      label="Ministério"
+                      value={churchName}
+                    />
+                    <InfoItem
+                      icon={Calendar}
+                      label="Membro desde"
+                      value={
+                        musician.createdAt
+                          ?.toDate()
+                          .toLocaleDateString("pt-BR") || "---"
+                      }
+                    />
                   </div>
                 </section>
+
+                {bands.length > 0 && (
+                  <section>
+                    <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">
+                      Bandas / Grupos
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {bands.map((band) => (
+                        <div
+                          key={band.id}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl"
+                        >
+                          <Music className="w-3.5 h-3.5 text-blue-600" />
+                          <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                            {band.name}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
               </div>
 
               <div className="space-y-8">
-                <section>
-                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">Habilidades Musicais</h3>
-                  <div className="space-y-6">
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-slate-500">
-                        <Music className="w-4 h-4 text-blue-600" />
-                        <span className="text-sm font-bold">Instrumentos</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {musician.instruments && musician.instruments.length > 0 ? (
-                          musician.instruments.map(inst => (
-                            <span key={inst} className="px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-xl text-xs font-bold border border-blue-100 dark:border-blue-800 italic">
-                              {inst}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-slate-400 dark:text-slate-600 text-sm italic">Nenhum instrumento selecionado</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-slate-500">
-                        <Mic2 className="w-4 h-4 text-indigo-600" />
-                        <span className="text-sm font-bold">Vocal</span>
-                      </div>
-                      {musician.vocalRange ? (
-                        <span className="inline-block px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-xl text-xs font-bold border border-indigo-100 dark:border-indigo-800">
-                          {musician.vocalRange}
+                {musician.roles?.multimedia && musician.roles.multimedia.filter(s => s !== "leader").length > 0 && (
+                  <section>
+                    <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">
+                      Habilidades de Multimídia
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {musician.roles.multimedia.filter(s => s !== "leader").map((skill) => (
+                        <span
+                          key={skill}
+                          className="px-4 py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-xl text-xs font-bold border border-purple-100 dark:border-purple-800 uppercase"
+                        >
+                          {skill}
                         </span>
-                      ) : (
-                        <p className="text-slate-400 dark:text-slate-600 text-sm italic">Não definido</p>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {((musician.instruments && musician.instruments.length > 0) || musician.vocalRange || musician.level) && (
+                  <section>
+                    <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">
+                      Habilidades Musicais
+                    </h3>
+                    <div className="space-y-6">
+                      {musician.instruments && musician.instruments.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-slate-500">
+                            <Music className="w-4 h-4 text-blue-600" />
+                            <span className="text-sm font-bold">Instrumentos</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {musician.instruments.map((inst) => (
+                              <span
+                                key={inst}
+                                className="px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-xl text-xs font-bold border border-blue-100 dark:border-blue-800 italic"
+                              >
+                                {inst}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {musician.vocalRange && (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-slate-500">
+                            <Mic2 className="w-4 h-4 text-indigo-600" />
+                            <span className="text-sm font-bold">Vocal</span>
+                          </div>
+                          <span className="inline-block px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-xl text-xs font-bold border border-indigo-100 dark:border-indigo-800">
+                            {musician.vocalRange}
+                          </span>
+                        </div>
+                      )}
+
+                      {musician.level && (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-slate-500">
+                            <Shield className="w-4 h-4 text-emerald-600" />
+                            <span className="text-sm font-bold">Nível</span>
+                          </div>
+                          <span className="inline-block px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-xl text-xs font-bold border border-emerald-100 dark:border-emerald-800 capitalize">
+                            {musician.level}
+                          </span>
+                        </div>
                       )}
                     </div>
-
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-slate-500">
-                        <Shield className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-bold">Nível</span>
-                      </div>
-                      {musician.level ? (
-                        <span className="inline-block px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-xl text-xs font-bold border border-emerald-100 dark:border-emerald-800 capitalize">
-                          {musician.level}
-                        </span>
-                      ) : (
-                        <p className="text-slate-400 dark:text-slate-600 text-sm italic">Não informado</p>
-                      )}
-                    </div>
-                  </div>
-                </section>
+                  </section>
+                )}
               </div>
             </div>
           ) : (
@@ -258,18 +413,30 @@ export default function MusicianProfilePage() {
             <div className="space-y-6">
               {songs.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {songs.map(song => (
-                    <div key={song.id} className="p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 group hover:border-blue-200 transition-all">
+                  {songs.map((song) => (
+                    <div
+                      key={song.id}
+                      className="p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 group hover:border-blue-200 transition-all"
+                    >
                       <div className="flex justify-between items-start mb-4">
                         <div className="w-10 h-10 bg-white dark:bg-slate-900 rounded-xl flex items-center justify-center text-blue-800 shadow-sm">
                           <Music size={20} />
                         </div>
-                        <a href={song.link} target="_blank" rel="noopener noreferrer" className="p-2 text-slate-300 dark:text-slate-600 hover:text-blue-800 transition-colors">
+                        <a
+                          href={song.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 text-slate-300 dark:text-slate-600 hover:text-blue-800 transition-colors"
+                        >
                           <Youtube size={18} />
                         </a>
                       </div>
-                      <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-1">{song.title}</h4>
-                      <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mb-4">{song.artist}</p>
+                      <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-1">
+                        {song.title}
+                      </h4>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mb-4">
+                        {song.artist}
+                      </p>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-black text-blue-800 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded-lg">
                           Tom: {song.key}
@@ -281,8 +448,10 @@ export default function MusicianProfilePage() {
                 </div>
               ) : (
                 <div className="text-center py-20 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
-                   <Music className="w-12 h-12 text-slate-200 dark:text-slate-800 mx-auto mb-4" />
-                   <p className="text-slate-500 dark:text-slate-400 font-medium">Nenhuma música cadastrada ainda.</p>
+                  <Music className="w-12 h-12 text-slate-200 dark:text-slate-800 mx-auto mb-4" />
+                  <p className="text-slate-500 dark:text-slate-400 font-medium">
+                    Nenhuma música cadastrada ainda.
+                  </p>
                 </div>
               )}
             </div>
@@ -293,17 +462,26 @@ export default function MusicianProfilePage() {
   );
 }
 
-function InfoItem({ icon: Icon, label, value }: { icon: any, label: string, value: string }) {
+function InfoItem({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="flex items-start gap-4">
       <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 dark:text-slate-500 flex-shrink-0">
         <Icon className="w-5 h-5" />
       </div>
       <div>
-        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{label}</p>
+        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+          {label}
+        </p>
         <p className="text-slate-800 dark:text-slate-100 font-bold">{value}</p>
       </div>
     </div>
   );
 }
-
