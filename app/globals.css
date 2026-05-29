@@ -1,3 +1,4 @@
+/* Force css invalidate and reload stylesheet */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -16,3 +17,4 @@ body {
   color: var(--foreground);
   font-family: var(--font-inter), sans-serif;
 }
+/* Force css invalidate - reload */

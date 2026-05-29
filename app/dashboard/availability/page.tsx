@@ -83,8 +83,10 @@ export default function AvailabilityPage() {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDayOfMonth(year, month);
 
+  const isLeader = userData?.roles?.worship?.includes("leader") || userData?.roles?.multimedia?.includes("leader") || userData?.roles?.secretariat?.includes("leader");
   const isAdmin =
     userData?.role === "líder" ||
+    isLeader ||
     userData?.email === "pedrohenriqueribei@gmail.com";
 
   useEffect(() => {
@@ -119,30 +121,106 @@ export default function AvailabilityPage() {
     setTeamAvailability([]); // Reset state early when month changes
     setTeamLoading(true);
     try {
-      const q = query(
-        collection(db, "availability"),
-        where("churchId", "==", userData?.churchId || ""),
-        where("month", "==", month),
-        where("year", "==", year),
-      );
-      const snap = await getDocs(q);
-      const records = snap.docs.map((d) => d.data() as AvailabilityRecord);
+      const isSuperAdmin =
+        userData?.role === "super_admin" ||
+        userData?.super_admin === true ||
+        userData?.email === "pedrohenriqueribei@gmail.com";
+      const isGlobalLeader = userData?.role === "líder";
+      const hasFullAccess = isSuperAdmin || isGlobalLeader;
 
+      const myLedDepts = ["worship", "multimedia", "secretariat"].filter(
+        (deptId) => userData?.roles?.[deptId]?.includes("leader")
+      );
+
+      const allowedDepts = hasFullAccess
+        ? ["worship", "multimedia", "secretariat"]
+        : myLedDepts;
+
+      if (allowedDepts.length === 0) {
+        setTeamAvailability([]);
+        setTeamLoading(false);
+        return;
+      }
+
+      // 1. Fetch users associated via allowed department members subcollections
+      const deptMembersUids = new Set<string>();
+      for (const dept of allowedDepts) {
+        try {
+          const deptSnap = await getDocs(
+            collection(
+              db,
+              "churches",
+              userData.churchId,
+              "departments",
+              dept,
+              "members"
+            )
+          );
+          for (const docSnap of deptSnap.docs) {
+            deptMembersUids.add(docSnap.id);
+          }
+        } catch (err) {
+          console.error(`Error loading department members for ${dept}:`, err);
+        }
+      }
+
+      // 2. Fetch users directly associated with the church via their profile
       const membersQ = query(
         collection(db, "users"),
-        where("churchId", "==", userData?.churchId || ""),
+        where("churchId", "==", userData.churchId)
       );
       const membersSnap = await getDocs(membersQ);
-      const members = membersSnap.docs.map((d) => ({ uid: d.id, ...d.data() }));
-
-      const enrichedRecords = records.map((rec) => {
-        const member = members.find((m) => m.uid === rec.userId);
-        return {
-          ...rec,
-          userName: (member as any)?.name || "Integrante",
-          memberInfo: member,
-        };
+      const membersMap = new Map<string, any>();
+      membersSnap.docs.forEach((d) => {
+        const uData = d.data();
+        const hasDeptRole = allowedDepts.some(
+          (dept) => uData.roles?.[dept] && uData.roles[dept].length > 0
+        );
+        if (hasDeptRole || deptMembersUids.has(d.id)) {
+          membersMap.set(d.id, { uid: d.id, ...uData });
+        }
       });
+
+      // 3. Ensure all members found in subcollections are fully loaded
+      for (const memberUid of Array.from(deptMembersUids)) {
+        if (!membersMap.has(memberUid)) {
+          try {
+            const userProfileSnap = await getDoc(doc(db, "users", memberUid));
+            if (userProfileSnap.exists()) {
+              membersMap.set(memberUid, { uid: memberUid, ...userProfileSnap.data() });
+            }
+          } catch (err) {
+            console.error(`Error loading profile for ${memberUid}:`, err);
+          }
+        }
+      }
+
+      const members = Array.from(membersMap.values());
+
+      const availabilityPromises = members.map(async (member) => {
+        const docId = `${member.uid}_${year}_${month}`;
+        try {
+          const snap = await getDoc(doc(db, "availability", docId));
+          if (snap.exists()) {
+            return {
+              id: docId,
+              userId: member.uid,
+              churchId: member.churchId || userData.churchId || "",
+              month,
+              year,
+              days: snap.data().days || [],
+              userName: member.name || "Integrante",
+              memberInfo: member,
+            };
+          }
+        } catch (err) {
+          console.error(`Error loading availability for user ${member.uid}:`, err);
+        }
+        return null;
+      });
+
+      const availabilityResults = await Promise.all(availabilityPromises);
+      const enrichedRecords = availabilityResults.filter(Boolean) as AvailabilityRecord[];
 
       setTeamAvailability(enrichedRecords);
     } catch (err: any) {

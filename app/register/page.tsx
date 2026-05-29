@@ -20,7 +20,7 @@ import {
   Church,
 } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
 
 function RegisterForm() {
   const { user, signUpWithEmail, loading } = useAuth();
@@ -38,6 +38,130 @@ function RegisterForm() {
   const [instrumentsSelected, setInstrumentsSelected] = useState<string[]>([]);
   const [vocalRange, setVocalRange] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const [dynamicInstruments, setDynamicInstruments] = useState<any[]>([
+    { id: "acousticGuitarist", label: "Violão", value: "Violão" },
+    { id: "electricGuitarist", label: "Guitarra", value: "Guitarra" },
+    { id: "bassist", label: "Baixo", value: "Baixo" },
+    { id: "drummer", label: "Bateria", value: "Bateria" },
+    { id: "keyboardist", label: "Teclado", value: "Teclado" },
+    { id: "mainMinister", label: "Voz", value: "Voz" },
+    { id: "percussao", label: "Percussão", value: "Percussão" },
+  ]);
+
+  const [dynamicMultimediaRoles, setDynamicMultimediaRoles] = useState<any[]>([
+    { id: "multimedia_leader", label: "Líder de Multimídia" },
+    { id: "pc_operator", label: "Operador de PC" },
+    { id: "social_media_operator", label: "Operador de Redes Sociais" },
+    { id: "photography_operator", label: "Fotógrafo" },
+    { id: "camera_operator", label: "Operador de Câmera" },
+    { id: "audio_operator", label: "Operador de Áudio" },
+  ]);
+
+  React.useEffect(() => {
+    const loadConfigAndRoles = async () => {
+      const cId = churchIdFromUrl || "";
+      if (!cId) return;
+
+      try {
+        // 1. Fetch Worship Instruments
+        const worshipDoc = await getDoc(doc(db, "services", `worship_scale_config_${cId}`));
+        const defaultInstruments = [
+          { id: "acousticGuitarist", label: "Violão", value: "Violão" },
+          { id: "electricGuitarist", label: "Guitarra", value: "Guitarra" },
+          { id: "bassist", label: "Baixo", value: "Baixo" },
+          { id: "drummer", label: "Bateria", value: "Bateria" },
+          { id: "keyboardist", label: "Teclado", value: "Teclado" },
+          { id: "mainMinister", label: "Voz", value: "Voz" },
+        ];
+        if (worshipDoc.exists()) {
+          const data = worshipDoc.data();
+          const availableKeys = data.availableInstruments || [];
+          const customRoleMetadata = data.customRoleMetadata || {};
+          
+          const mapping: Record<string, { label: string; value: string }> = {
+            mainMinister: { label: "Ministro de Louvor", value: "Voz" },
+            keyboardist: { label: "Teclado", value: "Teclado" },
+            acousticGuitarist: { label: "Violão", value: "Violão" },
+            electricGuitarist: { label: "Guitarra", value: "Guitarra" },
+            bassist: { label: "Baixo", value: "Baixo" },
+            drummer: { label: "Bateria", value: "Bateria" },
+          };
+
+          const finalInstruments: { id: string; label: string; value: string }[] = [];
+          
+          availableKeys.forEach((key: string) => {
+            if (mapping[key]) {
+              finalInstruments.push({ id: key, label: mapping[key].label, value: mapping[key].value });
+            } else if (key.startsWith("custom_instrument_")) {
+              const customLabel = customRoleMetadata[key]?.label || key;
+              finalInstruments.push({ id: key, label: customLabel, value: customLabel });
+            } else {
+              const labels: Record<string, string> = {
+                soprano: "Sopranoist (Vocal)",
+                contralto: "Contraltoist (Vocal)",
+                baritone: "Baritonoist (Vocal)",
+                mezzoSoprano: "Mezzo-Sopranoist (Vocal)"
+              };
+              const lbl = labels[key] || key;
+              finalInstruments.push({ id: key, label: lbl, value: key });
+            }
+          });
+
+          if (finalInstruments.length > 0) {
+            setDynamicInstruments(finalInstruments);
+          }
+        }
+
+        // 2. Fetch Multimedia Roles
+        const multimediaDoc = await getDoc(doc(db, "services", `multimedia_scale_config_${cId}`));
+        if (multimediaDoc.exists()) {
+          const data = multimediaDoc.data();
+          const customRoleMetadata = data.customRoleMetadata || {};
+          const rolesConfig = data.roles || {
+            pcOperator: { enabled: true, count: 2 },
+            socialMediaOperator: { enabled: true, count: 1 },
+            photographyOperator: { enabled: true, count: 2 },
+            cameraOperator: { enabled: true, count: 1 },
+          };
+
+          const mappedKeys: Record<string, { id: string; label: string }> = {
+            pcOperator: { id: "pc_operator", label: "Operador de PC" },
+            socialMediaOperator: { id: "social_media_operator", label: "Operador de Redes Sociais" },
+            photographyOperator: { id: "photography_operator", label: "Fotógrafo" },
+            cameraOperator: { id: "camera_operator", label: "Operador de Câmera" },
+          };
+
+          const finalRoles: { id: string; label: string }[] = [];
+          
+          finalRoles.push({ id: "multimedia_leader", label: "Líder de Multimídia" });
+          finalRoles.push({ id: "audio_operator", label: "Operador de Áudio" });
+
+          Object.entries(rolesConfig).forEach(([key, configVal]: [string, any]) => {
+            if (configVal && configVal.enabled) {
+              if (mappedKeys[key]) {
+                if (!finalRoles.some(r => r.id === mappedKeys[key].id)) {
+                  finalRoles.push(mappedKeys[key]);
+                }
+              } else {
+                const customLabel = customRoleMetadata[key]?.label || key;
+                finalRoles.push({ id: key, label: customLabel });
+              }
+            }
+          });
+          
+          if (finalRoles.length > 0) {
+            setDynamicMultimediaRoles(finalRoles);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading church configs for self-registration:", err);
+      }
+    };
+
+    loadConfigAndRoles();
+  }, [churchIdFromUrl]);
 
   React.useEffect(() => {
     if (!loading && user) {
@@ -47,57 +171,62 @@ function RegisterForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     setError("");
+    setSubmitting(true);
     try {
       if (!selectedRole) {
         throw new Error("Por favor, selecione seu papel.");
       }
+      
+      if (selectedRole === "musico") {
+        if (instrumentsSelected.length === 0) {
+          throw new Error("A seleção de pelo menos um instrumento é obrigatória.");
+        }
+        if (instrumentsSelected.includes("Voz") && !vocalRange) {
+          throw new Error("Como você selecionou 'Voz', a definição do seu tipo de voz/vocal é obrigatória.");
+        }
+      } else if (selectedRole === "multimidia") {
+        if (instrumentsSelected.length === 0) {
+          throw new Error("A seleção de pelo menos uma função técnica/digital é obrigatória.");
+        }
+      }
+
+      const multimediaRoles = selectedRole === "multimidia" ? [...instrumentsSelected] : [];
+      if (multimediaRoles.includes("multimedia_leader") && !multimediaRoles.includes("leader")) {
+        multimediaRoles.push("leader");
+      }
+      const userRoles = {
+        worship: selectedRole === "musico" ? instrumentsSelected : [],
+        multimedia: multimediaRoles,
+        secretariat: selectedRole === "secretaria" ? ["admin"] : [],
+      };
+
       await signUpWithEmail(email, password, name, {
         phone,
         instruments: selectedRole === "musico" ? instrumentsSelected : [],
         vocalRange: selectedRole === "musico" ? vocalRange : "",
         churchId: churchIdFromUrl || "",
+        roles: userRoles,
       });
-
-      // Write role specifics if user just signed up
-      try {
-        const currentUserUid = auth.currentUser?.uid;
-        if (currentUserUid) {
-          const userRoles = {
-            worship: selectedRole === "musico" ? instrumentsSelected : [],
-            multimedia:
-              selectedRole === "multimidia" ? instrumentsSelected : [],
-            secretariat: selectedRole === "secretaria" ? ["admin"] : [],
-          };
-          await updateDoc(doc(db, "users", currentUserUid), {
-            roles: userRoles,
-          });
-        }
-      } catch (err) {
-        console.error("Erro ao salvar roles adicionais:", err);
-      }
 
       router.push(redirectPath);
     } catch (err: any) {
       setError(err.message || "Erro ao criar conta. Verifique seus dados.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const toggleInstrument = (inst: string) => {
-    setInstrumentsSelected((prev) =>
-      prev.includes(inst) ? prev.filter((i) => i !== inst) : [...prev, inst],
-    );
+    setInstrumentsSelected((prev) => {
+      const isSelected = prev.includes(inst);
+      if (inst === "Voz" && isSelected) {
+        setVocalRange("");
+      }
+      return isSelected ? prev.filter((i) => i !== inst) : [...prev, inst];
+    });
   };
-
-  const instrumentsList = [
-    "Violão",
-    "Guitarra",
-    "Baixo",
-    "Bateria",
-    "Teclado",
-    "Voz",
-    "Percussão",
-  ];
 
   const vocalRanges = [
     "Soprano",
@@ -349,30 +478,37 @@ function RegisterForm() {
                 {selectedRole === "musico" && (
                   <>
                     <div className="space-y-2">
-                      <label className="text-sm font-bold text-slate-700 ml-1">
-                        Instrumentos (pode escolher vários)
+                      <label className="text-sm font-bold text-slate-700 ml-1 flex items-center gap-1">
+                        <span>Instrumentos (pode escolher vários)</span>
+                        <span className="text-red-500 font-black">*</span>
                       </label>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {instrumentsList.map((inst) => (
+                        {dynamicInstruments.map((inst) => (
                           <button
-                            key={inst}
+                            key={inst.id}
                             type="button"
-                            onClick={() => toggleInstrument(inst)}
+                            onClick={() => toggleInstrument(inst.value)}
                             className={`py-3 px-2 rounded-xl text-xs font-bold transition-all border ${
-                              instrumentsSelected.includes(inst)
+                              instrumentsSelected.includes(inst.value)
                                 ? "bg-blue-800 text-white border-blue-800 shadow-lg shadow-blue-800/20"
                                 : "bg-white text-slate-600 border-slate-200 hover:border-blue-300"
                             }`}
                           >
-                            {inst}
+                            {inst.label}
                           </button>
                         ))}
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-bold text-slate-700 ml-1 flex items-center gap-2">
-                        <Mic2 className="w-4 h-4" /> Vocal (se possuir)
+                      <label className="text-sm font-bold text-slate-700 ml-1 flex items-center gap-1.5 flex-wrap">
+                        <Mic2 className="w-4 h-4 text-indigo-600" />
+                        <span>Vocal</span>
+                        {instrumentsSelected.includes("Voz") ? (
+                          <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 uppercase tracking-wider animate-pulse">Obrigatório para Vocalistas *</span>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-normal">(se possuir)</span>
+                        )}
                       </label>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {vocalRanges.map((range) => (
@@ -399,30 +535,15 @@ function RegisterForm() {
                 {selectedRole === "multimidia" && (
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <label className="text-sm font-bold text-slate-700 ml-1">
-                        Funções Digitais e Técnicas (pode escolher várias)
+                      <label className="text-sm font-bold text-slate-700 ml-1 flex items-center gap-1">
+                        <span>Funções Digitais e Técnicas (pode escolher várias)</span>
+                        <span className="text-red-500 font-bold">*</span>
                       </label>
                       <p className="text-xs text-slate-400 ml-1 -mt-1 font-medium">
                         Selecione suas áreas de atuação no ministério técnico.
                       </p>
                       <div className="grid grid-cols-2 gap-2 mt-2">
-                        {[
-                          {
-                            id: "multimedia_leader",
-                            label: "Líder de Multimídia",
-                          },
-                          { id: "audio_operator", label: "Operador de Áudio" },
-                          { id: "pc_operator", label: "Operador de PC" },
-                          {
-                            id: "social_media_operator",
-                            label: "Operador de Redes Sociais",
-                          },
-                          {
-                            id: "camera_operator",
-                            label: "Camera Man (Woman)",
-                          },
-                          { id: "photography_operator", label: "Fotografia" },
-                        ].map((spec) => (
+                        {dynamicMultimediaRoles.map((spec) => (
                           <button
                             key={spec.id}
                             type="button"
@@ -443,11 +564,11 @@ function RegisterForm() {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || submitting}
                   className="w-full bg-blue-800 text-white py-4 rounded-2xl font-bold hover:bg-blue-900 transition-all shadow-xl shadow-blue-800/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 mt-4"
                 >
-                  {loading ? "Criando conta..." : "Cadastrar agora"}
-                  {!loading && <ArrowRight className="w-5 h-5" />}
+                  {loading || submitting ? "Criando conta..." : "Cadastrar agora"}
+                  {!(loading || submitting) && <ArrowRight className="w-5 h-5" />}
                 </button>
               </form>
 

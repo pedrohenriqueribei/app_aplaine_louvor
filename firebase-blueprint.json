@@ -121,9 +121,30 @@
         "songs": { "type": "array" },
         "members": { "type": "array" },
         "roles": { "type": "object" },
+        "rehearsalDate": { "type": "string", "description": "Data do ensaio" },
+        "rehearsalTime": { "type": "string", "description": "Hora do ensaio" },
+        "playlist": { "type": "array", "items": { "type": "string" }, "description": "Lista de IDs de músicas da playlist pessoal do ministro" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "date", "churchId"]
+    },
+    "Playlist": {
+      "title": "Playlist",
+      "description": "Conjunto de músicas escaladas para estudo e ensaio",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID coincide com o ID da escala (1-para-1)" },
+        "scheduleId": { "type": "string" },
+        "churchId": { "type": "string" },
+        "songs": { "type": "array", "items": { "type": "string" }, "description": "Array de IDs das músicas vinculadas" },
+        "rehearsalDate": { "type": "string" },
+        "rehearsalTime": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["id", "scheduleId", "churchId", "songs"]
     },
     "Availability": {
       "title": "Disponibilidade",
@@ -190,6 +211,7 @@
     "schedules/{scheduleId}": { "schema": "Schedule", "description": "Escalas de louvor" },
     "availability/{availableId}": { "schema": "Availability", "description": "Disponibilidade dos membros" },
     "notifications/{notificationId}": { "schema": "Notification", "description": "Notificações internas do sistema" },
-    "bands/{bandId}": { "schema": "Band", "description": "Bandas internas dos ministérios" }
+    "bands/{bandId}": { "schema": "Band", "description": "Bandas internas dos ministérios" },
+    "playlists/{playlistId}": { "schema": "Playlist", "description": "Playlists independentes vinculadas às respectivas escalas de louvor" }
   }
 }

@@ -1,11 +1,13 @@
 'use client';
 
+export const dynamic = "force-dynamic";
+
 import React, { useState, useEffect } from 'react';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, setDoc, updateDoc, getDocs, deleteDoc } from 'firebase/firestore';
-import { use } from 'react';
-import { Building2, Plus, Loader2, Save, Users, Settings2, Trash2 } from 'lucide-react';
+import { db, auth } from '@/lib/firebase';
+import { doc, getDoc, collection, setDoc, updateDoc, getDocs, deleteDoc, query, where } from 'firebase/firestore';
+import { Building2, Plus, Loader2, Save, Users, Settings2, Trash2, Crown } from 'lucide-react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 
 interface Department {
   id: string;
@@ -24,8 +26,9 @@ interface Member {
   name?: string;
 }
 
-export default function AdminChurchDetails({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
+export default function AdminChurchDetails() {
+  const params = useParams();
+  const id = params?.id as string;
   const [churchName, setChurchName] = useState('');
   const [loading, setLoading] = useState(true);
   
@@ -52,31 +55,191 @@ export default function AdminChurchDetails({ params }: { params: Promise<{ id: s
   const [savingMember, setSavingMember] = useState(false);
 
   useEffect(() => {
-    fetchChurchData();
-    fetchAllUsers();
-  }, [resolvedParams.id]);
+    if (id) {
+      fetchChurchData();
+      fetchAllUsers();
+    }
+  }, [id]);
+
+  const getDeptRoleLabels = (deptId: string, member: any) => {
+    const badges: string[] = [];
+    const deptRoles = member.roles || [];
+
+    if (deptId === 'worship') {
+      if (deptRoles.includes("leader")) {
+        badges.push("Líder");
+      }
+      
+      const isVocal = member.vocalRange || (member.instruments && member.instruments.includes("Voz")) || member.instrument === "Voz";
+      const hasInstruments = (member.instruments && member.instruments.filter((i: string) => i !== "Voz").length > 0) || (member.instrument && member.instrument !== "Voz");
+
+      if (isVocal) {
+        if (member.vocalRange) {
+          badges.push(`Vocalista (${member.vocalRange})`);
+        } else {
+          badges.push("Vocalista");
+        }
+      }
+
+      if (hasInstruments) {
+        if (member.instruments && member.instruments.length > 0) {
+          member.instruments.filter((i: string) => i !== "Voz").forEach((inst: string) => {
+            badges.push(inst);
+          });
+        } else if (member.instrument) {
+          badges.push(member.instrument);
+        }
+      }
+
+      deptRoles.forEach((role: string) => {
+        if (role === "leader") return;
+        if (role === "instrumentist" || role === "instrumentista") {
+          if (!hasInstruments) badges.push("Instrumentista");
+        } else if (role === "vocalist" || role === "vocalista") {
+          if (!isVocal) badges.push("Vocalista");
+        } else if (role === "musician") {
+          // already covered or standard
+        } else {
+          badges.push(role.charAt(0).toUpperCase() + role.slice(1));
+        }
+      });
+
+      if (badges.length === 0) {
+        badges.push("Integrante");
+      }
+    } else if (deptId === 'multimedia') {
+      if (deptRoles.includes("leader") || deptRoles.includes("multimedia_leader")) {
+        badges.push("Líder");
+      }
+
+      deptRoles.forEach((role: string) => {
+        if (role === "leader" || role === "multimedia_leader") return;
+        
+        if (role === "audio_operator" || role === "audio" || role === "sound") {
+          badges.push("Operador de Áudio");
+        } else if (role === "pc_operator" || role === "projection" || role === "slides") {
+          badges.push("Projeção");
+        } else if (role === "social_media_operator" || role === "social_media_manager") {
+          badges.push("Redes Sociais");
+        } else if (role === "camera_operator" || role === "camera" || role === "video") {
+          badges.push("Câmera / Vídeo");
+        } else if (role === "photography_operator" || role === "photography") {
+          badges.push("Fotografia");
+        } else if (role === "lights" || role === "illumination") {
+          badges.push("Iluminação");
+        } else {
+          badges.push(role.charAt(0).toUpperCase() + role.slice(1));
+        }
+      });
+
+      if (badges.length === 0) {
+        badges.push("Integrante");
+      }
+    } else if (deptId === 'secretariat') {
+      if (deptRoles.includes("leader") || deptRoles.includes("admin") || deptRoles.includes("secretariat_leader")) {
+        badges.push("Secretário");
+      }
+
+      deptRoles.forEach((role: string) => {
+        if (role === "leader" || role === "admin" || role === "secretariat_leader") return;
+        badges.push(role.charAt(0).toUpperCase() + role.slice(1));
+      });
+
+      if (badges.length === 0) {
+        badges.push("Integrante");
+      }
+    } else {
+      deptRoles.forEach((role: string) => {
+        badges.push(role.charAt(0).toUpperCase() + role.slice(1));
+      });
+      if (badges.length === 0) {
+        badges.push("Integrante");
+      }
+    }
+
+    return badges;
+  };
 
   async function fetchChurchData() {
+    if (!id) return;
     setLoading(true);
     try {
-      const docRef = doc(db, 'churches', resolvedParams.id);
+      const docRef = doc(db, 'churches', id);
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         setChurchName(snap.data().name);
       }
 
       // Fetch departments
-      const deptsRef = collection(db, 'churches', resolvedParams.id, 'departments');
+      const deptsRef = collection(db, 'churches', id, 'departments');
       const deptsSnap = await getDocs(deptsRef);
-      const depts = deptsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Department));
+      let depts = deptsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Department));
+
+      // Ensure default departments are always shown
+      const defaultDeptsList = [
+        { id: 'worship', name: 'Ministério de Louvor', type: 'worship' },
+        { id: 'multimedia', name: 'Ministério de Multimídia', type: 'multimedia' },
+        { id: 'secretariat', name: 'Secretaria', type: 'secretariat' }
+      ];
+      defaultDeptsList.forEach(defDept => {
+        if (!depts.some(d => d.id === defDept.id)) {
+          depts.push(defDept);
+        }
+      });
+
       setDepartments(depts);
+
+      // Query all users from users collection belonging to this church
+      const usersQ = query(collection(db, 'users'), where('churchId', '==', id));
+      const usersSnap = await getDocs(usersQ);
+      const churchUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
       // Fetch members for each department
       const membersMap: Record<string, Member[]> = {};
       for (const dept of depts) {
-        const membersRef = collection(db, 'churches', resolvedParams.id, 'departments', dept.id, 'members');
-        const membersSnap = await getDocs(membersRef);
-        membersMap[dept.id] = membersSnap.docs.map(d => ({ userId: d.id, ...d.data() } as Member));
+        const deptId = dept.id;
+        const tempDeptMembers = new Map<string, Member>();
+
+        // 1. Fetch from subcollection /churches/{id}/departments/{deptId}/members
+        try {
+          const membersRef = collection(db, 'churches', id, 'departments', deptId, 'members');
+          const membersSnap = await getDocs(membersRef);
+          membersSnap.docs.forEach(d => {
+            const data = d.data();
+            const rolesArray = data.roles || [];
+            tempDeptMembers.set(d.id, {
+              userId: d.id,
+              roles: rolesArray,
+              joinedAt: data.joinedAt || new Date().toISOString()
+            });
+          });
+        } catch (err) {
+          console.error(`Error loading members subcollection for ${deptId}:`, err);
+        }
+
+        // 2. Scan all churchUsers to see if they have roles for this department in their user doc
+        churchUsers.forEach((u: any) => {
+          const userDeptRoles = u.roles?.[deptId] || [];
+          if (userDeptRoles.length > 0 || tempDeptMembers.has(u.id)) {
+            const existing = tempDeptMembers.get(u.id);
+            const finalRoles = Array.from(new Set([
+              ...(existing?.roles || []),
+              ...userDeptRoles
+            ]));
+
+            if (finalRoles.length > 0) {
+              tempDeptMembers.set(u.id, {
+                userId: u.id,
+                roles: finalRoles,
+                joinedAt: existing?.joinedAt || u.createdAt || new Date().toISOString(),
+                name: u.name,
+                email: u.email
+              });
+            }
+          }
+        });
+
+        membersMap[deptId] = Array.from(tempDeptMembers.values());
       }
       setMembersContent(membersMap);
 
@@ -106,7 +269,7 @@ export default function AdminChurchDetails({ params }: { params: Promise<{ id: s
         deptId = deptType; // e.g. 'worship', 'multimedia', 'secretariat'
       }
 
-      const deptRef = doc(db, 'churches', resolvedParams.id, 'departments', deptId);
+      const deptRef = doc(db, 'churches', id, 'departments', deptId);
       await setDoc(deptRef, {
         name: deptName,
         acronym: deptAcronym,
@@ -151,7 +314,7 @@ export default function AdminChurchDetails({ params }: { params: Promise<{ id: s
 
       const rolesArray = newMemberRoles.split(',').map(s => s.trim()).filter(Boolean);
 
-      const memberRef = doc(db, 'churches', resolvedParams.id, 'departments', addingMemberTo, 'members', user.id);
+      const memberRef = doc(db, 'churches', id, 'departments', addingMemberTo, 'members', user.id);
       
       await setDoc(memberRef, {
         userId: user.id,
@@ -161,7 +324,7 @@ export default function AdminChurchDetails({ params }: { params: Promise<{ id: s
 
       // Link the user to this church as well
       await updateDoc(doc(db, 'users', user.id), {
-        churchId: resolvedParams.id
+        churchId: id
       });
 
       setAddingMemberTo(null);
@@ -176,12 +339,68 @@ export default function AdminChurchDetails({ params }: { params: Promise<{ id: s
   };
 
   const handleRemoveMember = async (deptId: string, userId: string) => {
-    if (!confirm('Deseja realmente remover este integrante?')) return;
     try {
-      await deleteDoc(doc(db, 'churches', resolvedParams.id, 'departments', deptId, 'members', userId));
+      await deleteDoc(doc(db, 'churches', id, 'departments', deptId, 'members', userId));
       await fetchChurchData();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handlePromoteToLeader = async (deptId: string, userId: string) => {
+    try {
+      const actorId = auth.currentUser?.uid || auth.currentUser?.email || 'super_admin';
+      const memberRef = doc(db, 'churches', id, 'departments', deptId, 'members', userId);
+      const memberSnap = await getDoc(memberRef);
+      
+      let currentRoles: string[] = [];
+      let joinedAt = new Date().toISOString();
+      if (memberSnap.exists()) {
+        const d = memberSnap.data();
+        currentRoles = d.roles || [];
+        joinedAt = d.joinedAt || d.createdAt || d.joinedAt || joinedAt;
+      }
+      
+      const isCurrentlyLeader = currentRoles.includes('leader');
+      let updatedRoles: string[];
+      if (isCurrentlyLeader) {
+        updatedRoles = currentRoles.filter(r => r !== 'leader');
+      } else {
+        updatedRoles = Array.from(new Set([...currentRoles, 'leader']));
+      }
+      
+      await setDoc(memberRef, {
+        userId,
+        roles: updatedRoles,
+        joinedAt,
+        updatedAt: new Date().toISOString(),
+        updatedBy: actorId
+      }, { merge: true });
+
+      const userRef = doc(db, 'users', userId);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const uData = userSnap.data();
+        const uRolesObj = uData.roles || {};
+        const uDeptRoles = uRolesObj[deptId] || [];
+        
+        let uUpdatedDeptRoles: string[];
+        if (isCurrentlyLeader) {
+          uUpdatedDeptRoles = uDeptRoles.filter((r: string) => r !== 'leader');
+        } else {
+          uUpdatedDeptRoles = Array.from(new Set([...uDeptRoles, 'leader']));
+        }
+        
+        await updateDoc(userRef, {
+          [`roles.${deptId}`]: uUpdatedDeptRoles,
+          updatedAt: new Date().toISOString(),
+          updatedBy: actorId
+        });
+      }
+
+      await fetchChurchData();
+    } catch (err) {
+      console.error('Error toggling member leader role:', err);
     }
   };
 
@@ -399,27 +618,42 @@ export default function AdminChurchDetails({ params }: { params: Promise<{ id: s
                     ) : (
                       (membersContent[dept.id] || []).map(member => {
                         const userDetails = allUsers.find(u => u.id === member.userId);
+                        const displayName = member.name || userDetails?.name || 'Desconhecido';
+                        const displayEmail = member.email || userDetails?.email || member.userId;
                         return (
                           <div key={member.userId} className="flex justify-between items-center p-3 border border-slate-100 dark:border-slate-800/80 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                             <div>
                               <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">
-                                {userDetails?.name || 'Desconhecido'} <span className="text-slate-400 font-normal">({userDetails?.email || member.userId})</span>
+                                {displayName} <span className="text-slate-400 font-normal">({displayEmail})</span>
                               </p>
                               <div className="flex flex-wrap gap-2 mt-1.5">
-                                {member.roles.map(r => (
-                                  <span key={r} className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs rounded-md uppercase font-bold tracking-wider">
-                                    {r}
+                                {getDeptRoleLabels(dept.id, { ...userDetails, roles: member.roles }).map((label, index) => (
+                                  <span key={`${label}-${index}`} className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs rounded-md uppercase font-bold tracking-wider">
+                                    {label}
                                   </span>
                                 ))}
                               </div>
                             </div>
-                            <button
-                              onClick={() => handleRemoveMember(dept.id, member.userId)}
-                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                              title="Remover"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handlePromoteToLeader(dept.id, member.userId)}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  member.roles?.includes('leader')
+                                    ? 'text-amber-500 hover:bg-amber-500/10'
+                                    : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+                                }`}
+                                title={member.roles?.includes('leader') ? 'Remover Liderança' : 'Promover a Líder'}
+                              >
+                                <Crown className={`w-4 h-4 ${member.roles?.includes('leader') ? 'fill-amber-500 text-amber-500' : ''}`} />
+                              </button>
+                              <button
+                                onClick={() => handleRemoveMember(dept.id, member.userId)}
+                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                title="Remover"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         )
                       })

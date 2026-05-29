@@ -140,20 +140,63 @@ export default function ChurchDetailPage() {
           setChurch({ ...churchDoc.data() } as ChurchType);
         }
 
-        // Fetch Members for church display
+        // 1. Fetch users directly registered under this churchId
         const usersQ = query(
           collection(db, "users"),
           where("churchId", "==", id),
         );
         const usersSnap = await getDocs(usersQ);
-
-        const membersData: Musician[] = usersSnap.docs.map((docSnap) => {
-          const userData = docSnap.data();
-          return {
+        
+        const membersMap = new Map<string, any>();
+        usersSnap.docs.forEach((docSnap) => {
+          membersMap.set(docSnap.id, {
             uid: docSnap.id,
-            ...userData,
-          } as Musician;
+            ...docSnap.data()
+          });
         });
+
+        // 2. Fetch users and nested roles from department members subcollections
+        const depts = ["worship", "multimedia", "secretariat"];
+        for (const dept of depts) {
+          try {
+            const deptSnap = await getDocs(
+              collection(db, "churches", id as string, "departments", dept, "members")
+            );
+            for (const docSnap of deptSnap.docs) {
+              const memberUid = docSnap.id;
+              const deptMemberData = docSnap.data();
+              const subroles = deptMemberData.roles || [];
+              
+              if (!membersMap.has(memberUid)) {
+                // Fetch user profile for this department member
+                const userProfileSnap = await getDoc(doc(db, "users", memberUid));
+                if (userProfileSnap.exists()) {
+                  const uData = userProfileSnap.data();
+                  membersMap.set(memberUid, {
+                    uid: memberUid,
+                    ...uData,
+                    roles: {
+                      ...(uData.roles || {}),
+                      [dept]: subroles
+                    }
+                  });
+                }
+              } else {
+                // Update roles with subcollection values if found
+                const existingUser = membersMap.get(memberUid);
+                existingUser.roles = {
+                  ...(existingUser.roles || {}),
+                  [dept]: Array.from(new Set([...(existingUser.roles?.[dept] || []), ...subroles]))
+                };
+                membersMap.set(memberUid, existingUser);
+              }
+            }
+          } catch (err) {
+            console.error(`Error loading department ${dept} members in church page:`, err);
+          }
+        }
+
+        const membersData = Array.from(membersMap.values()) as Musician[];
 
         // Ensure members are sorted by name for UI mapping simplicity
         membersData.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
@@ -321,6 +364,101 @@ export default function ChurchDetailPage() {
     );
   }
 
+  const getMemberWorshipRoles = (member: any) => {
+    const badges: string[] = [];
+    const deptRoles = member.roles?.worship || [];
+
+    if (deptRoles.includes("leader")) {
+      badges.push("Líder");
+    }
+
+    const isVocal = member.vocalRange || (member.instruments && member.instruments.includes("Voz")) || member.instrument === "Voz";
+    const hasInstruments = (member.instruments && member.instruments.filter((i: string) => i !== "Voz").length > 0) || (member.instrument && member.instrument !== "Voz");
+
+    if (isVocal) {
+      if (member.vocalRange) {
+        badges.push(`Vocalista (${member.vocalRange})`);
+      } else {
+        badges.push("Vocalista");
+      }
+    }
+
+    if (hasInstruments) {
+      if (member.instruments && member.instruments.length > 0) {
+        member.instruments.filter((i: string) => i !== "Voz").forEach((inst: string) => {
+          badges.push(inst);
+        });
+      } else if (member.instrument) {
+        badges.push(member.instrument);
+      }
+    }
+
+    if (badges.length === 0) {
+      if (deptRoles.includes("instrumentist")) {
+        badges.push("Instrumentista");
+      } else {
+        badges.push("Integrante");
+      }
+    }
+
+    return badges;
+  };
+
+  const getMemberMultimediaRoles = (member: any) => {
+    const badges: string[] = [];
+    const deptRoles = member.roles?.multimedia || [];
+
+    if (deptRoles.includes("leader") || deptRoles.includes("multimedia_leader")) {
+      badges.push("Líder");
+    }
+
+    deptRoles.forEach((role: string) => {
+      if (role === "leader" || role === "multimedia_leader") return;
+      
+      if (role === "audio_operator" || role === "audio" || role === "sound") {
+        badges.push("Áudio");
+      } else if (role === "pc_operator" || role === "projection") {
+        badges.push("Projeção");
+      } else if (role === "social_media_operator" || role === "social_media_manager") {
+        badges.push("Redes Sociais");
+      } else if (role === "camera_operator" || role === "camera" || role === "video") {
+        badges.push("Câmera / Vídeo");
+      } else if (role === "photography_operator" || role === "photography") {
+        badges.push("Fotografia");
+      } else if (role === "lights" || role === "illumination") {
+        badges.push("Iluminação");
+      } else {
+        badges.push(role.charAt(0).toUpperCase() + role.slice(1));
+      }
+    });
+
+    if (badges.length === 0) {
+      badges.push("Integrante");
+    }
+
+    return badges;
+  };
+
+  const getMemberSecretariatRoles = (member: any) => {
+    const badges: string[] = [];
+    const deptRoles = member.roles?.secretariat || [];
+
+    if (deptRoles.includes("leader") || deptRoles.includes("admin") || deptRoles.includes("secretariat_leader")) {
+      badges.push("Secretário");
+    }
+
+    deptRoles.forEach((role: string) => {
+      if (role === "leader" || role === "admin" || role === "secretariat_leader") return;
+      badges.push(role.charAt(0).toUpperCase() + role.slice(1));
+    });
+
+    if (badges.length === 0) {
+      badges.push("Integrante");
+    }
+
+    return badges;
+  };
+
   // Define instruments and vocal ranges for grouping
   const groupMembers = () => {
     const groups: { [key: string]: Musician[] } = {};
@@ -357,6 +495,16 @@ export default function ChurchDetailPage() {
   };
 
   const groupedData = groupMembers();
+
+  const worshipMembers = members.filter(
+    (m) => m.roles?.worship && m.roles.worship.length > 0
+  );
+  const multimediaMembers = members.filter(
+    (m) => m.roles?.multimedia && m.roles.multimedia.length > 0
+  );
+  const secretariatMembers = members.filter(
+    (m) => m.roles?.secretariat && m.roles.secretariat.length > 0
+  );
 
   return (
     <div className="max-w-6xl space-y-12 pb-20 text-slate-800 dark:text-slate-100">
@@ -693,38 +841,78 @@ export default function ChurchDetailPage() {
             onClick={() =>
               router.push(`/dashboard/churches/${id}/ministries/louvor`)
             }
-            className="bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-xl transition-all group cursor-pointer"
+            className="bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-xl transition-all group cursor-pointer flex flex-col justify-between"
           >
-            <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm mb-6 group-hover:scale-110 transition-transform">
-              <Mic2 className="w-8 h-8" />
+            <div>
+              <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm mb-6 group-hover:scale-110 transition-transform">
+                <Mic2 className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-blue-600 transition-colors">
+                Ministério de Louvor
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
+                Equipe dedicada à adoração através da música, instrumentos e vozes
+                em nossos cultos.
+              </p>
+              <div className="flex items-center text-[10px] font-black text-blue-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0 mb-6">
+                Ver Detalhes <ExternalLink className="w-3 h-3" />
+              </div>
             </div>
-            <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-blue-600 transition-colors">
-              Ministério de Louvor
-            </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-              Equipe dedicada à adoração através da música, instrumentos e vozes
-              em nossos cultos.
-            </p>
-            <div className="flex items-center text-[10px] font-black text-blue-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
-              Ver Detalhes <ExternalLink className="w-3 h-3" />
-            </div>
-            {bands.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-100 dark:border-slate-700">
-                {bands.slice(0, 3).map((band) => (
-                  <span
-                    key={band.id}
-                    className="text-[9px] font-black uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded-md"
-                  >
-                    {band.name}
-                  </span>
-                ))}
-                {bands.length > 3 && (
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 py-1">
-                    +{bands.length - 3} mais
-                  </span>
+
+            <div className="space-y-4">
+              {/* Integrantes e Papéis */}
+              <div className="mt-2 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 block mb-2">
+                  Integrantes da Equipe
+                </span>
+                {worshipMembers.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">Sem integrantes cadastrados</p>
+                ) : (
+                  <div className="space-y-2">
+                    {worshipMembers.slice(0, 4).map((member) => (
+                      <div key={member.uid} className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
+                          {member.name}
+                        </span>
+                        <div className="flex flex-wrap gap-1 justify-end max-w-[180px]">
+                          {getMemberWorshipRoles(member).map((role, idx) => (
+                            <span
+                              key={`${role}-${idx}`}
+                              className="text-[9px] font-black uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded"
+                            >
+                              {role}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    {worshipMembers.length > 4 && (
+                      <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 text-right mt-1">
+                        + {worshipMembers.length - 4} integrante(s)
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
+
+              {bands.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-100 dark:border-slate-700">
+                  {bands.slice(0, 3).map((band) => (
+                    <span
+                      key={band.id}
+                      className="text-[9px] font-black uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded-md"
+                    >
+                      {band.name}
+                    </span>
+                  ))}
+                  {bands.length > 3 && (
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 py-1">
+                      +{bands.length - 3} mais
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
           </motion.div>
 
           {/* Ministério de Multimídia */}
@@ -733,20 +921,57 @@ export default function ChurchDetailPage() {
             onClick={() =>
               router.push(`/dashboard/churches/${id}/ministries/multimidia`)
             }
-            className="bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-xl transition-all group cursor-pointer"
+            className="bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-xl transition-all group cursor-pointer flex flex-col justify-between"
           >
-            <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-purple-600 dark:text-purple-400 shadow-sm mb-6 group-hover:scale-110 transition-transform">
-              <Monitor className="w-8 h-8" />
+            <div>
+              <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-purple-600 dark:text-purple-400 shadow-sm mb-6 group-hover:scale-110 transition-transform">
+                <Monitor className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-purple-600 transition-colors">
+                Ministério de Multimídia
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
+                Gestão de som, projeção, transmissões ao vivo e toda a
+                infraestrutura tecnológica da igreja.
+              </p>
+              <div className="flex items-center text-[10px] font-black text-purple-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0 mb-6">
+                Ver Detalhes <ExternalLink className="w-3 h-3" />
+              </div>
             </div>
-            <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-purple-600 transition-colors">
-              Ministério de Multimídia
-            </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-              Gestão de som, projeção, transmissões ao vivo e toda a
-              infraestrutura tecnológica da igreja.
-            </p>
-            <div className="flex items-center text-[10px] font-black text-purple-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
-              Ver Detalhes <ExternalLink className="w-3 h-3" />
+
+            {/* Integrantes e Papéis */}
+            <div className="mt-2 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 block mb-2">
+                Integrantes da Equipe
+              </span>
+              {multimediaMembers.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Sem integrantes cadastrados</p>
+              ) : (
+                <div className="space-y-2">
+                  {multimediaMembers.slice(0, 4).map((member) => (
+                    <div key={member.uid} className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
+                        {member.name}
+                      </span>
+                      <div className="flex flex-wrap gap-1 justify-end max-w-[180px]">
+                        {getMemberMultimediaRoles(member).map((role, idx) => (
+                          <span
+                            key={`${role}-${idx}`}
+                            className="text-[9px] font-black uppercase tracking-widest bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-1.5 py-0.5 rounded"
+                          >
+                            {role}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {multimediaMembers.length > 4 && (
+                    <p className="text-[10px] font-bold text-purple-600 dark:text-purple-400 text-right mt-1">
+                      + {multimediaMembers.length - 4} integrante(s)
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </motion.div>
 
@@ -756,20 +981,57 @@ export default function ChurchDetailPage() {
             onClick={() =>
               router.push(`/dashboard/churches/${id}/ministries/secretaria`)
             }
-            className="bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-xl transition-all group cursor-pointer"
+            className="bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-xl transition-all group cursor-pointer flex flex-col justify-between"
           >
-            <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm mb-6 group-hover:scale-110 transition-transform">
-              <Briefcase className="w-8 h-8" />
+            <div>
+              <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm mb-6 group-hover:scale-110 transition-transform">
+                <Briefcase className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-emerald-600 transition-colors">
+                Secretaria
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
+                Organização administrativa, cadastro de membros, atas e suporte
+                pastoral estratégico.
+              </p>
+              <div className="flex items-center text-[10px] font-black text-emerald-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0 mb-6">
+                Ver Detalhes <ExternalLink className="w-3 h-3" />
+              </div>
             </div>
-            <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-emerald-600 transition-colors">
-              Secretaria
-            </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-              Organização administrativa, cadastro de membros, atas e suporte
-              pastoral estratégico.
-            </p>
-            <div className="flex items-center text-[10px] font-black text-emerald-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
-              Ver Detalhes <ExternalLink className="w-3 h-3" />
+
+            {/* Integrantes e Papéis */}
+            <div className="mt-2 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 block mb-2">
+                Integrantes da Equipe
+              </span>
+              {secretariatMembers.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Sem integrantes cadastrados</p>
+              ) : (
+                <div className="space-y-2">
+                  {secretariatMembers.slice(0, 4).map((member) => (
+                    <div key={member.uid} className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
+                        {member.name}
+                      </span>
+                      <div className="flex flex-wrap gap-1 justify-end max-w-[180px]">
+                        {getMemberSecretariatRoles(member).map((role, idx) => (
+                          <span
+                            key={`${role}-${idx}`}
+                            className="text-[9px] font-black uppercase tracking-widest bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded"
+                          >
+                            {role}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {secretariatMembers.length > 4 && (
+                    <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 text-right mt-1">
+                      + {secretariatMembers.length - 4} integrante(s)
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </motion.div>
         </div>

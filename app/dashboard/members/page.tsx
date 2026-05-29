@@ -24,9 +24,12 @@ import {
   XCircle,
   Bell,
   Link2,
+  Mic,
+  Music,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
+import { motion } from "motion/react";
 
 interface Member {
   uid: string;
@@ -38,6 +41,7 @@ interface Member {
   vocalRange?: string;
   level?: "aprendiz" | "intermediário" | "experiente";
   churchId?: string;
+  fcmTokens?: string[];
   roles?: {
     worship?: string[];
     multimedia?: string[];
@@ -53,6 +57,7 @@ export default function MembersPage() {
   const [selectedChurchForLink, setSelectedChurchForLink] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState<"all" | "worship" | "multimedia" | "secretariat">("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
@@ -117,15 +122,173 @@ export default function MembersPage() {
     }));
   };
 
-  const instrumentsList = [
-    "Violão",
-    "Guitarra",
-    "Baixo",
-    "Bateria",
-    "Teclado",
-    "Voz",
-    "Percussão",
-  ];
+  const [dynamicInstruments, setDynamicInstruments] = useState<any[]>([
+    { id: "acousticGuitarist", label: "Violão", value: "Violão" },
+    { id: "electricGuitarist", label: "Guitarra", value: "Guitarra" },
+    { id: "bassist", label: "Baixo", value: "Baixo" },
+    { id: "drummer", label: "Bateria", value: "Bateria" },
+    { id: "keyboardist", label: "Teclado", value: "Teclado" },
+    { id: "mainMinister", label: "Voz", value: "Voz" },
+    { id: "percussao", label: "Percussão", value: "Percussão" },
+  ]);
+
+  const [dynamicMultimediaRoles, setDynamicMultimediaRoles] = useState<any[]>([
+    { id: "multimedia_leader", label: "Líder de Multimídia" },
+    { id: "pc_operator", label: "Operador de PC" },
+    { id: "social_media_operator", label: "Operador de Redes Sociais" },
+    { id: "photography_operator", label: "Fotógrafo" },
+    { id: "camera_operator", label: "Operador de Câmera" },
+    { id: "audio_operator", label: "Operador de Áudio" },
+    { id: "audio_tech", label: "Técnico de Áudio (Legado)" },
+    { id: "projection_operator", label: "Projeção (Legado)" },
+    { id: "media_creator", label: "Mídia / Foto (Legado)" },
+    { id: "social_media_manager", label: "Social Media (Legado)" },
+  ]);
+
+  const loadChurchWorshipInstruments = async (cId: string) => {
+    if (!cId) {
+      setDynamicInstruments([
+        { id: "acousticGuitarist", label: "Violão", value: "Violão" },
+        { id: "electricGuitarist", label: "Guitarra", value: "Guitarra" },
+        { id: "bassist", label: "Baixo", value: "Baixo" },
+        { id: "drummer", label: "Bateria", value: "Bateria" },
+        { id: "keyboardist", label: "Teclado", value: "Teclado" },
+        { id: "mainMinister", label: "Voz", value: "Voz" },
+        { id: "percussao", label: "Percussão", value: "Percussão" },
+      ]);
+      return;
+    }
+    try {
+      const worshipDoc = await getDoc(doc(db, "services", `worship_scale_config_${cId}`));
+      const defaultInstruments = [
+        { id: "acousticGuitarist", label: "Violão", value: "Violão" },
+        { id: "electricGuitarist", label: "Guitarra", value: "Guitarra" },
+        { id: "bassist", label: "Baixo", value: "Baixo" },
+        { id: "drummer", label: "Bateria", value: "Bateria" },
+        { id: "keyboardist", label: "Teclado", value: "Teclado" },
+        { id: "mainMinister", label: "Voz", value: "Voz" },
+      ];
+      if (worshipDoc.exists()) {
+        const data = worshipDoc.data();
+        const availableKeys = data.availableInstruments || [];
+        const customRoleMetadata = data.customRoleMetadata || {};
+        
+        const mapping: Record<string, { label: string; value: string }> = {
+          mainMinister: { label: "Ministro de Louvor", value: "Voz" },
+          keyboardist: { label: "Teclado", value: "Teclado" },
+          acousticGuitarist: { label: "Violão", value: "Violão" },
+          electricGuitarist: { label: "Guitarra", value: "Guitarra" },
+          bassist: { label: "Baixo", value: "Baixo" },
+          drummer: { label: "Bateria", value: "Bateria" },
+        };
+
+        const finalInstruments: { id: string; label: string; value: string }[] = [];
+        
+        availableKeys.forEach((key: string) => {
+          if (mapping[key]) {
+            finalInstruments.push({ id: key, label: mapping[key].label, value: mapping[key].value });
+          } else if (key.startsWith("custom_instrument_")) {
+            const customLabel = customRoleMetadata[key]?.label || key;
+            finalInstruments.push({ id: key, label: customLabel, value: customLabel });
+          } else {
+            const labels: Record<string, string> = {
+              soprano: "Sopranoist (Vocal)",
+              contralto: "Contraltoist (Vocal)",
+              baritone: "Baritonoist (Vocal)",
+              mezzoSoprano: "Mezzo-Sopranoist (Vocal)"
+            };
+            const lbl = labels[key] || key;
+            finalInstruments.push({ id: key, label: lbl, value: key });
+          }
+        });
+
+        if (finalInstruments.length > 0) {
+          setDynamicInstruments(finalInstruments);
+        } else {
+          setDynamicInstruments(defaultInstruments);
+        }
+      } else {
+        setDynamicInstruments(defaultInstruments);
+      }
+    } catch (error) {
+      console.error("Error loading church instruments:", error);
+    }
+  };
+
+  const loadChurchMultimediaRoles = async (cId: string) => {
+    if (!cId) {
+      setDynamicMultimediaRoles([
+        { id: "multimedia_leader", label: "Líder de Multimídia" },
+        { id: "pc_operator", label: "Operador de PC" },
+        { id: "social_media_operator", label: "Operador de Redes Sociais" },
+        { id: "photography_operator", label: "Fotógrafo" },
+        { id: "camera_operator", label: "Operador de Câmera" },
+        { id: "audio_operator", label: "Operador de Áudio" },
+        { id: "audio_tech", label: "Técnico de Áudio (Legado)" },
+        { id: "projection_operator", label: "Projeção (Legado)" },
+        { id: "media_creator", label: "Mídia / Foto (Legado)" },
+        { id: "social_media_manager", label: "Social Media (Legado)" },
+      ]);
+      return;
+    }
+    try {
+      const multimediaDoc = await getDoc(doc(db, "services", `multimedia_scale_config_${cId}`));
+      const defaultRoles = [
+        { id: "multimedia_leader", label: "Líder de Multimídia" },
+        { id: "pc_operator", label: "Operador de PC" },
+        { id: "social_media_operator", label: "Operador de Redes Sociais" },
+        { id: "photography_operator", label: "Fotógrafo" },
+        { id: "camera_operator", label: "Operador de Câmera" },
+        { id: "audio_operator", label: "Operador de Áudio" },
+      ];
+      if (multimediaDoc.exists()) {
+        const data = multimediaDoc.data();
+        const customRoleMetadata = data.customRoleMetadata || {};
+        const rolesConfig = data.roles || {
+          pcOperator: { enabled: true, count: 2 },
+          socialMediaOperator: { enabled: true, count: 1 },
+          photographyOperator: { enabled: true, count: 2 },
+          cameraOperator: { enabled: true, count: 1 },
+        };
+
+        const mappedKeys: Record<string, { id: string; label: string }> = {
+          pcOperator: { id: "pc_operator", label: "Operador de PC" },
+          socialMediaOperator: { id: "social_media_operator", label: "Operador de Redes Sociais" },
+          photographyOperator: { id: "photography_operator", label: "Fotógrafo" },
+          cameraOperator: { id: "camera_operator", label: "Operador de Câmera" },
+        };
+
+        const finalRoles: { id: string; label: string }[] = [];
+        
+        finalRoles.push({ id: "multimedia_leader", label: "Líder de Multimídia" });
+        finalRoles.push({ id: "audio_operator", label: "Operador de Áudio" });
+
+        Object.entries(rolesConfig).forEach(([key, configVal]: [string, any]) => {
+          if (configVal && configVal.enabled) {
+            if (mappedKeys[key]) {
+              if (!finalRoles.some(r => r.id === mappedKeys[key].id)) {
+                finalRoles.push(mappedKeys[key]);
+              }
+            } else {
+              const customLabel = customRoleMetadata[key]?.label || key;
+              finalRoles.push({ id: key, label: customLabel });
+            }
+          }
+        });
+        
+        setDynamicMultimediaRoles(finalRoles);
+      } else {
+        setDynamicMultimediaRoles(defaultRoles);
+      }
+    } catch (error) {
+      console.error("Error loading church multimedia roles:", error);
+    }
+  };
+
+  useEffect(() => {
+    loadChurchWorshipInstruments(formData.churchId);
+    loadChurchMultimediaRoles(formData.churchId);
+  }, [formData.churchId]);
 
   const vocalRanges = [
     "Soprano",
@@ -245,9 +408,33 @@ export default function MembersPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const worshipRoles = formData.roles?.worship || [];
+      let multimediaRoles = formData.roles?.multimedia || [];
+      const secretariatRoles = formData.roles?.secretariat || [];
+
+      // Sync "leader" with the presence of "multimedia_leader"
+      if (multimediaRoles.includes("multimedia_leader")) {
+        if (!multimediaRoles.includes("leader")) {
+          multimediaRoles = [...multimediaRoles, "leader"];
+        }
+      } else {
+        multimediaRoles = multimediaRoles.filter((r) => r !== "leader");
+      }
+
+      const finalRoles = {
+        worship: worshipRoles,
+        multimedia: multimediaRoles,
+        secretariat: secretariatRoles,
+      };
+
+      const finalPayload = {
+        ...formData,
+        roles: finalRoles,
+      };
+
       if (editingMember) {
         await updateDoc(doc(db, "users", editingMember.uid), {
-          ...formData,
+          ...finalPayload,
           updatedAt: serverTimestamp(),
           updatedBy: user?.uid,
         });
@@ -255,7 +442,7 @@ export default function MembersPage() {
         const newUid = `user_${Date.now()}`;
         await setDoc(doc(db, "users", newUid), {
           uid: newUid,
-          ...formData,
+          ...finalPayload,
           createdAt: serverTimestamp(),
           createdBy: user?.uid,
           updatedAt: serverTimestamp(),
@@ -303,6 +490,19 @@ export default function MembersPage() {
         )),
   );
 
+  const displayedMembers = filteredMembers.filter((m) => {
+    if (activeTab === "all") return true;
+    if (activeTab === "worship") return (m.roles?.worship?.length ?? 0) > 0;
+    if (activeTab === "multimedia") return (m.roles?.multimedia?.length ?? 0) > 0;
+    if (activeTab === "secretariat") return (m.roles?.secretariat?.length ?? 0) > 0;
+    return true;
+  });
+
+  const allCount = filteredMembers.length;
+  const worshipCount = filteredMembers.filter(m => (m.roles?.worship?.length ?? 0) > 0).length;
+  const multimediaCount = filteredMembers.filter(m => (m.roles?.multimedia?.length ?? 0) > 0).length;
+  const secretariatCount = filteredMembers.filter(m => (m.roles?.secretariat?.length ?? 0) > 0).length;
+
   const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -333,18 +533,27 @@ export default function MembersPage() {
       });
       await Promise.all(savePromises);
 
-      // Trigger Push via API
-      await fetch("/api/notifications/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "broadcast",
-          title: broadcastData.title,
-          body: broadcastData.body,
-          churchId: broadcastData.churchOnly ? userProfile?.churchId : null,
-          memberIds: targetMembers.map((m) => m.uid), // Explicitly provide member IDs to avoid server-side fetch if it's still failing
-        }),
+      // Get tokens for push notification
+      const targetTokens: string[] = [];
+      targetMembers.forEach(m => {
+        if (m.fcmTokens) {
+          targetTokens.push(...m.fcmTokens);
+        }
       });
+
+      if (targetTokens.length > 0) {
+        // Trigger Push via API
+        await fetch("/api/notifications/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "broadcast",
+            title: broadcastData.title,
+            body: broadcastData.body,
+            tokens: targetTokens, 
+          }),
+        });
+      }
       setIsBroadcastModalOpen(false);
       setBroadcastData({ title: "", body: "", churchOnly: true });
       alert("Comunicado enviado com sucesso!");
@@ -511,6 +720,65 @@ export default function MembersPage() {
         </div>
       </div>
 
+      {/* Tabs para cada ministério */}
+      <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100/80 dark:bg-slate-900/40 rounded-3xl w-fit border border-slate-200/50 dark:border-slate-800/50">
+        {(["all", "worship", "multimedia", "secretariat"] as const).map((tab) => {
+          const isActive = activeTab === tab;
+          let label = "Todos";
+          let count = allCount;
+          let activeTextColorClass = "text-blue-800 dark:text-blue-400";
+          let activeBadgeColorClass = "bg-blue-50 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300";
+
+          if (tab === "worship") {
+            label = "Ministério de Louvor";
+            count = worshipCount;
+            activeTextColorClass = "text-blue-800 dark:text-blue-400";
+            activeBadgeColorClass = "bg-blue-50 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300";
+          } else if (tab === "multimedia") {
+            label = "Ministério de Multimídia";
+            count = multimediaCount;
+            activeTextColorClass = "text-amber-700 dark:text-amber-400";
+            activeBadgeColorClass = "bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300";
+          } else if (tab === "secretariat") {
+            label = "Secretaria";
+            count = secretariatCount;
+            activeTextColorClass = "text-emerald-700 dark:text-emerald-400";
+            activeBadgeColorClass = "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300";
+          }
+
+          return (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`relative px-5 py-2.5 rounded-2xl text-xs font-bold transition-colors outline-none select-none ${
+                isActive
+                  ? activeTextColorClass
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+              }`}
+            >
+              {isActive && (
+                <motion.div
+                  layoutId="activeTabIndicator"
+                  className="absolute inset-0 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200/20"
+                  transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                />
+              )}
+              <div className="flex items-center gap-2 relative z-10">
+                <span>{label}</span>
+                <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-colors ${
+                  isActive 
+                    ? activeBadgeColorClass 
+                    : "bg-slate-200/50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400"
+                }`}>
+                  {count}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
         <table className="w-full text-left border-collapse">
           <thead>
@@ -519,10 +787,10 @@ export default function MembersPage() {
                 Integrante
               </th>
               <th className="px-10 py-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                Vocal / Instrumento
+                {activeTab === "multimedia" ? "Papéis na Multimídia" : activeTab === "secretariat" ? "Funções na Secretaria" : "Vocal / Instrumento"}
               </th>
-              <th className="px-10 py-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                Cargo
+              <th id="papel-col-header" className="px-10 py-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
+                Papel
               </th>
               <th className="px-10 py-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 text-right">
                 Ações
@@ -530,7 +798,7 @@ export default function MembersPage() {
             </tr>
           </thead>
           <tbody>
-            {filteredMembers.map((member) => (
+            {displayedMembers.map((member) => (
               <tr
                 key={member.uid}
                 className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors"
@@ -562,6 +830,47 @@ export default function MembersPage() {
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-wrap gap-1.5">
                       {(() => {
+                        if (activeTab === "multimedia") {
+                          const multimediaRoles = member.roles?.multimedia || [];
+                          if (multimediaRoles.length > 0) {
+                            return multimediaRoles.map((roleId) => {
+                              const foundDynamic = dynamicMultimediaRoles.find((r) => r.id === roleId);
+                              const foundStatic = multimediaRolesList.find((r) => r.id === roleId);
+                              const label = foundDynamic ? foundDynamic.label : (foundStatic ? foundStatic.label : (roleId === "leader" ? "Líder de Multimídia" : roleId));
+                              return (
+                                <span key={roleId} className="font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200/50 dark:border-amber-800/50 px-3 py-1 rounded-lg text-[11px]">
+                                  {label}
+                                </span>
+                              );
+                            });
+                          }
+                          return (
+                            <span className="text-slate-300 dark:text-slate-700 font-bold">
+                              ---
+                            </span>
+                          );
+                        }
+
+                        if (activeTab === "secretariat") {
+                          const secretariatRoles = member.roles?.secretariat || [];
+                          if (secretariatRoles.length > 0) {
+                            return secretariatRoles.map((roleId) => {
+                              const found = secretariatRolesList.find((r) => r.id === roleId);
+                              const label = found ? found.label : (roleId === "leader" ? "Líder" : roleId);
+                              return (
+                                <span key={roleId} className="font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/50 dark:border-emerald-800/50 px-3 py-1 rounded-lg text-[11px]">
+                                  {label}
+                                </span>
+                              );
+                            });
+                          }
+                          return (
+                            <span className="text-slate-300 dark:text-slate-700 font-bold">
+                              ---
+                            </span>
+                          );
+                        }
+
                         const vocal = member.vocalRange || "";
                         const insts = member.instruments || [];
 
@@ -599,22 +908,62 @@ export default function MembersPage() {
                 </td>
                 <td className="px-10 py-6 border-b border-dashed border-slate-100 dark:border-slate-800">
                   <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400">
-                      {member.roles?.worship?.includes("leader") || member.roles?.multimedia?.includes("leader") || member.roles?.secretariat?.includes("leader") ? (
-                        <Shield className="w-4 h-4 text-amber-500" />
-                      ) : (
-                        <User className="w-4 h-4 text-blue-400" />
-                      )}
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 font-sans">
                       {(() => {
                         const isLeader = member.roles?.worship?.includes("leader") || member.roles?.multimedia?.includes("leader") || member.roles?.secretariat?.includes("leader");
-                        if (isLeader) return "Líder";
-                        
+                        if (isLeader) {
+                          return (
+                            <>
+                              <Shield className="w-4 h-4 text-amber-500" />
+                              <span>Líder</span>
+                            </>
+                          );
+                        }
+
                         const isMultimedia = (member.roles?.multimedia?.length ?? 0) > 0;
-                        if (isMultimedia && (member.roles?.worship?.length ?? 0) === 0 && (member.roles?.secretariat?.length ?? 0) === 0) return "Multimídia";
-                        
-                        if ((member.roles?.secretariat?.length ?? 0) > 0) return "Secretaria";
-                        
-                        return "Instrumentista";
+                        if (isMultimedia) {
+                          return (
+                            <>
+                              <User className="w-4 h-4 text-purple-500" />
+                              <span>Multimídia</span>
+                            </>
+                          );
+                        }
+
+                        if ((member.roles?.secretariat?.length ?? 0) > 0) {
+                          return (
+                            <>
+                              <User className="w-4 h-4 text-slate-400" />
+                              <span>Secretaria</span>
+                            </>
+                          );
+                        }
+
+                        // Vocal check
+                        if (member.vocalRange && member.vocalRange.trim().length > 0) {
+                          return (
+                            <>
+                              <Mic className="w-4 h-4 text-pink-500" />
+                              <span>{member.vocalRange}</span>
+                            </>
+                          );
+                        }
+
+                        if (member.instruments?.includes("Voz")) {
+                          return (
+                            <>
+                              <Mic className="w-4 h-4 text-pink-500" />
+                              <span>Vocal</span>
+                            </>
+                          );
+                        }
+
+                        return (
+                          <>
+                            <Music className="w-4 h-4 text-blue-400" />
+                            <span>Instrumentista</span>
+                          </>
+                        );
                       })()}
                     </div>
                     {member.churchId && (
@@ -658,13 +1007,13 @@ export default function MembersPage() {
           </tbody>
         </table>
 
-        {filteredMembers.length === 0 && !loading && (
+        {displayedMembers.length === 0 && !loading && (
           <div className="p-20 text-center">
-            <h3 className="text-xl font-bold text-slate-800 mb-2">
-              Nenhum integrante encontrado
+            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-2">
+              Nenhum integrante encontrado neste ministério
             </h3>
-            <p className="text-slate-500">
-              Tente buscar por outro nome ou instrumento.
+            <p className="text-slate-500 dark:text-slate-400 text-sm">
+              Tente buscar por outro nome ou selecione outra aba.
             </p>
           </div>
         )}
@@ -769,18 +1118,18 @@ export default function MembersPage() {
                   Instrumentos
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {instrumentsList.map((inst) => (
+                  {dynamicInstruments.map((inst) => (
                     <button
-                      key={inst}
+                      key={inst.id}
                       type="button"
-                      onClick={() => toggleInstrument(inst)}
+                      onClick={() => toggleInstrument(inst.value)}
                       className={`py-3 px-4 rounded-xl text-xs font-bold transition-all border ${
-                        formData.instruments.includes(inst)
+                        formData.instruments.includes(inst.value)
                           ? "bg-blue-800 text-white border-blue-800 shadow-lg shadow-blue-800/20"
                           : "bg-slate-50 text-slate-600 border-transparent hover:border-blue-300"
                       }`}
                     >
-                      {inst}
+                      {inst.label}
                     </button>
                   ))}
                 </div>
@@ -866,7 +1215,7 @@ export default function MembersPage() {
                       Multimídia
                     </label>
                     <div className="flex flex-wrap gap-2">
-                      {multimediaRolesList.map((role) => (
+                      {dynamicMultimediaRoles.map((role) => (
                         <button
                           key={role.id}
                           type="button"

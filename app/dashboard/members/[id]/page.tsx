@@ -157,7 +157,7 @@ export default function MusicianProfilePage() {
     displayRole = "Líder de Ministério";
     displayRoleShort = "Líder";
     shieldColor = "text-amber-500";
-  } else if (isMultimedia && (musician.roles?.worship?.length ?? 0) === 0 && (musician.roles?.secretariat?.length ?? 0) === 0) {
+  } else if (isMultimedia) {
     displayRole = "Multimídia";
     displayRoleShort = "Multimídia";
     shieldColor = "text-purple-500";
@@ -165,6 +165,14 @@ export default function MusicianProfilePage() {
     displayRole = "Secretaria";
     displayRoleShort = "Secretaria";
     shieldColor = "text-slate-500";
+  } else if (musician.vocalRange && musician.vocalRange.trim().length > 0) {
+    displayRole = `Vocal (${musician.vocalRange})`;
+    displayRoleShort = musician.vocalRange;
+    shieldColor = "text-pink-500";
+  } else if (musician.instruments?.includes("Voz")) {
+    displayRole = "Vocal Integrante";
+    displayRoleShort = "Vocal";
+    shieldColor = "text-pink-500";
   }
 
   return (
@@ -343,14 +351,25 @@ export default function MusicianProfilePage() {
                       Habilidades de Multimídia
                     </h3>
                     <div className="flex flex-wrap gap-2">
-                      {musician.roles.multimedia.filter(s => s !== "leader").map((skill) => (
-                        <span
-                          key={skill}
-                          className="px-4 py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-xl text-xs font-bold border border-purple-100 dark:border-purple-800 uppercase"
-                        >
-                          {skill}
-                        </span>
-                      ))}
+                      {musician.roles.multimedia.filter(s => s !== "leader").map((skill) => {
+                        const translated = 
+                          skill === "audio_operator" || skill === "audio" || skill === "sound" ? "Operador de Áudio" :
+                          skill === "pc_operator" || skill === "projection" ? "Operador de PC / Projeção" :
+                          skill === "social_media_operator" || skill === "social_media_manager" ? "Redes Sociais" :
+                          skill === "camera_operator" || skill === "camera" || skill === "video" ? "Operador de Câmera" :
+                          skill === "photography_operator" || skill === "photography" ? "Fotografia" :
+                          skill === "lights" || skill === "illumination" ? "Iluminação" :
+                          skill === "multimedia_leader" ? "Líder de Multimídia" :
+                          skill.charAt(0).toUpperCase() + skill.slice(1);
+                        return (
+                          <span
+                            key={skill}
+                            className="px-4 py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-xl text-xs font-bold border border-purple-100 dark:border-purple-800 uppercase"
+                          >
+                            {translated}
+                          </span>
+                        );
+                      })}
                     </div>
                   </section>
                 )}

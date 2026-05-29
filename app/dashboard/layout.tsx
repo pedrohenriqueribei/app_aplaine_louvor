@@ -49,24 +49,54 @@ export default function DashboardLayout({
     if (!loading) {
       if (!user) {
         router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
-      } else if (
-        !isSuperAdmin &&
-        !["líder", "instrumentista", "admin", "member", "super_admin", "multimídia"].includes(
-          userData?.role
-        )
-      ) {
-        router.push("/");
+      } else if (userData) {
+        const isLeader = userData?.roles?.worship?.includes("leader") || userData?.roles?.multimedia?.includes("leader") || userData?.roles?.secretariat?.includes("leader");
+        const hasLegacyRole = ["líder", "instrumentista", "admin", "member", "super_admin", "multimídia"].includes(userData?.role);
+        const isWorshipMember = userData?.roles?.worship && userData.roles.worship.length > 0;
+        const isMultimediaMember = userData?.roles?.multimedia && userData.roles.multimedia.length > 0;
+        const isSecretariatMember = userData?.roles?.secretariat && userData.roles.secretariat.length > 0;
+        const hasActiveStatus = userData?.status === "active";
+
+        if (
+          !isSuperAdmin &&
+          !hasLegacyRole &&
+          !isLeader &&
+          !isWorshipMember &&
+          !isMultimediaMember &&
+          !isSecretariatMember &&
+          !hasActiveStatus
+        ) {
+          console.warn("Redirecionando usuario sem permissao valida:", userData);
+          router.push("/");
+        }
       }
     }
   }, [user, userData, loading, router, pathname, isSuperAdmin]);
 
-  if (loading) return null;
+  const isLeaderAuth = userData?.roles?.worship?.includes("leader") || userData?.roles?.multimedia?.includes("leader") || userData?.roles?.secretariat?.includes("leader");
+  const hasLegacyRoleAuth = ["líder", "instrumentista", "admin", "member", "super_admin", "multimídia"].includes(userData?.role);
+  const isWorshipMemberAuth = userData?.roles?.worship && userData.roles.worship.length > 0;
+  const isMultimediaMemberAuth = userData?.roles?.multimedia && userData.roles.multimedia.length > 0;
+  const isSecretariatMemberAuth = userData?.roles?.secretariat && userData.roles.secretariat.length > 0;
+  const hasActiveStatusAuth = userData?.status === "active";
+
+  if (loading || (user && !userData)) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950">
+        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
   if (
     !user ||
     (!isSuperAdmin &&
-      !["líder", "instrumentista", "admin", "member", "super_admin", "multimídia"].includes(
-        userData?.role
-      ))
+      !hasLegacyRoleAuth &&
+      !isLeaderAuth &&
+      !isWorshipMemberAuth &&
+      !isMultimediaMemberAuth &&
+      !isSecretariatMemberAuth &&
+      !hasActiveStatusAuth)
   )
     return null;
 

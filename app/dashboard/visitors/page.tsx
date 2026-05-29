@@ -49,7 +49,8 @@ export default function VisitorsPage() {
   }, [userData]);
 
   async function fetchVisitors() {
-    if (!userData?.churchId && userData?.role !== "líder") {
+    const isLeader = userData?.role === "líder" || userData?.roles?.worship?.includes("leader") || userData?.roles?.multimedia?.includes("leader") || userData?.roles?.secretariat?.includes("leader");
+    if (!userData?.churchId && !isLeader) {
       setLoading(false);
       return;
     }

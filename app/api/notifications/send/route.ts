@@ -5,72 +5,57 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    const { type, title, body, memberIds, churchId } = await req.json();
+    const { type, title, body, tokens } = await req.json();
 
-    let tokens: string[] = [];
-
-    if (type === 'schedule' || (type === 'broadcast' && memberIds && memberIds.length > 0)) {
-      // Fetch tokens for specific members
-      const targetIds = memberIds || [];
-      if (targetIds.length === 0) {
-        return NextResponse.json({ error: 'No members specified' }, { status: 400 });
-      }
-
-      const usersSnap = await adminDb.collection('users')
-        .where('uid', 'in', targetIds)
-        .get();
-
-      usersSnap.forEach(doc => {
-        const data = doc.data();
-        if (data.fcmTokens && Array.isArray(data.fcmTokens)) {
-          tokens.push(...data.fcmTokens);
-        }
-      });
-    } else if (type === 'broadcast') {
-      // Fallback: Fetch all active users' tokens if memberIds not provided
-      let q = adminDb.collection('users').where('status', '==', 'active');
-      if (churchId) {
-        q = q.where('churchId', '==', churchId);
-      }
-
-      const usersSnap = await q.get();
-      usersSnap.forEach(doc => {
-        const data = doc.data();
-        if (data.fcmTokens && Array.isArray(data.fcmTokens)) {
-          tokens.push(...data.fcmTokens);
-        }
-      });
-    }
-
-    // Remove duplicates
-    tokens = [...new Set(tokens)];
-
-    if (tokens.length === 0) {
+    if (!tokens || tokens.length === 0) {
       return NextResponse.json({ 
         message: 'No recipients with registered tokens found.',
         success: true 
       }, { status: 200 });
     }
 
-    // Multicast sends message to multiple tokens
-    const response = await adminMessaging.sendEachForMulticast({
-      tokens,
-      notification: {
-        title,
-        body
-      },
-      webpush: {
-        fcmOptions: {
-          link: '/dashboard'
-        }
-      }
-    });
+    // Remove duplicates
+    const uniqueTokens = [...new Set(tokens as string[])];
 
-    return NextResponse.json({ 
-      success: true, 
-      successCount: response.successCount, 
-      failureCount: response.failureCount 
-    });
+    // Multicast sends message to multiple tokens
+    try {
+      const response = await adminMessaging.sendEachForMulticast({
+        tokens: uniqueTokens,
+        notification: {
+          title,
+          body
+        },
+        webpush: {
+          fcmOptions: {
+            link: '/dashboard'
+          }
+        }
+      });
+
+      return NextResponse.json({ 
+        success: true, 
+        successCount: response.successCount, 
+        failureCount: response.failureCount 
+      });
+    } catch (fcmError: any) {
+      console.warn('FCM send failed (likely missing configuration or permissions). Logging warning and continuing gracefully:', fcmError);
+      
+      const errMsg = fcmError instanceof Error ? fcmError.message : String(fcmError);
+      const isPermissionDenied = errMsg.includes('PERMISSION_DENIED') || 
+                                 errMsg.includes('7') || 
+                                 fcmError.code === 'messaging/permission-denied';
+
+      if (isPermissionDenied) {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'FCM_PERMISSION_DENIED',
+          message: 'Firebase Cloud Messaging API is not enabled or the service account lacks permission. Please assign "Firebase Cloud Messaging Admin" role or enable Cloud Messaging API in Google Cloud Console.',
+          details: errMsg
+        }, { status: 200 }); // Graceful standard HTTP 200 response to prevent breaking UI workflow
+      }
+      
+      throw fcmError;
+    }
 
   } catch (error: any) {
     console.error('Error sending push notification:', error);

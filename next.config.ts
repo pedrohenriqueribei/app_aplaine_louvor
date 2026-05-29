@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  reactStrictMode: true,
-  transpilePackages: ["motion", "firebase"],
+  reactStrictMode: false,
+  transpilePackages: ["motion"],
   serverExternalPackages: ["firebase-admin", "@google/genai"],
   eslint: {
     ignoreDuringBuilds: true,

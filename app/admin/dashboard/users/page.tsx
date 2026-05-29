@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, getDoc, updateDoc, setDoc, serverTimestamp, getDocFromCache } from 'firebase/firestore';
 import { useAuth } from '@/components/AuthProvider';
-import { Users, Loader2, Search, X, CheckCircle2, User as UserIcon, Save } from 'lucide-react';
+import { Users, Loader2, Search, X, CheckCircle2, User as UserIcon, Save, Music, Mic2 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 
 interface PlatformUser {
@@ -16,6 +16,15 @@ interface PlatformUser {
   role?: string;
   status?: string;
   createdAt?: any;
+  roles?: {
+    worship?: string[];
+    multimedia?: string[];
+    secretariat?: string[];
+  };
+  instruments?: string[];
+  vocalRange?: string;
+  voice?: string;
+  voices?: string[];
 }
 
 interface ChurchType {
@@ -39,9 +48,9 @@ export default function AdminUsersPage() {
   // Edited values
   const [editChurchId, setEditChurchId] = useState<string>('');
   const [deptRoles, setDeptRoles] = useState<Record<string, string[]>>({
-    louvor: [],
-    multimidia: [],
-    secretaria: []
+    worship: [],
+    multimedia: [],
+    secretariat: []
   });
   const [savingLoading, setSavingLoading] = useState(false);
 
@@ -87,12 +96,12 @@ export default function AdminUsersPage() {
   const handleUserClick = async (u: PlatformUser) => {
     setSelectedUser(u);
     setEditChurchId(u.churchId || '');
-    setDeptRoles({ louvor: [], multimidia: [], secretaria: [] });
+    setDeptRoles({ worship: [], multimedia: [], secretariat: [] });
     
     // Fetch current department roles if the user has a church
     if (u.churchId) {
-      const depts = ['louvor', 'multimidia', 'secretaria'];
-      const rolesData: Record<string, string[]> = { louvor: [], multimidia: [], secretaria: [] };
+      const depts = ['worship', 'multimedia', 'secretariat'];
+      const rolesData: Record<string, string[]> = { worship: [], multimedia: [], secretariat: [] };
       
       for (const dept of depts) {
         try {
@@ -114,32 +123,93 @@ export default function AdminUsersPage() {
     if (!selectedUser) return;
     setSavingLoading(true);
     try {
-      // 1. Update user document
+      // 1. Update user document and its internal roles
       const userRef = doc(db, 'users', selectedUser.id);
+      const userSnap = await getDoc(userRef);
+      let userRoles = { worship: [] as string[], multimedia: [] as string[], secretariat: [] as string[] };
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        if (data.roles) {
+          userRoles = {
+            worship: data.roles.worship || [],
+            multimedia: data.roles.multimedia || [],
+            secretariat: data.roles.secretariat || [],
+          };
+        }
+      }
+
+      // Update leader role based on the Super Admin's selection in deptRoles
+      const isWorshipLeader = deptRoles['worship']?.includes('leader');
+      if (isWorshipLeader) {
+        if (!userRoles.worship.includes('leader')) {
+          userRoles.worship = [...userRoles.worship, 'leader'];
+        }
+      } else {
+        userRoles.worship = userRoles.worship.filter(r => r !== 'leader');
+      }
+
+      const isMultimediaLeader = deptRoles['multimedia']?.includes('leader');
+      if (isMultimediaLeader) {
+        if (!userRoles.multimedia.includes('leader')) {
+          userRoles.multimedia = [...userRoles.multimedia, 'leader'];
+        }
+        if (!userRoles.multimedia.includes('multimedia_leader')) {
+          userRoles.multimedia = [...userRoles.multimedia, 'multimedia_leader'];
+        }
+      } else {
+        userRoles.multimedia = userRoles.multimedia.filter(r => r !== 'leader' && r !== 'multimedia_leader');
+      }
+
+      const isSecretariatLeader = deptRoles['secretariat']?.includes('leader');
+      if (isSecretariatLeader) {
+        if (!userRoles.secretariat.includes('leader')) {
+          userRoles.secretariat = [...userRoles.secretariat, 'leader'];
+        }
+      } else {
+        userRoles.secretariat = userRoles.secretariat.filter(r => r !== 'leader');
+      }
+
       await updateDoc(userRef, {
         churchId: editChurchId,
+        roles: userRoles,
         updatedAt: serverTimestamp(),
+        updatedBy: user?.email || user?.uid || 'system'
       });
       
       // 2. Update roles for each department in the subcollection
       if (editChurchId) {
-        const depts = ['louvor', 'multimidia', 'secretaria'];
+        const depts = ['worship', 'multimedia', 'secretariat'];
         for (const dept of depts) {
           const memberRef = doc(db, 'churches', editChurchId, 'departments', dept, 'members', selectedUser.id);
           const currentRoles = deptRoles[dept] || [];
           
-          await setDoc(memberRef, {
-            userId: selectedUser.id,
-            roles: currentRoles,
-            updatedAt: serverTimestamp(),
-            ...(currentRoles.length > 0 ? { joinedAt: serverTimestamp() } : {}) // Keep joinedAt if they have roles
-          }, { merge: true });
+          const memberSnap = await getDoc(memberRef);
+          if (!memberSnap.exists()) {
+            if (currentRoles.length > 0) {
+              await setDoc(memberRef, {
+                userId: selectedUser.id,
+                roles: currentRoles,
+                createdAt: serverTimestamp(),
+                createdBy: user?.email || user?.uid || 'system',
+                updatedAt: serverTimestamp(),
+                updatedBy: user?.email || user?.uid || 'system',
+                joinedAt: serverTimestamp()
+              });
+            }
+          } else {
+            await setDoc(memberRef, {
+              roles: currentRoles,
+              updatedAt: serverTimestamp(),
+              updatedBy: user?.email || user?.uid || 'system',
+              ...(currentRoles.length > 0 && !memberSnap.data().joinedAt ? { joinedAt: serverTimestamp() } : {})
+            }, { merge: true });
+          }
         }
       }
       
       // Update local state
-      setUsers(users.map(u => u.id === selectedUser.id ? { ...u, churchId: editChurchId } : u));
-      setSelectedUser({ ...selectedUser, churchId: editChurchId });
+      setUsers(users.map(u => u.id === selectedUser.id ? { ...u, churchId: editChurchId, roles: userRoles } : u));
+      setSelectedUser({ ...selectedUser, churchId: editChurchId, roles: userRoles });
       setIsModalOpen(false);
       
     } catch (error) {
@@ -322,6 +392,123 @@ export default function AdminUsersPage() {
                         </p>
                       </div>
                     </div>
+
+                    {/* Habilidades Musicais se registradas */}
+                    {((selectedUser.instruments && selectedUser.instruments.length > 0) || selectedUser.vocalRange || selectedUser.voice || (selectedUser.voices && selectedUser.voices.length > 0)) && (
+                      <div className="mt-4 p-4 bg-blue-50/40 dark:bg-blue-950/10 rounded-2xl border border-blue-100/50 dark:border-blue-900/35 space-y-3">
+                        <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest flex items-center gap-1.5">
+                          Habilidades
+                        </p>
+                        
+                        {selectedUser.instruments && selectedUser.instruments.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                              <Music className="w-3.5 h-3.5 text-blue-500" />
+                              Instrumentos
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {selectedUser.instruments.map((inst) => (
+                                <span key={inst} className="px-2.5 py-1 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700/60 rounded-lg text-xs font-bold capitalize">
+                                  {inst}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {(selectedUser.vocalRange || selectedUser.voice || (selectedUser.voices && selectedUser.voices.length > 0)) && (
+                          <div className={selectedUser.instruments && selectedUser.instruments.length > 0 ? "pt-2 border-t border-blue-100/30 dark:border-blue-900/20" : ""}>
+                            <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                              <Mic2 className="w-3.5 h-3.5 text-indigo-500" />
+                              Voz / Classificação
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {selectedUser.vocalRange && (
+                                <span className="px-2.5 py-1 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/50 rounded-lg text-xs font-bold capitalize">
+                                  {selectedUser.vocalRange}
+                                </span>
+                              )}
+                              {selectedUser.voice && selectedUser.voice !== selectedUser.vocalRange && (
+                                <span className="px-2.5 py-1 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/50 rounded-lg text-xs font-bold capitalize">
+                                  {selectedUser.voice}
+                                </span>
+                              )}
+                              {selectedUser.voices && selectedUser.voices.map((vc) => (
+                                <span key={vc} className="px-2.5 py-1 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/50 rounded-lg text-xs font-bold capitalize">
+                                  {vc}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Roles do Usuário no Banco de Dados */}
+                    <div className="mt-6 space-y-3">
+                      <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                        Atribuições e Papéis (roles do banco)
+                      </p>
+                      
+                      <div className="space-y-4 bg-slate-50 dark:bg-slate-800/30 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                        {/* Louvor */}
+                        <div>
+                          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                            Ministério de Louvor / worship
+                          </p>
+                          {selectedUser.roles?.worship && selectedUser.roles.worship.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {selectedUser.roles.worship.map((r) => (
+                                <span key={r} className="px-2.5 py-1 bg-blue-550/10 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/50 rounded-lg text-xs font-bold capitalize font-mono">
+                                  {r === "leader" ? "Líder 👑" : r}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 italic">Nenhum papel atribuído neste ministérios</p>
+                          )}
+                        </div>
+
+                        {/* Multimidia */}
+                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60">
+                          <p className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                            Ministério de Multimídia / multimedia
+                          </p>
+                          {selectedUser.roles?.multimedia && selectedUser.roles.multimedia.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {selectedUser.roles.multimedia.map((r) => (
+                                <span key={r} className="px-2.5 py-1 bg-purple-550/10 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-900/50 rounded-lg text-xs font-bold capitalize font-mono">
+                                  {r === "leader" || r === "multimedia_leader" ? "Líder 👑" : r}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 italic">Nenhum papel atribuído neste ministério</p>
+                          )}
+                        </div>
+
+                        {/* Secretaria */}
+                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60">
+                          <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Secretaria / secretariat
+                          </p>
+                          {selectedUser.roles?.secretariat && selectedUser.roles.secretariat.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {selectedUser.roles.secretariat.map((r) => (
+                                <span key={r} className="px-2.5 py-1 bg-emerald-550/10 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50 rounded-lg text-xs font-bold capitalize font-mono">
+                                  {r === "leader" || r === "admin" ? "Líder/Admin 👑" : r}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 italic">Nenhum papel atribuído neste ministério</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Configurações Administrativas */}
@@ -340,7 +527,7 @@ export default function AdminUsersPage() {
                           setEditChurchId(e.target.value);
                           // Reset roles when changing church? Not strictly necessary but good.
                           if (e.target.value !== selectedUser.churchId) {
-                            setDeptRoles({ louvor: [], multimidia: [], secretaria: [] });
+                            setDeptRoles({ worship: [], multimedia: [], secretariat: [] });
                           }
                         }}
                         className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm mb-4"
@@ -358,12 +545,12 @@ export default function AdminUsersPage() {
                           Liderança por Departamento
                         </label>
                         
-                        {['louvor', 'multimidia', 'secretaria'].map((dept) => {
+                        {['worship', 'multimedia', 'secretariat'].map((dept) => {
                           const isLeader = deptRoles[dept]?.includes('leader');
                           const labels: Record<string, string> = {
-                            louvor: 'Ministério de Louvor',
-                            multimidia: 'Multimídia',
-                            secretaria: 'Secretaria'
+                            worship: 'Ministério de Louvor',
+                            multimedia: 'Multimídia',
+                            secretariat: 'Secretaria'
                           };
                           
                           return (

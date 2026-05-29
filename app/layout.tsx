@@ -29,7 +29,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${outfit.variable}`}
     >
-      <body suppressHydrationWarning className="antialiased">
+      <body suppressHydrationWarning className="antialiased font-sans">
         <AuthProvider>
           <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-300">
             {children}

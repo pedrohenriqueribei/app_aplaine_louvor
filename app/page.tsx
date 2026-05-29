@@ -48,7 +48,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
       {/* Navigation */}
-      <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
+      <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <Link
             href="/"
@@ -163,12 +163,14 @@ export default function HomePage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-4">
                   {/* Ministério de Louvor */}
-                  <div className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm group">
-                    <div className="relative h-40 rounded-2xl overflow-hidden">
+                  <div className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm group" id="card-louvor">
+                    <div className="relative h-40 rounded-2xl overflow-hidden" id="card-louvor-image-container">
                       <img
+                        id="card-louvor-image"
                         src="/images/worship.png"
                         alt="Banda tocando"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        referrerPolicy="no-referrer"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/10 to-transparent"></div>
                       <div className="absolute bottom-3 left-3">
@@ -210,12 +212,14 @@ export default function HomePage() {
                   />
 
                   {/* Ministério de Multimídia */}
-                  <div className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm group">
-                    <div className="relative h-48 rounded-2xl overflow-hidden">
+                  <div className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm group" id="card-multimedia">
+                    <div className="relative h-48 rounded-2xl overflow-hidden" id="card-multimedia-image-container">
                       <img
+                        id="card-multimedia-image"
                         src="/images/multimedia.png"
                         alt="Mesa de som e painel digital"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        referrerPolicy="no-referrer"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/10 to-transparent"></div>
                       <div className="absolute bottom-3 left-3">

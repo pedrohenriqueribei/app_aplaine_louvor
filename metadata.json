@@ -1,6 +1,6 @@
 {
   "name": "Aplaine",
-  "description": "Sistema de gestão de ministério de louvor",
+  "description": "SaaS Multi-tenant para gestão de igrejas (louvor e multimídia)",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

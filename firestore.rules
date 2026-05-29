@@ -118,7 +118,7 @@ service cloud.firestore {
             return data.keys().hasAll(['userId', 'roles']) &&
                    data.userId is string &&
                    data.roles is list && data.roles.size() <= 20 &&
-                   (!('joinedAt' in data) || data.joinedAt is string);
+                   (!('joinedAt' in data) || data.joinedAt is string || data.joinedAt is timestamp);
           }
 
           allow read: if isSignedIn() && (
@@ -216,6 +216,15 @@ service cloud.firestore {
              data.roles is map;
     }
 
+    function isValidPlaylist(data) {
+      let requiredFields = ['id', 'scheduleId', 'churchId', 'songs'];
+      return data.keys().hasAll(requiredFields) &&
+             data.id is string &&
+             data.scheduleId is string &&
+             data.churchId is string &&
+             data.songs is list;
+    }
+
     match /schedules/{scheduleId} {
       allow read: if isSignedIn() && (
         isAdmin() || (resource != null && resource.data.churchId == getMyChurch())
@@ -226,6 +235,21 @@ service cloud.firestore {
                     (incoming().churchId == getMyChurch() || isAdmin());
       allow update: if isSignedIn() && isValidId(scheduleId) && 
                     isValidSchedule(incoming()) && 
+                    (existing().churchId == getMyChurch() || isAdmin()) &&
+                    (incoming().churchId == existing().churchId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /playlists/{playlistId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || (resource != null && resource.data.churchId == getMyChurch())
+      );
+      allow create: if isSignedIn() && isValidId(playlistId) && 
+                    isValidPlaylist(incoming()) && 
+                    incoming().id == playlistId &&
+                    (incoming().churchId == getMyChurch() || isAdmin());
+      allow update: if isSignedIn() && isValidId(playlistId) && 
+                    isValidPlaylist(incoming()) && 
                     (existing().churchId == getMyChurch() || isAdmin()) &&
                     (incoming().churchId == existing().churchId || isAdmin());
       allow delete: if isAdmin();
@@ -250,7 +274,8 @@ service cloud.firestore {
       allow get: if isSignedIn() && (
         availId.split('_')[0] == request.auth.uid || 
         isAdmin() ||
-        (resource != null && resource.data.churchId == getMyChurch())
+        (resource != null && resource.data.churchId == getMyChurch()) ||
+        (getMyChurch() != "" && get(/databases/$(database)/documents/users/$(availId.split('_')[0])).data.get('churchId', '') == getMyChurch())
       );
 
       allow list: if isSignedIn() && (

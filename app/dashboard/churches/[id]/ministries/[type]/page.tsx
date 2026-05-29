@@ -32,6 +32,7 @@ import {
   Calendar,
   Copy,
   Check,
+  Sliders,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,11 @@ interface Musician {
   level?: string;
   role: "líder" | "instrumentista";
   status: "active" | "inactive";
+  roles?: {
+    worship?: string[];
+    multimedia?: string[];
+    secretariat?: string[];
+  };
 }
 
 interface Band {
@@ -90,6 +96,106 @@ export default function MinistryDetailPage() {
 
   const [copied, setCopied] = useState(false);
 
+  const isDeptLeader =
+    members.find((m) => m.uid === userData?.uid)?.role === "líder" ||
+    userData?.roles?.[type === "louvor" ? "worship" : type === "multimidia" ? "multimedia" : "secretariat"]?.includes("leader") ||
+    userData?.role === "líder" ||
+    userData?.super_admin === true ||
+    userData?.email === "pedrohenriqueribei@gmail.com";
+
+  const getRoleLabels = (m: Musician) => {
+    if (type === "louvor") {
+      const worshipRoles = m.roles?.worship || [];
+      const labels: string[] = [];
+
+      if (worshipRoles.includes("leader")) {
+        labels.push("Líder");
+      }
+
+      const isVocal = m.vocalRange || (m.instruments && m.instruments.includes("Voz")) || m.instrument === "Voz";
+      const hasInstruments = (m.instruments && m.instruments.filter((i: string) => i !== "Voz").length > 0) || (m.instrument && m.instrument !== "Voz");
+
+      if (isVocal) {
+        if (m.vocalRange) {
+          labels.push(`Vocalista (${m.vocalRange})`);
+        } else {
+          labels.push("Vocalista");
+        }
+      }
+
+      if (hasInstruments) {
+        if (m.instruments && m.instruments.length > 0) {
+          m.instruments.filter((i: string) => i !== "Voz").forEach((inst: string) => {
+            labels.push(inst);
+          });
+        } else if (m.instrument) {
+          labels.push(m.instrument);
+        }
+      }
+
+      if (labels.length === 0) {
+        if (worshipRoles.includes("instrumentist")) {
+          labels.push("Instrumentista");
+        } else {
+          labels.push("Músico Integrante");
+        }
+      }
+
+      return labels.join(", ");
+    } else if (type === "multimidia") {
+      const mmRoles = m.roles?.multimedia || [];
+      const labels: string[] = [];
+
+      if (mmRoles.includes("leader") || mmRoles.includes("multimedia_leader")) {
+        labels.push("Líder");
+      }
+
+      mmRoles.forEach((role: string) => {
+        if (role === "leader" || role === "multimedia_leader") return;
+        
+        if (role === "audio_operator" || role === "audio" || role === "sound") {
+          labels.push("Áudio");
+        } else if (role === "pc_operator" || role === "projection") {
+          labels.push("Projeção");
+        } else if (role === "social_media_operator" || role === "social_media_manager") {
+          labels.push("Redes Sociais");
+        } else if (role === "camera_operator" || role === "camera" || role === "video") {
+          labels.push("Câmera / Vídeo");
+        } else if (role === "photography_operator" || role === "photography") {
+          labels.push("Fotografia");
+        } else if (role === "lights" || role === "illumination") {
+          labels.push("Iluminação");
+        } else {
+          labels.push(role.charAt(0).toUpperCase() + role.slice(1));
+        }
+      });
+
+      if (labels.length === 0) {
+        labels.push("Técnico Integrante");
+      }
+
+      return labels.join(", ");
+    } else {
+      const secRoles = m.roles?.secretariat || [];
+      const labels: string[] = [];
+
+      if (secRoles.includes("leader") || secRoles.includes("admin") || secRoles.includes("secretariat_leader")) {
+        labels.push("Secretário");
+      }
+
+      secRoles.forEach((role: string) => {
+        if (role === "leader" || role === "admin" || role === "secretariat_leader") return;
+        labels.push(role.charAt(0).toUpperCase() + role.slice(1));
+      });
+
+      if (labels.length === 0) {
+        labels.push("Auxiliar de Secretaria");
+      }
+
+      return labels.join(", ");
+    }
+  };
+
   const handleCopyLink = () => {
     const inviteUrl = `${window.location.origin}/register?churchId=${id}&role=${type}`;
     navigator.clipboard.writeText(inviteUrl);
@@ -118,15 +224,84 @@ export default function MinistryDetailPage() {
         );
         const usersSnap = await getDocs(usersQ);
 
-        const membersData: Musician[] = usersSnap.docs.map((docSnap) => {
-          const userData = docSnap.data();
-          const primaryRole = userData.role === "líder" ? "líder" : "instrumentista";
-          return {
+        const membersMap = new Map<string, any>();
+        usersSnap.docs.forEach((docSnap) => {
+          membersMap.set(docSnap.id, {
             uid: docSnap.id,
+            ...docSnap.data()
+          });
+        });
+
+        let deptKey: "worship" | "multimedia" | "secretariat" | null = null;
+        if (type === "louvor") {
+          deptKey = "worship";
+        } else if (type === "multimidia") {
+          deptKey = "multimedia";
+        } else if (type === "secretaria") {
+          deptKey = "secretariat";
+        }
+
+        // Fetch users and nested roles from this specific department subcollection
+        if (deptKey) {
+          try {
+            const deptSnap = await getDocs(
+              collection(db, "churches", id as string, "departments", deptKey, "members")
+            );
+            for (const docSnap of deptSnap.docs) {
+              const memberUid = docSnap.id;
+              const deptMemberData = docSnap.data();
+              const subroles = deptMemberData.roles || [];
+              
+              if (!membersMap.has(memberUid)) {
+                // Fetch user profile for this department member
+                const userProfileSnap = await getDoc(doc(db, "users", memberUid));
+                if (userProfileSnap.exists()) {
+                  const uData = userProfileSnap.data();
+                  membersMap.set(memberUid, {
+                    uid: memberUid,
+                    ...uData,
+                    roles: {
+                      ...(uData.roles || {}),
+                      [deptKey]: subroles
+                    }
+                  });
+                }
+              } else {
+                // Update roles with subcollection values if found
+                const existingUser = membersMap.get(memberUid);
+                existingUser.roles = {
+                  ...(existingUser.roles || {}),
+                  [deptKey]: Array.from(new Set([...(existingUser.roles?.[deptKey] || []), ...subroles]))
+                };
+                membersMap.set(memberUid, existingUser);
+              }
+            }
+          } catch (err) {
+            console.error(`Error loading department ${deptKey} members:`, err);
+          }
+        }
+
+        const allMappedUsers = Array.from(membersMap.values());
+        const filteredDocs = allMappedUsers.filter((userData) => {
+          if (userData.roles) {
+            const deptRoles = deptKey ? (userData.roles?.[deptKey] || []) : [];
+            return deptRoles.length > 0;
+          }
+          // Fallback for legacy database entries: default to "louvor" if no roles object exists
+          return type === "louvor";
+        });
+
+        const membersData: Musician[] = filteredDocs.map((userData) => {
+          const deptRoles = deptKey ? (userData.roles?.[deptKey] || []) : [];
+          // A user is a leader in this department if their department roles array contains "leader"
+          // or as a fallback if they are marked as a leader globally and have no roles object
+          const isLeaderInDept = deptRoles.includes("leader") || deptRoles.includes("multimedia_leader") || (userData.role === "líder" && !userData.roles);
+          const primaryRole = isLeaderInDept ? "líder" : "instrumentista";
+          return {
+            uid: userData.uid,
             ...userData,
             role: primaryRole,
-            departmentRoles: [primaryRole === "líder" ? "leader" : "instrumentista"],
-          } as Musician & { departmentRoles: string[] };
+          } as Musician;
         });
         
         membersData.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
@@ -304,6 +479,17 @@ export default function MinistryDetailPage() {
                   : "organização administrativa e suporte pastoral"}{" "}
               em nossa comunidade.
             </p>
+            {type === "multimidia" && isDeptLeader && (
+              <div className="pt-4">
+                <Link
+                  id="btn-configurar-escala"
+                  href={`/dashboard/churches/${id}/ministries/multimidia/scale-config`}
+                  className="inline-flex items-center gap-2 bg-purple-800 hover:bg-purple-950 dark:bg-purple-800 dark:hover:bg-purple-700 text-white font-bold px-6 py-3 rounded-2xl shadow-lg shadow-purple-800/15 active:scale-95 transition-all text-sm cursor-pointer"
+                >
+                  <Sliders className="w-4 h-4" /> Configurar Escala
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -325,12 +511,21 @@ export default function MinistryDetailPage() {
                           Personalize o nome e a sigla deste ministério.
                         </p>
                       </div>
-                      <button
-                        onClick={() => setIsEditingWorship(true)}
-                        className="bg-white dark:bg-slate-800 text-blue-800 dark:text-blue-400 px-6 py-3 rounded-2xl font-bold shadow-sm border border-slate-100 dark:border-slate-700 hover:bg-blue-50 transition-colors"
-                      >
-                        Alterar Nome/Sigla
-                      </button>
+                      <div className="flex flex-wrap gap-3">
+                        <Link
+                          id="btn-configurar-escala-louvor"
+                          href={`/dashboard/churches/${id}/ministries/louvor/scale-config`}
+                          className="bg-blue-800 hover:bg-blue-900 text-white px-6 py-3 rounded-2xl font-bold shadow-sm border border-blue-700 transition-colors inline-flex items-center gap-2 text-sm"
+                        >
+                          <Sliders className="w-4 h-4" /> Configuração de Escala
+                        </Link>
+                        <button
+                          onClick={() => setIsEditingWorship(true)}
+                          className="bg-white dark:bg-slate-800 text-blue-800 dark:text-blue-400 px-6 py-3 rounded-2xl font-bold shadow-sm border border-slate-100 dark:border-slate-700 hover:bg-blue-50 transition-colors text-sm"
+                        >
+                          Alterar Nome/Sigla
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-6">
@@ -528,10 +723,7 @@ export default function MinistryDetailPage() {
                           {member.name}
                         </div>
                         <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">
-                          {member.instruments?.join(", ") ||
-                            member.instrument ||
-                            member.vocalRange ||
-                            "Participante"}
+                          {getRoleLabels(member)}
                         </div>
                       </div>
                     </div>

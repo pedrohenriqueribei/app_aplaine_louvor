@@ -14,6 +14,6 @@ const app = getApps().length === 0
   : getApp();
 
 // Use modular API which is recommended for v13
-export const adminDb = getFirestore(app);
+export const adminDb = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId || undefined);
 export const adminMessaging = getMessaging(app);
 export const adminAuth = getAuth(app);
