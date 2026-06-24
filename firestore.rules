@@ -107,7 +107,7 @@ service cloud.firestore {
 
     match /churches/{churchId} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isAdmin();
 
       match /departments/{departmentId} {
         allow read: if isSignedIn();
@@ -152,7 +152,34 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, write: if true;
+      // Allow any signed-in user to see team directory
+      allow read: if isSignedIn();
+      
+      allow create: if (
+                      isOwner(userId) && 
+                      isValidUser(incoming()) && 
+                      incoming().uid == userId &&
+                      (
+                        incoming().get('role', 'instrumentista') == 'instrumentista' || 
+                        (request.auth.token.email == 'pedrohenriqueribei@gmail.com' && incoming().get('role', '') == 'líder')
+                      )
+                    ) || isAdmin();
+      
+      allow update: if (
+                      isOwner(userId) && 
+                      isValidUser(incoming()) && 
+                      (
+                        isAdmin() || 
+                        (
+                          incoming().get('role', 'instrumentista') == existing().get('role', 'instrumentista') &&
+                          incoming().get('status', 'active') == existing().get('status', 'active') &&
+                          incoming().get('email', '') == existing().get('email', '') &&
+                          incoming().uid == existing().uid
+                        )
+                      )
+                    ) || isAdmin();
+
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.get('email', '') == request.auth.token.email);
     }
 
     match /songs/{songId} {
