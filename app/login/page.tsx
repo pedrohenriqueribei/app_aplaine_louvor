@@ -61,15 +61,17 @@ function LoginForm() {
           >
             <Link
               href="/"
-              className="bg-white p-6 rounded-[2rem] shadow-2xl shadow-blue-900/50 relative group border border-white/20 block cursor-pointer"
+              className="bg-white p-5 rounded-[2rem] shadow-2xl shadow-blue-900/50 relative group border border-white/20 flex items-center gap-4 cursor-pointer"
             >
               <div className="absolute inset-0 bg-blue-400/30 rounded-[2rem] blur-2xl group-hover:blur-3xl transition-all duration-500 -z-10"></div>
               <img
-                src="https://lh3.googleusercontent.com/d/1lKzsn9yPg-jpcH5Lw1x5QwCyH_W9btXq?v=2"
+                src="/logo_aplaine.png"
                 alt="Aplaine Logo"
-                className="h-20 w-auto relative z-10 transition-transform duration-500 group-hover:scale-105"
-                referrerPolicy="no-referrer"
+                className="h-16 w-16 object-contain rounded-2xl relative z-10 transition-transform duration-500 group-hover:scale-105"
               />
+              <span className="text-3xl font-display font-black text-slate-900 tracking-tight pr-2">
+                Aplaine
+              </span>
             </Link>
           </motion.div>
           <motion.h2
@@ -103,6 +105,18 @@ function LoginForm() {
           className="w-full max-w-md"
         >
           <div className="mb-10 text-center lg:text-left">
+            <div className="lg:hidden flex justify-center mb-6">
+              <Link href="/" className="flex items-center gap-3">
+                <img
+                  src="/logo_aplaine.png"
+                  alt="Aplaine Logo"
+                  className="h-12 w-12 object-contain rounded-2xl shadow-md"
+                />
+                <span className="text-2xl font-display font-black text-slate-900 tracking-tight">
+                  Aplaine
+                </span>
+              </Link>
+            </div>
             <h1 className="text-4xl font-display font-black text-slate-900 mb-2 tracking-tight">
               {isLogin ? "Bem-vindo de volta" : "Criar conta"}
             </h1>

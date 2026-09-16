@@ -52,14 +52,17 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <Link
             href="/"
-            className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+            className="flex items-center gap-3 cursor-pointer hover:opacity-85 transition-opacity"
+            id="nav-logo-link"
           >
             <img
-              src="https://lh3.googleusercontent.com/d/1lKzsn9yPg-jpcH5Lw1x5QwCyH_W9btXq?v=2"
+              src="/logo_aplaine.png"
               alt="Aplaine Logo"
-              className="h-10 w-auto"
-              referrerPolicy="no-referrer"
+              className="h-10 w-10 object-contain rounded-xl shadow-sm"
             />
+            <span className="text-2xl font-display font-black text-slate-900 tracking-tight">
+              Aplaine
+            </span>
           </Link>
           <div className="flex items-center gap-4">
             <Link

@@ -3,6 +3,7 @@
 import React, { useState, Suspense } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Mail,
@@ -248,11 +249,24 @@ function RegisterForm() {
 
         <div className="relative z-10 max-w-lg text-center">
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-[2.5rem] flex items-center justify-center text-white mb-10 border border-white/20 shadow-2xl mx-auto"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mx-auto mb-10 flex justify-center"
           >
-            <Music className="w-10 h-10" />
+            <Link
+              href="/"
+              className="bg-white p-5 rounded-[2rem] shadow-2xl shadow-blue-900/50 relative group border border-white/20 flex items-center gap-4 cursor-pointer"
+            >
+              <div className="absolute inset-0 bg-blue-400/30 rounded-[2rem] blur-2xl group-hover:blur-3xl transition-all duration-500 -z-10"></div>
+              <img
+                src="/logo_aplaine.png"
+                alt="Aplaine Logo"
+                className="h-16 w-16 object-contain rounded-2xl relative z-10 transition-transform duration-500 group-hover:scale-105"
+              />
+              <span className="text-3xl font-display font-black text-slate-900 tracking-tight pr-2">
+                Aplaine
+              </span>
+            </Link>
           </motion.div>
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
@@ -287,6 +301,18 @@ function RegisterForm() {
           {!selectedRole ? (
             <div className="space-y-8">
               <div className="text-center lg:text-left">
+                <div className="lg:hidden flex justify-center mb-6">
+                  <Link href="/" className="flex items-center gap-3">
+                    <img
+                      src="/logo_aplaine.png"
+                      alt="Aplaine Logo"
+                      className="h-12 w-12 object-contain rounded-2xl shadow-md"
+                    />
+                    <span className="text-2xl font-display font-black text-slate-900 tracking-tight">
+                      Aplaine
+                    </span>
+                  </Link>
+                </div>
                 <h1 className="text-4xl font-display font-black text-slate-900 mb-2 tracking-tight">
                   Como quer atuar?
                 </h1>
@@ -368,6 +394,18 @@ function RegisterForm() {
               </button>
 
               <div className="mb-10 text-center lg:text-left">
+                <div className="lg:hidden flex justify-center mb-6">
+                  <Link href="/" className="flex items-center gap-3">
+                    <img
+                      src="/logo_aplaine.png"
+                      alt="Aplaine Logo"
+                      className="h-12 w-12 object-contain rounded-2xl shadow-md"
+                    />
+                    <span className="text-2xl font-display font-black text-slate-900 tracking-tight">
+                      Aplaine
+                    </span>
+                  </Link>
+                </div>
                 <h1 className="text-4xl font-display font-black text-slate-900 mb-2 tracking-tight">
                   {selectedRole === "musico"
                     ? "Cadastro de Músico"
