@@ -58,16 +58,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           href="/" 
           id="logo-link"
           onClick={onClose} 
-          className="flex items-center gap-3 cursor-pointer hover:opacity-85 transition-opacity"
+          className="flex items-center cursor-pointer hover:opacity-90 transition-opacity"
         >
-          <img 
-            src="/logo_aplaine.png" 
-            alt="Aplaine Logo" 
-            className="h-10 w-10 object-contain rounded-xl shadow-sm" 
-          />
-          <span className="text-2xl font-display font-black text-slate-900 dark:text-white tracking-tight">
-            Aplaine
-          </span>
+          <div className="bg-white p-2 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-xs flex items-center">
+            <img 
+              src="/logo_aplane.png" 
+              alt="Applane Logo" 
+              className="h-8 w-auto object-contain" 
+            />
+          </div>
         </Link>
         {onClose && (
           <button onClick={onClose} className="lg:hidden p-2 text-slate-400">

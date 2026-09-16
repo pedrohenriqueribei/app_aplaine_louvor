@@ -1,6 +1,6 @@
 {
-  "name": "Aplaine",
-  "description": "SaaS Multi-tenant para gestão de igrejas (louvor e multimídia)",
+  "name": "Applane",
+  "description": "Plataforma de gestão de ministérios de louvor, multimídia e escalas para igrejas",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

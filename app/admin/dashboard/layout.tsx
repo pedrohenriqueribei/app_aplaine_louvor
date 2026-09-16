@@ -3,7 +3,7 @@
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter, usePathname } from 'next/navigation';
-import { LogOut, Music, LayoutDashboard, Settings, Building2, Users } from 'lucide-react';
+import { LogOut, LayoutDashboard, Settings, Building2, Users } from 'lucide-react';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { auth } from '@/lib/firebase';
@@ -40,14 +40,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="flex bg-slate-50 dark:bg-slate-950 min-h-screen transition-colors duration-300">
       {/* Sidebar Admin */}
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col hidden md:flex h-screen sticky top-0">
-        <div className="p-6 flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30 shrink-0">
-            <Music className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <span className="text-xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Applaine</span>
-            <span className="block text-[10px] uppercase tracking-widest text-blue-600 dark:text-blue-400 font-bold -mt-1">Admin</span>
-          </div>
+        <div className="p-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 mb-2">
+          <Link href="/admin/dashboard" className="flex items-center gap-2">
+            <div className="bg-white p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center">
+              <img src="/logo_aplane.png" alt="Applane Logo" className="h-7 w-auto object-contain" />
+            </div>
+            <span className="text-[10px] uppercase tracking-widest bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 font-bold px-2 py-0.5 rounded-md">Admin</span>
+          </Link>
         </div>
 
         <div className="px-4 py-2">

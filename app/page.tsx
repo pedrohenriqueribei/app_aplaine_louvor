@@ -52,17 +52,14 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <Link
             href="/"
-            className="flex items-center gap-3 cursor-pointer hover:opacity-85 transition-opacity"
+            className="flex items-center cursor-pointer hover:opacity-90 transition-opacity"
             id="nav-logo-link"
           >
             <img
-              src="/logo_aplaine.png"
-              alt="Aplaine Logo"
-              className="h-10 w-10 object-contain rounded-xl shadow-sm"
+              src="/logo_aplane.png"
+              alt="Applane Logo"
+              className="h-10 md:h-12 w-auto object-contain"
             />
-            <span className="text-2xl font-display font-black text-slate-900 tracking-tight">
-              Aplaine
-            </span>
           </Link>
           <div className="flex items-center gap-4">
             <Link
@@ -268,6 +265,22 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Footer with Applane logo */}
+      <footer className="bg-white border-t border-slate-200 py-10 px-6">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+          <Link href="/" className="flex items-center hover:opacity-90 transition-opacity">
+            <img
+              src="/logo_aplane.png"
+              alt="Applane Logo"
+              className="h-9 w-auto object-contain"
+            />
+          </Link>
+          <p className="text-sm font-medium text-slate-500 text-center md:text-right">
+            © {new Date().getFullYear()} Applane. Gestão ministerial com excelência.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -106,8 +106,10 @@ function AdminLoginForm() {
       
       <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl p-8 relative z-10">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-600 dark:bg-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-500/30">
-            <Music className="w-8 h-8 text-white" />
+          <div className="flex justify-center mb-6">
+            <div className="bg-white p-3 rounded-2xl shadow-lg shadow-blue-500/10 border border-slate-200 dark:border-slate-700">
+              <img src="/logo_aplane.png" alt="Applane Logo" className="h-12 w-auto object-contain" />
+            </div>
           </div>
           <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Admin Login</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Acesso restrito para super administradores.</p>

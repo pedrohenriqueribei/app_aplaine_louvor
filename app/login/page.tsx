@@ -61,17 +61,14 @@ function LoginForm() {
           >
             <Link
               href="/"
-              className="bg-white p-5 rounded-[2rem] shadow-2xl shadow-blue-900/50 relative group border border-white/20 flex items-center gap-4 cursor-pointer"
+              className="bg-white px-8 py-5 rounded-[2rem] shadow-2xl shadow-blue-900/50 relative group border border-white/20 flex items-center cursor-pointer"
             >
               <div className="absolute inset-0 bg-blue-400/30 rounded-[2rem] blur-2xl group-hover:blur-3xl transition-all duration-500 -z-10"></div>
               <img
-                src="/logo_aplaine.png"
-                alt="Aplaine Logo"
-                className="h-16 w-16 object-contain rounded-2xl relative z-10 transition-transform duration-500 group-hover:scale-105"
+                src="/logo_aplane.png"
+                alt="Applane Logo"
+                className="h-16 w-auto object-contain relative z-10 transition-transform duration-500 group-hover:scale-105"
               />
-              <span className="text-3xl font-display font-black text-slate-900 tracking-tight pr-2">
-                Aplaine
-              </span>
             </Link>
           </motion.div>
           <motion.h2
@@ -106,15 +103,12 @@ function LoginForm() {
         >
           <div className="mb-10 text-center lg:text-left">
             <div className="lg:hidden flex justify-center mb-6">
-              <Link href="/" className="flex items-center gap-3">
+              <Link href="/" className="flex items-center">
                 <img
-                  src="/logo_aplaine.png"
-                  alt="Aplaine Logo"
-                  className="h-12 w-12 object-contain rounded-2xl shadow-md"
+                  src="/logo_aplane.png"
+                  alt="Applane Logo"
+                  className="h-12 w-auto object-contain"
                 />
-                <span className="text-2xl font-display font-black text-slate-900 tracking-tight">
-                  Aplaine
-                </span>
               </Link>
             </div>
             <h1 className="text-4xl font-display font-black text-slate-900 mb-2 tracking-tight">

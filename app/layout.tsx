@@ -14,8 +14,18 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "Aplaine",
-  description: "Sistema de gestão de ministério de louvor",
+  title: "Applane",
+  description: "Plataforma de gestão de ministérios de louvor, multimídia e escalas para igrejas",
+  icons: {
+    icon: "/icon_applane.png",
+    shortcut: "/icon_applane.png",
+    apple: "/icon_applane.png",
+  },
+  openGraph: {
+    title: "Applane",
+    description: "Plataforma de gestão de ministérios de louvor, multimídia e escalas para igrejas",
+    images: ["/logo_aplane.png"],
+  },
 };
 
 export default function RootLayout({
