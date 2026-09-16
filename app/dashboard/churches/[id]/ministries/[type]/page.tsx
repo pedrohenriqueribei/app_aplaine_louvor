@@ -100,8 +100,7 @@ export default function MinistryDetailPage() {
     members.find((m) => m.uid === userData?.uid)?.role === "líder" ||
     userData?.roles?.[type === "louvor" ? "worship" : type === "multimidia" ? "multimedia" : "secretariat"]?.includes("leader") ||
     userData?.role === "líder" ||
-    userData?.super_admin === true ||
-    userData?.email === "pedrohenriqueribei@gmail.com";
+    userData?.super_admin === true;
 
   const getRoleLabels = (m: Musician) => {
     if (type === "louvor") {

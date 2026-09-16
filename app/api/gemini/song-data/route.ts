@@ -1,18 +1,42 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
+import { adminAuth } from "@/lib/firebase-admin";
 
-// Initialize Gemini client server-side only
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    }
+export const dynamic = "force-dynamic";
+
+let client: GoogleGenAI | null = null;
+
+function getClient() {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY não configurada.");
   }
-});
+  if (!client) {
+    client = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+  }
+  return client;
+}
 
 export async function POST(req: NextRequest) {
   try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+    }
+
+    try {
+      await adminAuth.verifyIdToken(authHeader.split("Bearer ")[1]);
+    } catch {
+      return NextResponse.json({ error: "Token inválido." }, { status: 401 });
+    }
+
+    const ai = getClient();
     const body = await req.json();
     const { action, title, artist } = body;
 

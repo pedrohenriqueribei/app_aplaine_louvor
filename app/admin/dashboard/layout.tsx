@@ -18,7 +18,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (!loading) {
       if (!user) {
         router.push('/admin/login');
-      } else if (!isSuperAdmin && user.email !== 'pedrohenriqueribei@gmail.com') {
+      } else if (!isSuperAdmin) {
         router.push('/dashboard');
       }
     }
@@ -29,7 +29,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     router.push('/admin/login');
   };
 
-  if (loading || !user || (!isSuperAdmin && user.email !== 'pedrohenriqueribei@gmail.com')) return null;
+  if (loading || !user || !isSuperAdmin) return null;
 
   const navItems = [
     { label: 'Visão Geral', icon: <LayoutDashboard className="w-5 h-5" />, href: '/admin/dashboard' },

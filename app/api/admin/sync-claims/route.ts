@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Permite se for super_admin ou o email principal
-    if (decodedToken.super_admin !== true && decodedToken.email !== 'pedrohenriqueribei@gmail.com') {
+    if (decodedToken.super_admin !== true) {
       return NextResponse.json({ error: "Acesso negado. Apenas super administradores podem executar esta ação." }, { status: 403 });
     }
 
@@ -34,9 +34,7 @@ export async function POST(req: NextRequest) {
         const userDoc = await userDocRef.get();
         const userData = userDoc.exists ? userDoc.data() : null;
 
-        const isSuperAdminEmail = userRecord.email === 'pedrohenriqueribei@gmail.com';
-        const hasFirestoreSuperAdminRole = userData?.role === 'super_admin';
-        const isSuperAdminInFirestore = hasFirestoreSuperAdminRole || isSuperAdminEmail;
+        const isSuperAdminInFirestore = userData?.role === 'super_admin';
         const hasAuthSuperAdminClaim = userRecord.customClaims?.super_admin === true;
 
         // Se deveria ser super_admin (email do dono ou role na coleção users) e não tem a claim

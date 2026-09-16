@@ -180,6 +180,7 @@ export default function SongsPage() {
   };
 
   const fetchOriginalKey = async () => {
+    if (!user) return;
     if (!formData.title || !formData.artist) {
       alert(
         "Preencha o título e o artista primeiro para buscar os dados originais.",
@@ -191,7 +192,10 @@ export default function SongsPage() {
     try {
       const response = await fetch("/api/gemini/song-data", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await user.getIdToken()}`,
+        },
         body: JSON.stringify({
           action: "song-info",
           title: formData.title,
@@ -236,6 +240,7 @@ export default function SongsPage() {
   };
 
   const fetchChordSheet = async () => {
+    if (!user) return;
     if (!formData.title || !formData.artist) {
       alert("Preencha o título e o artista primeiro para buscar a cifra.");
       return;
@@ -245,7 +250,10 @@ export default function SongsPage() {
     try {
       const response = await fetch("/api/gemini/song-data", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await user.getIdToken()}`,
+        },
         body: JSON.stringify({
           action: "chord-sheet",
           title: formData.title,

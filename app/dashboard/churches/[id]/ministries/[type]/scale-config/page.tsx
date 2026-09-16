@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { doc, getDoc, setDoc, serverTimestamp, query, where, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, query, where, collection, getDocs, DocumentData } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
 import {
@@ -482,9 +482,9 @@ export default function ScaleConfigPage() {
       const serviceRef = doc(db, "services", serviceId);
       
       const serviceSnap = await getDoc(serviceRef);
-      const existingData = serviceSnap.exists() ? serviceSnap.data() : {};
+      const existingData: DocumentData = serviceSnap.exists() ? serviceSnap.data() : {};
       
-      const updatedData = {
+      const updatedData: DocumentData = {
         ...existingData,
         playlistConfig: moments,
         updatedAt: serverTimestamp(),
@@ -515,9 +515,7 @@ export default function ScaleConfigPage() {
     memberSubroles.includes("leader") ||
     userData?.roles?.[type === "louvor" ? "worship" : "multimedia"]?.includes("leader") ||
     userData?.role === "líder" ||
-    userData?.super_admin === true ||
-    userData?.email === "pedrohenriqueribei@gmail.com" ||
-    user?.email === "pedrohenriqueribei@gmail.com";
+    userData?.super_admin === true;
 
   if (!isLeader && !loading) {
     return (

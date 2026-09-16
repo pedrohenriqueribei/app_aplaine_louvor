@@ -46,7 +46,7 @@ function AdminLoginForm() {
 
   useEffect(() => {
     if (!loading && user) {
-      if (isSuperAdmin || user.email === 'pedrohenriqueribei@gmail.com') {
+      if (isSuperAdmin) {
         router.push(redirect);
       } else {
         router.push('/dashboard');

@@ -40,7 +40,6 @@ export function useNotifications() {
             await updateDoc(doc(db, 'users', user.uid), {
               fcmTokens: arrayUnion(fcmToken)
             });
-            console.log('FCM Token registered:', fcmToken);
           }
         }
       } catch (error) {
@@ -56,10 +55,11 @@ export function useNotifications() {
       const messagingInstance = await messaging?.();
       if (messagingInstance) {
         unsubscribe = onMessage(messagingInstance, (payload) => {
-          console.log('Message received in foreground:', payload);
-          // You can show a custom toast or UI notification here
-          if (payload.notification?.title) {
-             alert(`${payload.notification.title}: ${payload.notification.body}`);
+          if (payload.notification?.title && Notification.permission === 'granted') {
+            new Notification(payload.notification.title, {
+              body: payload.notification.body,
+              icon: '/icon_applane.png',
+            });
           }
         });
       }

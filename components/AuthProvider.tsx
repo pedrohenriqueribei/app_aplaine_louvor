@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         try {
           const tokenResult = await user.getIdTokenResult();
-          const superAdmin = tokenResult.claims.super_admin === true || user.email === 'pedrohenriqueribei@gmail.com';
+          const superAdmin = tokenResult.claims.super_admin === true;
           setIsSuperAdmin(superAdmin);
 
           let userDoc;
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
             }
 
-            if (existingPreCreatedUser) {
+            if (existingPreCreatedUser && existingPreCreatedDocId) {
               const mergedUserData = {
                 ...existingPreCreatedUser,
                 uid: user.uid,
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 vocalRange: '',
                 churchId: '',
                 status: 'active',
-                roles: user.email === 'pedrohenriqueribei@gmail.com' ? { worship: ['leader'], multimedia: [], secretariat: [] } : { worship: [], multimedia: [], secretariat: [] },
+                roles: { worship: [], multimedia: [], secretariat: [] },
                 createdAt: serverTimestamp()
               };
               try {
@@ -128,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               needsUpdate = true;
             }
             if (!currentData.roles) {
-              updates.roles = user.email === 'pedrohenriqueribei@gmail.com' ? { worship: ['leader'], multimedia: [], secretariat: [] } : { worship: [], multimedia: [], secretariat: [] };
+              updates.roles = { worship: [], multimedia: [], secretariat: [] };
               needsUpdate = true;
             }
 
@@ -174,8 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       const user = userCredential.user;
       
-      const isAdminEmail = email === 'pedrohenriqueribei@gmail.com';
-      const defaultRoles = isAdminEmail ? { worship: ['leader'], multimedia: [], secretariat: [] } : { worship: [], multimedia: [], secretariat: [] };
+      const defaultRoles = { worship: [], multimedia: [], secretariat: [] };
       const newUserData = {
         uid: user.uid,
         name: name,

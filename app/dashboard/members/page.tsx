@@ -533,24 +533,19 @@ export default function MembersPage() {
       });
       await Promise.all(savePromises);
 
-      // Get tokens for push notification
-      const targetTokens: string[] = [];
-      targetMembers.forEach(m => {
-        if (m.fcmTokens) {
-          targetTokens.push(...m.fcmTokens);
-        }
-      });
+      const targetUserIds = targetMembers.map((m) => m.uid);
 
-      if (targetTokens.length > 0) {
-        // Trigger Push via API
+      if (targetUserIds.length > 0 && user) {
         await fetch("/api/notifications/send", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${await user.getIdToken()}`,
+          },
           body: JSON.stringify({
-            type: "broadcast",
             title: broadcastData.title,
             body: broadcastData.body,
-            tokens: targetTokens, 
+            userIds: targetUserIds,
           }),
         });
       }

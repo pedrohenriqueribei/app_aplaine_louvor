@@ -6,7 +6,9 @@
     "dev": "next dev -p 3000 -H 0.0.0.0",
     "build": "NODE_ENV=production next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-applaine-rules --config firebase.emulator.json \"$(which node) tests/firestore-rules.test.mjs\""
   },
   "dependencies": {
     "@google/genai": "^2.0.1",
@@ -18,7 +20,7 @@
     "framer-motion": "^12.39.0",
     "lucide-react": "^0.456.0",
     "motion": "^12.39.0",
-    "next": "15.0.3",
+    "next": "^15.5.25",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-markdown": "^9.0.1",
@@ -26,13 +28,14 @@
   },
   "devDependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
+    "@firebase/rules-unit-testing": "^4.0.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.17",
     "eslint": "^8.57.1",
-    "eslint-config-next": "^15.0.3",
-    "postcss": "^8",
+    "eslint-config-next": "^15.5.25",
+    "postcss": "^8.5.28",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
   }

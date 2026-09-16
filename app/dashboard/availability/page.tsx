@@ -84,10 +84,7 @@ export default function AvailabilityPage() {
   const firstDay = getFirstDayOfMonth(year, month);
 
   const isLeader = userData?.roles?.worship?.includes("leader") || userData?.roles?.multimedia?.includes("leader") || userData?.roles?.secretariat?.includes("leader");
-  const isAdmin =
-    userData?.role === "líder" ||
-    isLeader ||
-    userData?.email === "pedrohenriqueribei@gmail.com";
+  const isAdmin = userData?.role === "líder" || isLeader;
 
   useEffect(() => {
     async function loadAvailability() {
@@ -122,9 +119,7 @@ export default function AvailabilityPage() {
     setTeamLoading(true);
     try {
       const isSuperAdmin =
-        userData?.role === "super_admin" ||
-        userData?.super_admin === true ||
-        userData?.email === "pedrohenriqueribei@gmail.com";
+        userData?.role === "super_admin" || userData?.super_admin === true;
       const isGlobalLeader = userData?.role === "líder";
       const hasFullAccess = isSuperAdmin || isGlobalLeader;
 

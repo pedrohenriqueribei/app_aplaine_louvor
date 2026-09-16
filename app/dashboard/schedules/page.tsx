@@ -75,6 +75,7 @@ interface Schedule {
     [key: string]: any;
   };
   notes?: string;
+  multimediaNotes?: string;
   createdAt?: any;
   createdBy?: string;
   updatedAt?: any;
@@ -100,6 +101,7 @@ interface Song {
   id: string;
   title: string;
   artist: string;
+  bpm?: string;
 }
 
 interface Band {
@@ -378,7 +380,7 @@ export default function SchedulesPage() {
       projectionOperator: "",
       mediaCreator: "",
       socialMediaManager: "",
-    } as Record<string, string>,
+    } as Record<string, any>,
     notes: "",
     locationType: "internal" as "internal" | "external",
     locationName: "",
@@ -404,7 +406,7 @@ export default function SchedulesPage() {
         projectionOperator: { enabled: true, count: 1 },
         mediaCreator: { enabled: true, count: 1 },
         socialMediaManager: { enabled: true, count: 1 },
-      };
+      } as Record<string, { enabled: boolean; count: number }>;
 
       if (snap.exists()) {
         const data = snap.data();
@@ -1025,24 +1027,17 @@ export default function SchedulesPage() {
         });
         await Promise.all(savePromises);
 
-        // Trigger Push Notification via API
-        const targetTokens: string[] = [];
-        membersList.forEach((mid) => {
-          const member = members.find((m) => m.uid === mid);
-          if (member?.fcmTokens) {
-            targetTokens.push(...member.fcmTokens);
-          }
-        });
-
-        if (targetTokens.length > 0) {
+        if (membersList.length > 0 && user) {
           await fetch("/api/notifications/send", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${await user.getIdToken()}`,
+            },
             body: JSON.stringify({
-              type: "schedule",
               title: notifTitle,
               body: notifBody,
-              tokens: targetTokens,
+              userIds: membersList,
             }),
           });
         }
@@ -1607,7 +1602,7 @@ export default function SchedulesPage() {
       const worshipMembers = worshipKeys.map(k => worshipRoles[k]).filter(Boolean);
 
       // Union of both teams
-      const mergedMembers = Array.from(new Set([...worshipMembers, ...finalAssignedUids]));
+      const mergedMembers = Array.from(new Set([...worshipMembers, ...allAssignedUids]));
 
       // Preserve other worship properties
       const bandId = existingData?.bandId || "master";
@@ -1672,24 +1667,17 @@ export default function SchedulesPage() {
         });
         await Promise.all(savePromises);
 
-        // Push API
-        const targetTokens: string[] = [];
-        allAssignedUids.forEach((mid) => {
-          const member = members.find((m) => m.uid === mid);
-          if (member?.fcmTokens) {
-            targetTokens.push(...member.fcmTokens);
-          }
-        });
-
-        if (targetTokens.length > 0) {
+        if (allAssignedUids.length > 0 && user) {
           await fetch("/api/notifications/send", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${await user.getIdToken()}`,
+            },
             body: JSON.stringify({
-              type: "schedule",
               title: notifTitle,
               body: notifBody,
-              tokens: targetTokens,
+              userIds: allAssignedUids,
             }),
           });
         }
@@ -1763,9 +1751,7 @@ export default function SchedulesPage() {
 
   const groupedData = groupSchedules();
 
-  const isSuperUser =
-    userData?.super_admin === true ||
-    userData?.email === "pedrohenriqueribei@gmail.com";
+  const isSuperUser = userData?.super_admin === true;
 
   const hasWorshipLeader = userData?.roles?.worship?.includes("leader");
   const hasMultimediaLeader = userData?.roles?.multimedia?.includes("leader");
@@ -2197,7 +2183,7 @@ export default function SchedulesPage() {
                                   socialMediaManager:
                                     schedule.roles?.socialMediaManager || "",
                                   ...(schedule.roles || {}),
-                                } as Record<string, string>,
+                                } as Record<string, any>,
                                 notes: schedule.notes || "",
                                 locationType:
                                   schedule.locationType || "internal",

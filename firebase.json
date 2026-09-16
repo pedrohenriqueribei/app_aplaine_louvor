@@ -2,7 +2,8 @@
   "firestore": [
     {
       "database": "applaine-db-v2",
-      "rules": "firestore.rules"
+      "rules": "firestore.rules",
+      "indexes": "firestore.indexes.json"
     }
   ]
 }
