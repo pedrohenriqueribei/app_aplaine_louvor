@@ -224,20 +224,6 @@ function LoginForm() {
 }
 
 export default function LoginPage() {
-  const [mounted, setMounted] = useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
-        <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-800 rounded-full animate-spin"></div>
-      </div>
-    );
-  }
-
   return (
     <Suspense
       fallback={

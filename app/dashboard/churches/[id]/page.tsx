@@ -15,6 +15,7 @@ import {
   addDoc,
   serverTimestamp,
   updateDoc,
+  deleteDoc,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
 import { motion } from "motion/react";
@@ -37,6 +38,9 @@ import {
   Clock,
   Plus,
   X,
+  Edit2,
+  Trash2,
+  AlertTriangle,
   LayoutGrid,
   Monitor,
   Briefcase,
@@ -110,6 +114,11 @@ export default function ChurchDetailPage() {
   const [savingWorship, setSavingWorship] = useState(false);
 
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [editingService, setEditingService] = useState<ServiceType | null>(null);
+  const [serviceToDelete, setServiceToDelete] = useState<ServiceType | null>(null);
+  const [isDeleteServiceModalOpen, setIsDeleteServiceModalOpen] =
+    useState(false);
+  const [deletingService, setDeletingService] = useState(false);
   const [isBandModalOpen, setIsBandModalOpen] = useState(false);
   const [isBandDetailOpen, setIsBandDetailOpen] = useState(false);
   const [selectedBand, setSelectedBand] = useState<Band | null>(null);
@@ -285,28 +294,110 @@ export default function ChurchDetailPage() {
     }
   };
 
+  const canManageServices = Boolean(
+    isSuperAdmin ||
+      user?.email === "pedrohenriqueribei@gmail.com" ||
+      ((userData?.roles?.worship?.includes("leader") ||
+        userData?.roles?.multimedia?.includes("leader") ||
+        userData?.roles?.multimedia?.includes("multimedia_leader") ||
+        userData?.roles?.secretariat?.includes("leader") ||
+        userData?.role === "líder") &&
+        (userData?.churchId === id || isSuperAdmin)),
+  );
+
+  const handleOpenCreateService = () => {
+    setEditingService(null);
+    setServiceFormData({
+      name: "",
+      description: "",
+      startTime: "",
+      endTime: "",
+      dayOfWeek: "Domingo",
+    });
+    setIsServiceModalOpen(true);
+  };
+
+  const handleOpenEditService = (service: ServiceType) => {
+    setEditingService(service);
+    setServiceFormData({
+      name: service.name,
+      description: service.description || "",
+      startTime: service.startTime,
+      endTime: service.endTime,
+      dayOfWeek: service.dayOfWeek,
+    });
+    setIsServiceModalOpen(true);
+  };
+
   const handleSaveService = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     setSavingService(true);
     try {
-      const docRef = await addDoc(collection(db, "services"), {
-        ...serviceFormData,
-        churchId: id,
-        createdAt: serverTimestamp(),
-        createdBy: user.uid,
-        updatedAt: serverTimestamp(),
-        updatedBy: user.uid,
-      });
-      setServices([
-        ...services,
-        { id: docRef.id, churchId: id as string, ...serviceFormData },
-      ]);
+      if (editingService) {
+        const serviceRef = doc(db, "services", editingService.id);
+        await updateDoc(serviceRef, {
+          ...serviceFormData,
+          updatedAt: serverTimestamp(),
+          updatedBy: user.uid,
+        });
+        setServices((prev) =>
+          prev.map((s) =>
+            s.id === editingService.id ? { ...s, ...serviceFormData } : s,
+          ),
+        );
+      } else {
+        const docRef = await addDoc(collection(db, "services"), {
+          ...serviceFormData,
+          churchId: id,
+          createdAt: serverTimestamp(),
+          createdBy: user.uid,
+          updatedAt: serverTimestamp(),
+          updatedBy: user.uid,
+        });
+        setServices((prev) => [
+          ...prev,
+          { id: docRef.id, churchId: id as string, ...serviceFormData },
+        ]);
+      }
       setIsServiceModalOpen(false);
+      setEditingService(null);
     } catch (err: any) {
+      console.error("Error saving service:", err);
+      handleFirestoreError(
+        err,
+        editingService ? OperationType.UPDATE : OperationType.CREATE,
+        editingService ? `services/${editingService.id}` : "services",
+      );
       alert("Erro ao salvar culto: " + err.message);
     } finally {
       setSavingService(false);
+    }
+  };
+
+  const handleOpenDeleteService = (service: ServiceType) => {
+    setServiceToDelete(service);
+    setIsDeleteServiceModalOpen(true);
+  };
+
+  const handleConfirmDeleteService = async () => {
+    if (!serviceToDelete) return;
+    setDeletingService(true);
+    try {
+      await deleteDoc(doc(db, "services", serviceToDelete.id));
+      setServices((prev) => prev.filter((s) => s.id !== serviceToDelete.id));
+      setIsDeleteServiceModalOpen(false);
+      setServiceToDelete(null);
+    } catch (err: any) {
+      console.error("Error deleting service:", err);
+      handleFirestoreError(
+        err,
+        OperationType.DELETE,
+        `services/${serviceToDelete.id}`,
+      );
+      alert("Erro ao excluir culto: " + err.message);
+    } finally {
+      setDeletingService(false);
     }
   };
 
@@ -743,21 +834,11 @@ export default function ChurchDetailPage() {
               Veja todos os cultos e horários associados a esta igreja.
             </p>
           </div>
-          {(isSuperAdmin ||
-            ((userData?.roles?.worship?.includes("leader") || userData?.roles?.multimedia?.includes("leader") || userData?.roles?.secretariat?.includes("leader")) &&
-              userData?.churchId === id)) && (
+          {canManageServices && (
             <button
-              onClick={() => {
-                setServiceFormData({
-                  name: "",
-                  description: "",
-                  startTime: "",
-                  endTime: "",
-                  dayOfWeek: "Domingo",
-                });
-                setIsServiceModalOpen(true);
-              }}
-              className="bg-blue-800 hover:bg-blue-900 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-xl shadow-blue-800/20 active:scale-95"
+              id="create-service-btn"
+              onClick={handleOpenCreateService}
+              className="bg-blue-800 hover:bg-blue-900 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-xl shadow-blue-800/20 active:scale-95 cursor-pointer"
             >
               <Plus className="w-5 h-5" />
               Cadastrar Culto
@@ -777,41 +858,90 @@ export default function ChurchDetailPage() {
             {services.map((service) => (
               <div
                 key={service.id}
-                className="bg-slate-50 dark:bg-slate-800 rounded-[2rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-lg transition-all group"
+                className="bg-slate-50 dark:bg-slate-800 rounded-[2rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-lg transition-all group flex flex-col justify-between"
               >
-                <div className="flex justify-between items-start mb-6">
-                  <div className="w-14 h-14 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center text-blue-800 dark:text-blue-400 shadow-sm">
-                    <Clock className="w-7 h-7" />
+                <div>
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="w-14 h-14 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center text-blue-800 dark:text-blue-400 shadow-sm">
+                      <Clock className="w-7 h-7" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-4 py-2 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 rounded-full text-xs font-black uppercase tracking-widest">
+                        {service.dayOfWeek}
+                      </span>
+                      {canManageServices && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            id={`edit-service-icon-btn-${service.id}`}
+                            onClick={() => handleOpenEditService(service)}
+                            className="p-2 rounded-xl text-slate-400 hover:text-blue-800 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-700 transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-600 cursor-pointer"
+                            title="Editar Culto"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            id={`delete-service-icon-btn-${service.id}`}
+                            onClick={() => handleOpenDeleteService(service)}
+                            className="p-2 rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-slate-700 transition-all border border-transparent hover:border-rose-200 dark:hover:border-rose-900/50 cursor-pointer"
+                            title="Excluir Culto"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <span className="px-4 py-2 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 rounded-full text-xs font-black uppercase tracking-widest">
-                    {service.dayOfWeek}
-                  </span>
+                  <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-2">
+                    {service.name}
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px] line-clamp-2">
+                    {service.description || "Sem descrição"}
+                  </p>
+                  <div className="flex items-center gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
+                    <div className="flex-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                        Início
+                      </span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300">
+                        {service.startTime}
+                      </span>
+                    </div>
+                    <div className="w-px h-8 bg-slate-200 dark:bg-slate-700"></div>
+                    <div className="flex-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                        Término
+                      </span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300">
+                        {service.endTime}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-2">
-                  {service.name}
-                </h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px] truncate">
-                  {service.description || "Sem descrição"}
-                </p>
-                <div className="flex items-center gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
-                  <div className="flex-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
-                      Início
-                    </span>
-                    <span className="font-bold text-slate-700 dark:text-slate-300">
-                      {service.startTime}
-                    </span>
+
+                {canManageServices && (
+                  <div className="pt-6 mt-6 border-t border-slate-200/60 dark:border-slate-700/60 space-y-2">
+                    <button
+                      type="button"
+                      id={`edit-service-btn-${service.id}`}
+                      onClick={() => handleOpenEditService(service)}
+                      className="w-full py-2.5 px-4 bg-white dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-700 dark:text-slate-200 hover:text-blue-800 dark:hover:text-blue-400 border border-slate-200 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-800 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-blue-800 dark:text-blue-400" />
+                      Editar Culto
+                    </button>
+                    <button
+                      type="button"
+                      id={`delete-service-btn-${service.id}`}
+                      onClick={() => handleOpenDeleteService(service)}
+                      className="w-full py-2.5 px-4 bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-900/50 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                      Excluir Culto
+                    </button>
                   </div>
-                  <div className="w-px h-8 bg-slate-200 dark:bg-slate-700"></div>
-                  <div className="flex-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
-                      Término
-                    </span>
-                    <span className="font-bold text-slate-700 dark:text-slate-300">
-                      {service.endTime}
-                    </span>
-                  </div>
-                </div>
+                )}
               </div>
             ))}
           </div>
@@ -1038,8 +1168,15 @@ export default function ChurchDetailPage() {
       </section>
 
       {isServiceModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div
+          onClick={() => {
+            setIsServiceModalOpen(false);
+            setEditingService(null);
+          }}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
           <motion.div
+            onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white dark:bg-slate-800 rounded-[3rem] w-full max-w-xl overflow-hidden shadow-2xl relative"
@@ -1047,11 +1184,15 @@ export default function ChurchDetailPage() {
             <div className="p-8 md:p-12">
               <div className="flex justify-between items-center mb-8">
                 <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100">
-                  Cadastrar Culto
+                  {editingService ? "Editar Culto" : "Cadastrar Culto"}
                 </h3>
                 <button
-                  onClick={() => setIsServiceModalOpen(false)}
-                  className="w-10 h-10 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full flex items-center justify-center text-slate-500 transition-colors"
+                  type="button"
+                  onClick={() => {
+                    setIsServiceModalOpen(false);
+                    setEditingService(null);
+                  }}
+                  className="w-10 h-10 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full flex items-center justify-center text-slate-500 transition-colors cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1167,9 +1308,13 @@ export default function ChurchDetailPage() {
                   <button
                     disabled={savingService}
                     type="submit"
-                    className="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-blue-800/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-blue-800/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
-                    {savingService ? "Salvando..." : "Salvar Culto"}
+                    {savingService
+                      ? "Salvando..."
+                      : editingService
+                        ? "Salvar Alterações"
+                        : "Salvar Culto"}
                   </button>
                 </div>
               </form>
@@ -1177,6 +1322,85 @@ export default function ChurchDetailPage() {
           </motion.div>
         </div>
       )}
+      {/* Modal de Confirmação para Excluir Culto */}
+      {isDeleteServiceModalOpen && serviceToDelete && (
+        <div
+          onClick={() => {
+            if (!deletingService) {
+              setIsDeleteServiceModalOpen(false);
+              setServiceToDelete(null);
+            }
+          }}
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <motion.div
+            onClick={(e) => e.stopPropagation()}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white dark:bg-slate-800 rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl relative border border-slate-100 dark:border-slate-700 p-8"
+          >
+            <div className="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+
+            <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100 text-center mb-2">
+              Excluir Culto?
+            </h3>
+
+            <p className="text-sm text-slate-500 dark:text-slate-400 text-center mb-6 leading-relaxed">
+              Tem certeza que deseja excluir o culto{" "}
+              <span className="font-bold text-slate-800 dark:text-slate-200">
+                &ldquo;{serviceToDelete.name}&rdquo;
+              </span>
+              ? Esta ação removerá o culto desta congregação.
+            </p>
+
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 mb-6 space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+              <div className="flex justify-between">
+                <span className="font-medium text-slate-400">Dia:</span>
+                <span className="font-bold">{serviceToDelete.dayOfWeek}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-slate-400">Horário:</span>
+                <span className="font-bold">
+                  {serviceToDelete.startTime} - {serviceToDelete.endTime}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={deletingService}
+                onClick={() => {
+                  setIsDeleteServiceModalOpen(false);
+                  setServiceToDelete(null);
+                }}
+                className="flex-1 py-3.5 px-4 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-sm transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                id="confirm-delete-service-btn"
+                disabled={deletingService}
+                onClick={handleConfirmDeleteService}
+                className="flex-1 py-3.5 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-rose-600/20 active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {deletingService ? (
+                  <span>Excluindo...</span>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Sim, Excluir</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {isBandModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <motion.div
