@@ -1,0 +1,60 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: Verificação
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      - run: npm run build
+
+  deploy:
+    name: Deploy para produção
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEPLOY_HOST: 72.61.38.199
+      DEPLOY_USER: deploy
+      APP_DIR: /var/www/applane
+      PM2_APP: applane
+      HEALTHCHECK_URL: http://127.0.0.1:3005
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Publicar na VPS
+        run: |
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" \
+            "APP_DIR='$APP_DIR' PM2_APP='$PM2_APP' HEALTHCHECK_URL='$HEALTHCHECK_URL' \
+             GIT_BRANCH='${{ github.ref_name }}' GIT_SHA='${{ github.sha }}' bash -s" \
+            < scripts/deploy-remote.sh
