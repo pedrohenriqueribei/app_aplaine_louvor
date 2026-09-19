@@ -44,6 +44,8 @@ import {
   LayoutGrid,
   Monitor,
   Briefcase,
+  Power,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -90,6 +92,7 @@ interface ServiceType {
   startTime: string;
   endTime: string;
   dayOfWeek: string;
+  status?: "active" | "inactive";
 }
 
 export default function ChurchDetailPage() {
@@ -123,14 +126,24 @@ export default function ChurchDetailPage() {
   const [isBandDetailOpen, setIsBandDetailOpen] = useState(false);
   const [selectedBand, setSelectedBand] = useState<Band | null>(null);
   const [savingService, setSavingService] = useState(false);
+  const [togglingServiceId, setTogglingServiceId] = useState<string | null>(null);
+  const [serviceStatusFilter, setServiceStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [savingBand, setSavingBand] = useState(false);
   const [bandName, setBandName] = useState("");
-  const [serviceFormData, setServiceFormData] = useState({
+  const [serviceFormData, setServiceFormData] = useState<{
+    name: string;
+    description: string;
+    startTime: string;
+    endTime: string;
+    dayOfWeek: string;
+    status: "active" | "inactive";
+  }>({
     name: "",
     description: "",
     startTime: "",
     endTime: "",
     dayOfWeek: "Domingo",
+    status: "active",
   });
 
   const handleCopyLink = () => {
@@ -219,7 +232,14 @@ export default function ChurchDetailPage() {
         const servicesSnap = await getDocs(servicesQ);
         setServices(
           servicesSnap.docs.map(
-            (doc) => ({ id: doc.id, ...doc.data() }) as ServiceType,
+            (doc) => {
+              const data = doc.data();
+              return {
+                id: doc.id,
+                ...data,
+                status: data.status === "inactive" ? "inactive" : "active",
+              } as ServiceType;
+            },
           ),
         );
 
@@ -313,6 +333,7 @@ export default function ChurchDetailPage() {
       startTime: "",
       endTime: "",
       dayOfWeek: "Domingo",
+      status: "active",
     });
     setIsServiceModalOpen(true);
   };
@@ -325,6 +346,7 @@ export default function ChurchDetailPage() {
       startTime: service.startTime,
       endTime: service.endTime,
       dayOfWeek: service.dayOfWeek,
+      status: service.status === "inactive" ? "inactive" : "active",
     });
     setIsServiceModalOpen(true);
   };
@@ -338,6 +360,7 @@ export default function ChurchDetailPage() {
         const serviceRef = doc(db, "services", editingService.id);
         await updateDoc(serviceRef, {
           ...serviceFormData,
+          churchId: id,
           updatedAt: serverTimestamp(),
           updatedBy: user.uid,
         });
@@ -372,6 +395,39 @@ export default function ChurchDetailPage() {
       alert("Erro ao salvar culto: " + err.message);
     } finally {
       setSavingService(false);
+    }
+  };
+
+  const handleToggleServiceStatus = async (service: ServiceType, targetStatus?: "active" | "inactive") => {
+    if (!user || !canManageServices || togglingServiceId) return;
+    const currentStatus = service.status === "inactive" ? "inactive" : "active";
+    const nextStatus = targetStatus ?? (currentStatus === "active" ? "inactive" : "active");
+    if (nextStatus === currentStatus) return;
+
+    setTogglingServiceId(service.id);
+    // Optimistic UI update
+    setServices((prev) =>
+      prev.map((s) => (s.id === service.id ? { ...s, status: nextStatus } : s)),
+    );
+
+    try {
+      const serviceRef = doc(db, "services", service.id);
+      await updateDoc(serviceRef, {
+        status: nextStatus,
+        churchId: service.churchId || id,
+        updatedAt: serverTimestamp(),
+        updatedBy: user.uid,
+      });
+    } catch (err: any) {
+      console.error("Error toggling service status:", err);
+      // Revert optimistic update
+      setServices((prev) =>
+        prev.map((s) => (s.id === service.id ? { ...s, status: currentStatus } : s)),
+      );
+      handleFirestoreError(err, OperationType.UPDATE, `services/${service.id}`);
+      alert("Erro ao alterar status do culto: " + err.message);
+    } finally {
+      setTogglingServiceId(null);
     }
   };
 
@@ -846,6 +902,61 @@ export default function ChurchDetailPage() {
           )}
         </div>
 
+        {/* Filter and Status Controls */}
+        {services.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1">
+                Filtrar:
+              </span>
+              <button
+                type="button"
+                id="filter-services-all"
+                onClick={() => setServiceStatusFilter("all")}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                  serviceStatusFilter === "all"
+                    ? "bg-blue-800 text-white shadow-sm"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                )}
+              >
+                Todos ({services.length})
+              </button>
+              <button
+                type="button"
+                id="filter-services-active"
+                onClick={() => setServiceStatusFilter("active")}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                  serviceStatusFilter === "active"
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                )}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                Ativos ({services.filter((s) => s.status !== "inactive").length})
+              </button>
+              <button
+                type="button"
+                id="filter-services-inactive"
+                onClick={() => setServiceStatusFilter("inactive")}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                  serviceStatusFilter === "inactive"
+                    ? "bg-slate-700 text-white shadow-sm"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                )}
+              >
+                <span className="w-2 h-2 rounded-full bg-slate-400" />
+                Inativos ({services.filter((s) => s.status === "inactive").length})
+              </button>
+            </div>
+            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+              Cultos inativos continuam salvos e podem ser reativados a qualquer momento.
+            </span>
+          </div>
+        )}
+
         {services.length === 0 ? (
           <div className="bg-slate-50 dark:bg-slate-800/50 rounded-[3rem] p-16 text-center border border-dashed border-slate-200 dark:border-slate-700">
             <Calendar className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-6" />
@@ -853,97 +964,224 @@ export default function ChurchDetailPage() {
               Nenhum culto cadastrado para esta igreja.
             </p>
           </div>
+        ) : services.filter((s) => {
+            if (serviceStatusFilter === "active") return s.status !== "inactive";
+            if (serviceStatusFilter === "inactive") return s.status === "inactive";
+            return true;
+          }).length === 0 ? (
+          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-[2.5rem] p-12 text-center border border-dashed border-slate-200 dark:border-slate-700">
+            <p className="text-base text-slate-500 dark:text-slate-400 font-medium mb-4">
+              Nenhum culto encontrado com o filtro &ldquo;{serviceStatusFilter === "active" ? "Ativos" : "Inativos"}&rdquo;.
+            </p>
+            <button
+              type="button"
+              onClick={() => setServiceStatusFilter("all")}
+              className="text-xs font-bold text-blue-700 dark:text-blue-400 hover:underline cursor-pointer"
+            >
+              Exibir todos os cultos
+            </button>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {services.map((service) => (
-              <div
-                key={service.id}
-                className="bg-slate-50 dark:bg-slate-800 rounded-[2rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-lg transition-all group flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="w-14 h-14 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center text-blue-800 dark:text-blue-400 shadow-sm">
-                      <Clock className="w-7 h-7" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-4 py-2 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 rounded-full text-xs font-black uppercase tracking-widest">
-                        {service.dayOfWeek}
-                      </span>
-                      {canManageServices && (
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            id={`edit-service-icon-btn-${service.id}`}
-                            onClick={() => handleOpenEditService(service)}
-                            className="p-2 rounded-xl text-slate-400 hover:text-blue-800 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-700 transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-600 cursor-pointer"
-                            title="Editar Culto"
+            {services
+              .filter((s) => {
+                if (serviceStatusFilter === "active") return s.status !== "inactive";
+                if (serviceStatusFilter === "inactive") return s.status === "inactive";
+                return true;
+              })
+              .map((service) => {
+                const isInactive = service.status === "inactive";
+                return (
+                  <div
+                    key={service.id}
+                    className={cn(
+                      "rounded-[2rem] p-8 border transition-all group flex flex-col justify-between relative",
+                      isInactive
+                        ? "bg-slate-100/70 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/80 opacity-90"
+                        : "bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:shadow-lg"
+                    )}
+                  >
+                    <div>
+                      {/* Top Bar: Icon, Day, and Action Icons */}
+                      <div className="flex justify-between items-start mb-5">
+                        <div
+                          className={cn(
+                            "w-14 h-14 rounded-2xl flex items-center justify-center shadow-xs transition-colors",
+                            isInactive
+                              ? "bg-slate-200/80 dark:bg-slate-900 text-slate-400 dark:text-slate-500"
+                              : "bg-white dark:bg-slate-900 text-blue-800 dark:text-blue-400"
+                          )}
+                        >
+                          <Clock className="w-7 h-7" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-widest",
+                              isInactive
+                                ? "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                                : "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300"
+                            )}
                           >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            id={`delete-service-icon-btn-${service.id}`}
-                            onClick={() => handleOpenDeleteService(service)}
-                            className="p-2 rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-slate-700 transition-all border border-transparent hover:border-rose-200 dark:hover:border-rose-900/50 cursor-pointer"
-                            title="Excluir Culto"
+                            {service.dayOfWeek}
+                          </span>
+                          {canManageServices && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                id={`edit-service-icon-btn-${service.id}`}
+                                onClick={() => handleOpenEditService(service)}
+                                className="p-2 rounded-xl text-slate-400 hover:text-blue-800 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-700 transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-600 cursor-pointer"
+                                title="Editar Culto"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                id={`delete-service-icon-btn-${service.id}`}
+                                onClick={() => handleOpenDeleteService(service)}
+                                className="p-2 rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-slate-700 transition-all border border-transparent hover:border-rose-200 dark:hover:border-rose-900/50 cursor-pointer"
+                                title="Excluir Culto"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Status Selector Bar */}
+                      <div className="mb-5 p-2 rounded-2xl bg-white/90 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-2 shadow-2xs">
+                        <div className="flex items-center gap-2 pl-1.5">
+                          <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                            Status:
+                          </span>
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wide",
+                              isInactive
+                                ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                                : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/70"
+                            )}
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                            <span
+                              className={cn(
+                                "w-1.5 h-1.5 rounded-full",
+                                isInactive ? "bg-slate-400" : "bg-emerald-500"
+                              )}
+                            />
+                            {isInactive ? "Inativo" : "Ativo"}
+                          </span>
+                        </div>
+
+                        {canManageServices ? (
+                          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                            <button
+                              type="button"
+                              id={`service-status-btn-active-${service.id}`}
+                              onClick={() => isInactive && handleToggleServiceStatus(service, "active")}
+                              disabled={togglingServiceId === service.id}
+                              className={cn(
+                                "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1",
+                                !isInactive
+                                  ? "bg-emerald-600 text-white shadow-xs"
+                                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                              )}
+                              title="Habilitar culto"
+                            >
+                              <Check className="w-3 h-3" />
+                              Ativo
+                            </button>
+                            <button
+                              type="button"
+                              id={`service-status-btn-inactive-${service.id}`}
+                              onClick={() => !isInactive && handleToggleServiceStatus(service, "inactive")}
+                              disabled={togglingServiceId === service.id}
+                              className={cn(
+                                "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1",
+                                isInactive
+                                  ? "bg-slate-600 text-white shadow-xs"
+                                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                              )}
+                              title="Desabilitar culto sem excluí-lo"
+                            >
+                              <Power className="w-3 h-3" />
+                              Inativo
+                            </button>
+                            {togglingServiceId === service.id && (
+                              <Loader2 className="w-3 h-3 animate-spin text-slate-400 ml-0.5" />
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {/* Inactive notice if disabled */}
+                      {isInactive && (
+                        <div className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 rounded-xl px-3 py-2 mb-4 flex items-center gap-2">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                          <span>Culto desabilitado (não aparecerá em novas escalas).</span>
                         </div>
                       )}
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-2">
-                    {service.name}
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px] line-clamp-2">
-                    {service.description || "Sem descrição"}
-                  </p>
-                  <div className="flex items-center gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
-                    <div className="flex-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
-                        Início
-                      </span>
-                      <span className="font-bold text-slate-700 dark:text-slate-300">
-                        {service.startTime}
-                      </span>
-                    </div>
-                    <div className="w-px h-8 bg-slate-200 dark:bg-slate-700"></div>
-                    <div className="flex-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
-                        Término
-                      </span>
-                      <span className="font-bold text-slate-700 dark:text-slate-300">
-                        {service.endTime}
-                      </span>
-                    </div>
-                  </div>
-                </div>
 
-                {canManageServices && (
-                  <div className="pt-6 mt-6 border-t border-slate-200/60 dark:border-slate-700/60 space-y-2">
-                    <button
-                      type="button"
-                      id={`edit-service-btn-${service.id}`}
-                      onClick={() => handleOpenEditService(service)}
-                      className="w-full py-2.5 px-4 bg-white dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-700 dark:text-slate-200 hover:text-blue-800 dark:hover:text-blue-400 border border-slate-200 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-800 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
-                    >
-                      <Edit2 className="w-3.5 h-3.5 text-blue-800 dark:text-blue-400" />
-                      Editar Culto
-                    </button>
-                    <button
-                      type="button"
-                      id={`delete-service-btn-${service.id}`}
-                      onClick={() => handleOpenDeleteService(service)}
-                      className="w-full py-2.5 px-4 bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-900/50 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                      Excluir Culto
-                    </button>
+                      <h3
+                        className={cn(
+                          "text-xl font-display font-black mb-2",
+                          isInactive
+                            ? "text-slate-600 dark:text-slate-300"
+                            : "text-slate-800 dark:text-slate-100"
+                        )}
+                      >
+                        {service.name}
+                      </h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px] line-clamp-2">
+                        {service.description || "Sem descrição"}
+                      </p>
+                      <div className="flex items-center gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                            Início
+                          </span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300">
+                            {service.startTime}
+                          </span>
+                        </div>
+                        <div className="w-px h-8 bg-slate-200 dark:bg-slate-700"></div>
+                        <div className="flex-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                            Término
+                          </span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300">
+                            {service.endTime}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {canManageServices && (
+                      <div className="pt-6 mt-6 border-t border-slate-200/60 dark:border-slate-700/60 space-y-2">
+                        <button
+                          type="button"
+                          id={`edit-service-btn-${service.id}`}
+                          onClick={() => handleOpenEditService(service)}
+                          className="w-full py-2.5 px-4 bg-white dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-700 dark:text-slate-200 hover:text-blue-800 dark:hover:text-blue-400 border border-slate-200 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-800 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-blue-800 dark:text-blue-400" />
+                          Editar Culto
+                        </button>
+                        <button
+                          type="button"
+                          id={`delete-service-btn-${service.id}`}
+                          onClick={() => handleOpenDeleteService(service)}
+                          className="w-full py-2.5 px-4 bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-900/50 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                          Excluir Culto
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              })}
           </div>
         )}
       </section>
@@ -1302,6 +1540,56 @@ export default function ChurchDetailPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* Status Selector in Modal */}
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
+                    Status do Culto *
+                  </label>
+                  <div className="grid grid-cols-2 gap-3 p-1.5 bg-slate-100 dark:bg-slate-900/80 rounded-2xl border border-slate-200 dark:border-slate-700">
+                    <button
+                      type="button"
+                      id="service-form-status-active-btn"
+                      onClick={() =>
+                        setServiceFormData({
+                          ...serviceFormData,
+                          status: "active",
+                        })
+                      }
+                      className={cn(
+                        "py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer",
+                        serviceFormData.status === "active"
+                          ? "bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 shadow-sm border border-emerald-200/60 dark:border-emerald-800/60"
+                          : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                      )}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      Ativo
+                    </button>
+                    <button
+                      type="button"
+                      id="service-form-status-inactive-btn"
+                      onClick={() =>
+                        setServiceFormData({
+                          ...serviceFormData,
+                          status: "inactive",
+                        })
+                      }
+                      className={cn(
+                        "py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer",
+                        serviceFormData.status === "inactive"
+                          ? "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-sm border border-slate-300 dark:border-slate-700"
+                          : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                      )}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-slate-400" />
+                      Inativo
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5">
+                    Cultos inativos continuam salvos, permitindo desabilitá-los temporariamente sem excluí-los.
+                  </p>
                 </div>
 
                 <div className="pt-6">

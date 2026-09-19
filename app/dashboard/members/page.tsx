@@ -30,6 +30,7 @@ import {
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { motion } from "motion/react";
+import { formatPhone } from "@/lib/utils";
 
 interface Member {
   uid: string;
@@ -977,7 +978,7 @@ export default function MembersPage() {
                         setFormData({
                           name: member.name,
                           email: member.email,
-                          phone: member.phone || "",
+                          phone: formatPhone(member.phone || ""),
                           instruments: member.instruments || [],
                           vocalRange: member.vocalRange || "",
                           level: member.level || "",
@@ -1071,10 +1072,11 @@ export default function MembersPage() {
                   </label>
                   <input
                     type="tel"
+                    maxLength={15}
                     className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white dark:focus:bg-slate-700 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 font-medium text-slate-800 dark:text-slate-100"
                     value={formData.phone}
                     onChange={(e) =>
-                      setFormData({ ...formData, phone: e.target.value })
+                      setFormData({ ...formData, phone: formatPhone(e.target.value) })
                     }
                     placeholder="(00) 00000-0000"
                   />

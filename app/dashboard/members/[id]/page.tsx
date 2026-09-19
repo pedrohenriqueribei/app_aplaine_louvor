@@ -17,6 +17,7 @@ import {
 import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
 import { motion, AnimatePresence } from "motion/react";
+import { formatPhone } from "@/lib/utils";
 import {
   ArrowLeft,
   Mail,
@@ -223,7 +224,7 @@ export default function MusicianProfilePage() {
     setFormData({
       name: musician.name || "",
       email: musician.email || "",
-      phone: musician.phone || "",
+      phone: formatPhone(musician.phone || ""),
       instruments: musician.instruments || [],
       vocalRange: musician.vocalRange || "",
       level: musician.level || "",
@@ -643,7 +644,7 @@ export default function MusicianProfilePage() {
                     <InfoItem
                       icon={Phone}
                       label="Telefone"
-                      value={musician.phone || "Não informado"}
+                      value={musician.phone ? formatPhone(musician.phone) : "Não informado"}
                     />
                   </div>
                 </section>
@@ -964,9 +965,10 @@ export default function MusicianProfilePage() {
                       </label>
                       <input
                         type="tel"
+                        maxLength={15}
                         value={formData.phone}
                         onChange={(e) =>
-                          setFormData({ ...formData, phone: e.target.value })
+                          setFormData({ ...formData, phone: formatPhone(e.target.value) })
                         }
                         className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:border-blue-800 dark:focus:border-blue-500 outline-none transition-all"
                         placeholder="(00) 00000-0000"

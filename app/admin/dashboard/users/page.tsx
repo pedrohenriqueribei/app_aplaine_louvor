@@ -6,6 +6,7 @@ import { collection, getDocs, doc, getDoc, updateDoc, setDoc, serverTimestamp, g
 import { useAuth } from '@/components/AuthProvider';
 import { Users, Loader2, Search, X, CheckCircle2, User as UserIcon, Save, Music, Mic2 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
+import { formatPhone } from '@/lib/utils';
 
 interface PlatformUser {
   id: string;
@@ -380,7 +381,7 @@ export default function AdminUsersPage() {
                           Telefone
                         </p>
                         <p className="text-slate-700 dark:text-slate-300 font-medium text-sm">
-                          {selectedUser.phone || 'Não informado'}
+                          {selectedUser.phone ? formatPhone(selectedUser.phone) : 'Não informado'}
                         </p>
                       </div>
                       <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">

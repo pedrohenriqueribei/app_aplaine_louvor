@@ -15,6 +15,7 @@ import {
 import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
 import { Search, Plus, UserPlus, FileText, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
+import { formatPhone } from "@/lib/utils";
 
 interface Visitor {
   id: string;
@@ -209,7 +210,7 @@ export default function VisitorsPage() {
 
                 <div className="space-y-2 mt-4 text-sm text-slate-600 dark:text-slate-400">
                   <p className="flex items-center gap-2">
-                    <strong>📞</strong> {visitor.phone || "Sem telefone"}
+                    <strong>📞</strong> {visitor.phone ? formatPhone(visitor.phone) : "Sem telefone"}
                   </p>
                   {visitor.email && (
                     <p className="flex items-center gap-2">
@@ -229,7 +230,7 @@ export default function VisitorsPage() {
                     setEditingVisitor(visitor);
                     setFormData({
                       name: visitor.name,
-                      phone: visitor.phone || "",
+                      phone: formatPhone(visitor.phone || ""),
                       email: visitor.email || "",
                       firstVisit: visitor.firstVisit,
                       followupStatus: visitor.followupStatus,
@@ -296,10 +297,11 @@ export default function VisitorsPage() {
                   </label>
                   <input
                     type="tel"
+                    maxLength={15}
                     className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 outline-none transition-all font-medium text-slate-800"
                     value={formData.phone}
                     onChange={(e) =>
-                      setFormData({ ...formData, phone: e.target.value })
+                      setFormData({ ...formData, phone: formatPhone(e.target.value) })
                     }
                     placeholder="(11) 99999-9999"
                   />

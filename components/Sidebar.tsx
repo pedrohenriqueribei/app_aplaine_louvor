@@ -43,12 +43,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { isSuperAdmin } = useAuth();
 
-  const allItems = [...menuItems];
-  if (isSuperAdmin) {
-    allItems.push({ icon: ShieldAlert, label: 'Admin', href: '/dashboard/admin' });
-  }
+  const allItems = React.useMemo(() => {
+    const items = [...menuItems];
+    if (isSuperAdmin) {
+      items.push({ icon: ShieldAlert, label: 'Admin', href: '/dashboard/admin' });
+    }
+    return items;
+  }, [isSuperAdmin]);
 
-  const SidebarContent = (
+  const renderSidebarContent = () => (
     <aside className={cn(
       "w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 h-screen sticky top-0 flex flex-col p-8 transition-colors duration-300 z-50",
       !isOpen && "hidden lg:flex"
@@ -78,7 +81,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       <nav className="flex-1 space-y-2 overflow-y-auto pr-2 pb-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {allItems.map((item) => (
           <Link
-            key={item.href}
+            key={`sidebar-item-${item.href}`}
             href={item.href}
             onClick={onClose}
             className={cn(
@@ -111,19 +114,21 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   return (
     <>
-      <div className="hidden lg:block shrink-0">
-        {SidebarContent}
+      <div key="sidebar-desktop-view" className="hidden lg:block shrink-0">
+        {renderSidebarContent()}
       </div>
       {isOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div key="sidebar-mobile-view" className="fixed inset-0 z-50 lg:hidden">
           <div
+            key="sidebar-mobile-overlay"
             onClick={onClose}
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
           />
           <div
+            key="sidebar-mobile-container"
             className="relative w-72 h-full"
           >
-            {SidebarContent}
+            {renderSidebarContent()}
           </div>
         </div>
       )}

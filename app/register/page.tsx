@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { doc, updateDoc, getDoc } from "firebase/firestore";
+import { formatPhone } from "@/lib/utils";
 
 function RegisterForm() {
   const { user, signUpWithEmail, loading } = useAuth();
@@ -479,8 +480,9 @@ function RegisterForm() {
                     <input
                       type="tel"
                       placeholder="(00) 00000-0000"
+                      maxLength={15}
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => setPhone(formatPhone(e.target.value))}
                       className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 outline-none transition-all font-medium text-slate-900"
                     />
                   </div>

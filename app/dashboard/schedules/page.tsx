@@ -95,6 +95,7 @@ interface ServiceType {
   churchId: string;
   name: string;
   dayOfWeek: string;
+  status?: "active" | "inactive";
 }
 
 interface Song {
@@ -725,6 +726,7 @@ export default function SchedulesPage() {
         churchId: doc.data().churchId,
         name: doc.data().name,
         dayOfWeek: doc.data().dayOfWeek,
+        status: doc.data().status === "inactive" ? "inactive" : "active",
       })),
     );
   }
@@ -2930,7 +2932,11 @@ export default function SchedulesPage() {
                             </button>
                           )}
                         {services
-                          .filter((s) => s.churchId === formData.churchId)
+                          .filter(
+                            (s) =>
+                              s.churchId === formData.churchId &&
+                              (s.status !== "inactive" || s.id === formData.serviceId)
+                          )
                           .map((s) => (
                             <button
                               key={s.id}
@@ -3350,7 +3356,11 @@ export default function SchedulesPage() {
                       </label>
                       <div className="flex flex-wrap gap-2">
                         {services
-                          .filter((s) => s.churchId === userData.churchId)
+                          .filter(
+                            (s) =>
+                              s.churchId === userData.churchId &&
+                              (s.status !== "inactive" || s.id === multimediaServiceId)
+                          )
                           .map((s) => (
                             <button
                               key={s.id}
