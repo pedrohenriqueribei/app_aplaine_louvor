@@ -47,6 +47,11 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
+      <div
+        dangerouslySetInnerHTML={{
+          __html: "<!-- deploy-test: abacaxi-de-tungstenio-8f31c7 -->",
+        }}
+      />
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
