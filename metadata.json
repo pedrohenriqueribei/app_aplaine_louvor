@@ -1,6 +1,6 @@
 {
   "name": "Applane",
-  "description": "Plataforma de gestão de ministérios de louvor, multimídia e escalas para igrejas",
+  "description": "Plataforma de gestão de ministérios de louvor, multimídia, dança e escalas para igrejas",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

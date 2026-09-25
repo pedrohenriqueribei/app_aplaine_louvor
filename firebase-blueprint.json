@@ -18,7 +18,8 @@
           "properties": {
             "worship": { "type": "array", "items": { "type": "string" } },
             "multimedia": { "type": "array", "items": { "type": "string" } },
-            "secretariat": { "type": "array", "items": { "type": "string" } }
+            "secretariat": { "type": "array", "items": { "type": "string" } },
+            "dance": { "type": "array", "items": { "type": "string" } }
           }
         },
         "status": { "type": "string", "enum": ["active", "inactive"] },
@@ -73,9 +74,64 @@
         "pastor": { "type": "string" },
         "worshipMinistryName": { "type": "string" },
         "worshipMinistryAcronym": { "type": "string" },
+        "danceMinistryName": { "type": "string" },
+        "danceMinistryAcronym": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "name"]
+    },
+    "DanceGroup": {
+      "title": "Grupo de Dança",
+      "description": "Elenco ou grupo de dança do ministério",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "churchId": { "type": "string" },
+        "description": { "type": "string" },
+        "leaderName": { "type": "string" },
+        "memberIds": { "type": "array", "items": { "type": "string" } },
+        "targetAge": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "churchId"]
+    },
+    "Choreography": {
+      "title": "Coreografia",
+      "description": "Coreografia e repertório de dança",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "songTitle": { "type": "string" },
+        "artist": { "type": "string" },
+        "churchId": { "type": "string" },
+        "groupId": { "type": "string" },
+        "status": { "type": "string", "enum": ["rehearsing", "ready", "performed"] },
+        "targetDate": { "type": "string" },
+        "costume": { "type": "string" },
+        "musicLink": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "churchId"]
+    },
+    "DanceRehearsal": {
+      "title": "Ensaio de Dança",
+      "description": "Ensaio e avisos do ministério de dança",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "churchId": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "location": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "churchId", "title"]
     },
     "Band": {
       "title": "Banda",
@@ -231,6 +287,9 @@
     "availability/{availableId}": { "schema": "Availability", "description": "Disponibilidade dos membros" },
     "notifications/{notificationId}": { "schema": "Notification", "description": "Notificações internas do sistema" },
     "bands/{bandId}": { "schema": "Band", "description": "Bandas internas dos ministérios" },
+    "dance_groups/{groupId}": { "schema": "DanceGroup", "description": "Grupos e elencos do Ministério de Dança" },
+    "choreographies/{choreographyId}": { "schema": "Choreography", "description": "Coreografias e repertório do Ministério de Dança" },
+    "dance_rehearsals/{rehearsalId}": { "schema": "DanceRehearsal", "description": "Ensaios do Ministério de Dança" },
     "playlists/{playlistId}": { "schema": "Playlist", "description": "Playlists independentes vinculadas às respectivas escalas de louvor" }
   }
 }

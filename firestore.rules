@@ -2,10 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // --- Identity helpers ---
 
     function isSignedIn() {
@@ -13,11 +9,11 @@ service cloud.firestore {
     }
 
     function incoming() {
-      return request.resource.data;
+      return request.resource != null ? request.resource.data : {};
     }
 
     function existing() {
-      return resource.data;
+      return resource != null ? resource.data : {};
     }
 
     function isOwner(userId) {
@@ -29,12 +25,12 @@ service cloud.firestore {
     }
 
     function myEmail() {
-      return ('email' in request.auth.token) ? request.auth.token.email : '';
+      return (isSignedIn() && 'email' in request.auth.token) ? request.auth.token.email : '';
     }
 
     function myData() {
       let path = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(path) ? get(path).data : {};
+      return isSignedIn() && exists(path) ? get(path).data : {};
     }
 
     function myChurch() {
@@ -53,7 +49,7 @@ service cloud.firestore {
 
     // Privileged role names. Anything listed here cannot be self-assigned.
     function leaderRoles() {
-      return ['leader', 'multimedia_leader'];
+      return ['leader', 'multimedia_leader', 'dance_leader'];
     }
 
     function isLeader() {
@@ -62,7 +58,8 @@ service cloud.firestore {
         myData().get('role', '') == 'líder' ||
         myRoles().get('worship', []).hasAny(leaderRoles()) ||
         myRoles().get('multimedia', []).hasAny(leaderRoles()) ||
-        myRoles().get('secretariat', []).hasAny(leaderRoles())
+        myRoles().get('secretariat', []).hasAny(leaderRoles()) ||
+        myRoles().get('dance', []).hasAny(leaderRoles())
       );
     }
 
@@ -77,7 +74,8 @@ service cloud.firestore {
     function grantsLeadership(rolesMap) {
       return rolesMap.get('worship', []).hasAny(leaderRoles()) ||
              rolesMap.get('multimedia', []).hasAny(leaderRoles()) ||
-             rolesMap.get('secretariat', []).hasAny(leaderRoles());
+             rolesMap.get('secretariat', []).hasAny(leaderRoles()) ||
+             rolesMap.get('dance', []).hasAny(leaderRoles());
     }
 
     // --- Validation helpers ---
@@ -195,13 +193,7 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isSignedIn() && (
-        isOwner(userId) ||
-        isSuperAdmin() ||
-        (myEmail() != '' && existing().get('email', '') == myEmail()) ||
-        (myChurch() != '' && existing().get('churchId', '') == myChurch()) ||
-        (isLeader() && existing().get('churchId', '') == '')
-      );
+      allow read: if isSignedIn();
 
       allow create: if isValidUser(incoming()) && (
         isSuperAdmin() ||
@@ -234,11 +226,7 @@ service cloud.firestore {
     }
 
     match /songs/{songId} {
-      allow read: if isSignedIn() && (
-        isSuperAdmin() ||
-        existing().ownerId == request.auth.uid ||
-        (existing().get('churchId', '') != '' && existing().get('churchId', '') == myChurch())
-      );
+      allow read: if isSignedIn();
 
       allow create: if isSignedIn() && isValidId(songId) && isValidSong(incoming()) &&
                     incoming().id == songId &&
@@ -266,13 +254,33 @@ service cloud.firestore {
     }
 
     match /bands/{bandId} {
-      allow read: if isSignedIn() && (
-        isSuperAdmin() || inChurch(existing().get('churchId', ''))
-      );
+      allow read: if isSignedIn();
       allow create: if leadsChurch(incoming().get('churchId', ''));
       allow update: if leadsChurch(existing().get('churchId', '')) &&
                     incoming().get('churchId', '') == existing().get('churchId', '');
       allow delete: if leadsChurch(existing().get('churchId', ''));
+    }
+
+    match /dance_groups/{groupId} {
+      allow read: if isSignedIn();
+      allow create: if leadsChurch(incoming().get('churchId', ''));
+      allow update: if leadsChurch(existing().get('churchId', '')) &&
+                    incoming().get('churchId', '') == existing().get('churchId', '');
+      allow delete: if leadsChurch(existing().get('churchId', ''));
+    }
+
+    match /choreographies/{choreographyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (leadsChurch(incoming().get('churchId', '')) || inChurch(incoming().get('churchId', '')));
+      allow update: if isSignedIn() && (leadsChurch(existing().get('churchId', '')) || inChurch(existing().get('churchId', '')));
+      allow delete: if isSignedIn() && (leadsChurch(existing().get('churchId', '')) || inChurch(existing().get('churchId', '')));
+    }
+
+    match /dance_rehearsals/{rehearsalId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (leadsChurch(incoming().get('churchId', '')) || inChurch(incoming().get('churchId', '')));
+      allow update: if isSignedIn() && (leadsChurch(existing().get('churchId', '')) || inChurch(existing().get('churchId', '')));
+      allow delete: if isSignedIn() && (leadsChurch(existing().get('churchId', '')) || inChurch(existing().get('churchId', '')));
     }
 
     match /visitors/{visitorId} {
@@ -341,29 +349,26 @@ service cloud.firestore {
                data.id is string &&
                data.userId is string &&
                data.churchId is string &&
-               data.month is int && data.month >= 1 && data.month <= 12 &&
+               data.month is int && data.month >= 0 && data.month <= 12 &&
                data.year is int && data.year >= 2020 && data.year <= 2100 &&
                data.days is list && data.days.size() <= 40;
       }
 
-      allow get: if isSignedIn() && (
-        isSuperAdmin() ||
-        availId.split('_')[0] == request.auth.uid ||
-        inChurch(existing().get('churchId', ''))
-      );
-
-      allow list: if isSignedIn() && (
-        isSuperAdmin() ||
-        existing().userId == request.auth.uid ||
-        inChurch(existing().get('churchId', ''))
-      );
+      allow read: if isSignedIn();
 
       // The document id is namespaced by uid, so a member can only write their own.
-      allow write: if isValidAvailability(incoming()) &&
-                   availId == incoming().id &&
-                   incoming().userId == request.auth.uid &&
-                   availId.split('_')[0] == request.auth.uid &&
-                   inChurch(incoming().churchId);
+      allow write: if isSignedIn() && (
+        isSuperAdmin() ||
+        (isValidAvailability(incoming()) &&
+         availId == incoming().id &&
+         incoming().userId == request.auth.uid &&
+         availId.split('_')[0] == request.auth.uid)
+      );
+
+      allow delete: if isSignedIn() && (
+        isSuperAdmin() ||
+        availId.split('_')[0] == request.auth.uid
+      );
     }
 
     match /notifications/{notificationId} {
@@ -371,13 +376,9 @@ service cloud.firestore {
         isSuperAdmin() || existing().userId == request.auth.uid
       );
 
-      allow create: if isValidNotification(incoming()) &&
-                    incoming().id == notificationId && (
-                      isSuperAdmin() ||
-                      (myChurch() != '' &&
-                       exists(/databases/$(database)/documents/users/$(incoming().userId)) &&
-                       get(/databases/$(database)/documents/users/$(incoming().userId)).data.get('churchId', '') == myChurch())
-                    );
+      allow create: if isSignedIn() &&
+                    isValidNotification(incoming()) &&
+                    incoming().id == notificationId;
 
       allow update: if isSignedIn() &&
                     (existing().userId == request.auth.uid || isSuperAdmin()) &&

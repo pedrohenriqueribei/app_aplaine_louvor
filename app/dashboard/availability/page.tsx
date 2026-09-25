@@ -209,7 +209,7 @@ export default function AvailabilityPage() {
             };
           }
         } catch (err) {
-          console.error(`Error loading availability for user ${member.uid}:`, err);
+          console.warn(`Could not load availability for user ${member.uid}:`, err);
         }
         return null;
       });

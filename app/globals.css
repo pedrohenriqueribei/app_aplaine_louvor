@@ -17,4 +17,52 @@ body {
   color: var(--foreground);
   font-family: var(--font-inter), sans-serif;
 }
+
+/* Agrupamento em 3 colunas e alinhamento uniforme para cards dos ministérios */
+#grid-ministerios {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
+  align-items: stretch;
+  grid-auto-rows: 1fr;
+}
+
+#grid-ministerios[data-filtered="true"] {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 420px));
+}
+
+#grid-ministerios > *,
+.grid-ministerios-scale-hover > * {
+  position: relative;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: center center;
+  will-change: transform, box-shadow;
+}
+
+#grid-ministerios > *:hover,
+.grid-ministerios-scale-hover > *:hover {
+  transform: scale(1.05);
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 12px 24px -8px rgba(15, 23, 42, 0.15);
+  z-index: 20;
+}
+
+/* Animação de rotação leve (transform: rotate(5deg)) no ícone interno do card ao passar o mouse */
+#grid-ministerios > * svg,
+#grid-ministerios > * .w-16 svg,
+.grid-ministerios-scale-hover > * svg {
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: center center;
+}
+
+#grid-ministerios > *:hover svg,
+#grid-ministerios > *:hover .w-16 svg,
+.grid-ministerios-scale-hover > *:hover svg {
+  transform: rotate(5deg);
+}
+
+@media (max-width: 768px) {
+  #grid-ministerios {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+}
 /* Force css invalidate - reload */

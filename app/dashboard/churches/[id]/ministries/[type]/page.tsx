@@ -33,10 +33,15 @@ import {
   Copy,
   Check,
   Sliders,
+  Sparkles,
+  Users,
+  ArrowRight,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { cn } from "@/lib/utils";
 import MultimediaWorkspace from "@/components/MultimediaWorkspace";
+import DanceWorkspace from "@/components/DanceWorkspace";
+import { BallerinaIcon, BallerinaIcon2 } from "@/components/BallerinaIcon";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +59,7 @@ interface Musician {
     worship?: string[];
     multimedia?: string[];
     secretariat?: string[];
+    dance?: string[];
   };
 }
 
@@ -71,12 +77,16 @@ interface ChurchType {
   pastor: string;
   worshipMinistryName?: string;
   worshipMinistryAcronym?: string;
+  danceMinistryName?: string;
+  danceMinistryAcronym?: string;
 }
 
 export default function MinistryDetailPage() {
   const { id, type } = useParams();
   const router = useRouter();
   const { userData } = useAuth();
+
+  const isDance = type === "danca" || type === "dance";
 
   const [church, setChurch] = useState<ChurchType | null>(null);
   const [members, setMembers] = useState<Musician[]>([]);
@@ -95,15 +105,55 @@ export default function MinistryDetailPage() {
   const [savingBand, setSavingBand] = useState(false);
 
   const [copied, setCopied] = useState(false);
+  const [danceIconVariant, setDanceIconVariant] = useState<"duet" | "classic" | "arabesque">("duet");
+  const [isScaleHelpModalOpen, setIsScaleHelpModalOpen] = useState(false);
 
   const isDeptLeader =
     members.find((m) => m.uid === userData?.uid)?.role === "líder" ||
-    userData?.roles?.[type === "louvor" ? "worship" : type === "multimidia" ? "multimedia" : "secretariat"]?.includes("leader") ||
+    userData?.roles?.[
+      type === "louvor"
+        ? "worship"
+        : type === "multimidia"
+          ? "multimedia"
+          : isDance
+            ? "dance"
+            : "secretariat"
+    ]?.includes("leader") ||
+    userData?.roles?.dance?.includes("dance_leader") ||
     userData?.role === "líder" ||
     userData?.super_admin === true;
 
   const getRoleLabels = (m: Musician) => {
-    if (type === "louvor") {
+    if (isDance) {
+      const danceRoles = m.roles?.dance || [];
+      const labels: string[] = [];
+
+      if (danceRoles.includes("leader") || danceRoles.includes("dance_leader")) {
+        labels.push("Líder");
+      }
+
+      danceRoles.forEach((role: string) => {
+        if (role === "leader" || role === "dance_leader") return;
+
+        if (role === "choreographer" || role === "coreografo") {
+          labels.push("Coreógrafo(a)");
+        } else if (role === "dancer" || role === "dancarino") {
+          labels.push("Dançarino(a)");
+        } else if (role === "costume_manager" || role === "figurino") {
+          labels.push("Figurino & Vestimenta");
+        } else if (role === "rehearsal_director" || role === "diretor_ensaio") {
+          labels.push("Diretor(a) de Ensaio");
+        } else {
+          labels.push(role.charAt(0).toUpperCase() + role.slice(1));
+        }
+      });
+
+      if (labels.length === 0) {
+        labels.push("Integrante de Dança");
+      }
+
+      return labels.join(", ");
+    } else if (type === "louvor") {
       const worshipRoles = m.roles?.worship || [];
       const labels: string[] = [];
 
@@ -196,7 +246,8 @@ export default function MinistryDetailPage() {
   };
 
   const handleCopyLink = () => {
-    const inviteUrl = `${window.location.origin}/register?churchId=${id}&role=${type}`;
+    const roleParam = isDance ? "danca" : type;
+    const inviteUrl = `${window.location.origin}/register?churchId=${id}&role=${roleParam}`;
     navigator.clipboard.writeText(inviteUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
@@ -231,13 +282,15 @@ export default function MinistryDetailPage() {
           });
         });
 
-        let deptKey: "worship" | "multimedia" | "secretariat" | null = null;
+        let deptKey: "worship" | "multimedia" | "secretariat" | "dance" | null = null;
         if (type === "louvor") {
           deptKey = "worship";
         } else if (type === "multimidia") {
           deptKey = "multimedia";
         } else if (type === "secretaria") {
           deptKey = "secretariat";
+        } else if (isDance) {
+          deptKey = "dance";
         }
 
         // Fetch users and nested roles from this specific department subcollection
@@ -294,7 +347,11 @@ export default function MinistryDetailPage() {
           const deptRoles = deptKey ? (userData.roles?.[deptKey] || []) : [];
           // A user is a leader in this department if their department roles array contains "leader"
           // or as a fallback if they are marked as a leader globally and have no roles object
-          const isLeaderInDept = deptRoles.includes("leader") || deptRoles.includes("multimedia_leader") || (userData.role === "líder" && !userData.roles);
+          const isLeaderInDept =
+            deptRoles.includes("leader") ||
+            deptRoles.includes("multimedia_leader") ||
+            deptRoles.includes("dance_leader") ||
+            (userData.role === "líder" && !userData.roles);
           const primaryRole = isLeaderInDept ? "líder" : "instrumentista";
           return {
             uid: userData.uid,
@@ -323,7 +380,7 @@ export default function MinistryDetailPage() {
     }
 
     if (id) fetchData();
-  }, [id, type]);
+  }, [id, type, isDance]);
 
   const handleUpdateWorshipInfo = async () => {
     if (!church) return;
@@ -393,10 +450,18 @@ export default function MinistryDetailPage() {
       ? "Ministério de Louvor"
       : type === "multimidia"
         ? "Multimídia"
-        : "Secretaria";
+        : isDance
+          ? "Ministério de Dança"
+          : "Secretaria";
 
   const ministryColor =
-    type === "louvor" ? "blue" : type === "multimidia" ? "purple" : "emerald";
+    type === "louvor"
+      ? "blue"
+      : type === "multimidia"
+        ? "purple"
+        : isDance
+          ? "rose"
+          : "emerald";
 
   return (
     <div className="max-w-6xl mx-auto space-y-12 pb-20 text-slate-800 dark:text-slate-100">
@@ -420,7 +485,9 @@ export default function MinistryDetailPage() {
               ? "bg-blue-50 dark:bg-blue-900/10"
               : type === "multimidia"
                 ? "bg-purple-50 dark:bg-purple-900/10"
-                : "bg-emerald-50 dark:bg-emerald-900/10",
+                : isDance
+                  ? "bg-rose-50 dark:bg-rose-900/10"
+                  : "bg-emerald-50 dark:bg-emerald-900/10",
           )}
         ></div>
 
@@ -432,7 +499,9 @@ export default function MinistryDetailPage() {
                 ? "bg-blue-800 shadow-blue-800/30"
                 : type === "multimidia"
                   ? "bg-purple-800 shadow-purple-800/30"
-                  : "bg-emerald-800 shadow-emerald-800/30",
+                  : isDance
+                    ? "bg-rose-800 shadow-rose-800/30"
+                    : "bg-emerald-800 shadow-emerald-800/30",
             )}
           >
             {type === "louvor" && <Mic2 size={56} className="text-white" />}
@@ -442,10 +511,50 @@ export default function MinistryDetailPage() {
             {type === "secretaria" && (
               <Briefcase size={56} className="text-white" />
             )}
+            {isDance && (
+              <div
+                onClick={() =>
+                  setDanceIconVariant((prev) =>
+                    prev === "duet"
+                      ? "arabesque"
+                      : prev === "arabesque"
+                        ? "classic"
+                        : "duet",
+                  )
+                }
+                title="Bailarina - Clique para alternar (Dueto com 2 Bailarinas / Arabesque / Clássica)"
+                className="flex items-center justify-center cursor-pointer select-none group/icon"
+              >
+                {danceIconVariant === "duet" && (
+                  <div className="flex items-center justify-center -space-x-3.5">
+                    <BallerinaIcon
+                      size={52}
+                      className="text-white drop-shadow-md group-hover/icon:-translate-x-1 transition-transform"
+                    />
+                    <BallerinaIcon2
+                      size={49}
+                      className="text-rose-200 drop-shadow-md group-hover/icon:translate-x-1 transition-transform"
+                    />
+                  </div>
+                )}
+                {danceIconVariant === "arabesque" && (
+                  <BallerinaIcon2
+                    size={56}
+                    className="text-white drop-shadow-md group-hover/icon:scale-105 transition-transform"
+                  />
+                )}
+                {danceIconVariant === "classic" && (
+                  <BallerinaIcon
+                    size={56}
+                    className="text-white drop-shadow-md group-hover/icon:scale-105 transition-transform"
+                  />
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex-1 space-y-4">
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <span
                 className={cn(
                   "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border",
@@ -453,7 +562,9 @@ export default function MinistryDetailPage() {
                     ? "bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 border-blue-100 dark:border-blue-900/50"
                     : type === "multimidia"
                       ? "bg-purple-50 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400 border-purple-100 dark:border-purple-900/50"
-                      : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/50",
+                      : isDance
+                        ? "bg-rose-50 dark:bg-rose-900/30 text-rose-800 dark:text-rose-400 border-rose-100 dark:border-rose-900/50"
+                        : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/50",
                 )}
               >
                 {ministryTitle}
@@ -463,11 +574,68 @@ export default function MinistryDetailPage() {
                   {church.worshipMinistryAcronym}
                 </span>
               )}
+              {isDance && church.danceMinistryAcronym && (
+                <span className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200 dark:border-slate-600">
+                  {church.danceMinistryAcronym}
+                </span>
+              )}
+
+              {isDance && (
+                <div className="inline-flex items-center gap-1 p-0.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200/60 dark:border-rose-800/50 rounded-xl text-[10px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setDanceIconVariant("duet")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer",
+                      danceIconVariant === "duet"
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50",
+                    )}
+                    title="Exibir dueto de 2 bailarinas"
+                  >
+                    <span className="flex -space-x-1 items-center">
+                      <BallerinaIcon size={12} />
+                      <BallerinaIcon2 size={12} />
+                    </span>
+                    Dueto (2 Bailarinas)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDanceIconVariant("arabesque")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer",
+                      danceIconVariant === "arabesque"
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50",
+                    )}
+                    title="Exibir novo ícone de bailarina em salto arabesque"
+                  >
+                    <BallerinaIcon2 size={12} />
+                    Arabesque (Novo Ícone)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDanceIconVariant("classic")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer",
+                      danceIconVariant === "classic"
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50",
+                    )}
+                    title="Exibir ícone clássico en pointe"
+                  >
+                    <BallerinaIcon size={12} />
+                    Clássica
+                  </button>
+                </div>
+              )}
             </div>
             <h1 className="text-4xl md:text-5xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tighter leading-tight">
               {type === "louvor"
                 ? church.worshipMinistryName || "Ministério de Louvor"
-                : ministryTitle}
+                : isDance
+                  ? church.danceMinistryName || "Ministério de Dança"
+                  : ministryTitle}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 font-medium text-lg max-w-2xl">
               Equipe dedicada à{" "}
@@ -475,7 +643,9 @@ export default function MinistryDetailPage() {
                 ? "adoração através da música, instrumentos e vozes"
                 : type === "multimidia"
                   ? "gestão de som, projeção e tecnologia"
-                  : "organização administrativa e suporte pastoral"}{" "}
+                  : isDance
+                    ? "expressão corporal, artes cênicas e ministração profética através da dança"
+                    : "organização administrativa e suporte pastoral"}{" "}
               em nossa comunidade.
             </p>
             {type === "multimidia" && isDeptLeader && (
@@ -511,13 +681,14 @@ export default function MinistryDetailPage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-3">
-                        <Link
+                        <button
+                          type="button"
                           id="btn-configurar-escala-louvor"
-                          href={`/dashboard/churches/${id}/ministries/louvor/scale-config`}
-                          className="bg-blue-800 hover:bg-blue-900 text-white px-6 py-3 rounded-2xl font-bold shadow-sm border border-blue-700 transition-colors inline-flex items-center gap-2 text-sm"
+                          onClick={() => setIsScaleHelpModalOpen(true)}
+                          className="bg-blue-800 hover:bg-blue-900 text-white px-6 py-3 rounded-2xl font-bold shadow-sm border border-blue-700 transition-colors inline-flex items-center gap-2 text-sm cursor-pointer"
                         >
                           <Sliders className="w-4 h-4" /> Configuração de Escala
-                        </Link>
+                        </button>
                         <button
                           onClick={() => setIsEditingWorship(true)}
                           className="bg-white dark:bg-slate-800 text-blue-800 dark:text-blue-400 px-6 py-3 rounded-2xl font-bold shadow-sm border border-slate-100 dark:border-slate-700 hover:bg-blue-50 transition-colors text-sm"
@@ -660,6 +831,10 @@ export default function MinistryDetailPage() {
           {type === "multimidia" && (
             <MultimediaWorkspace churchId={id as string} />
           )}
+
+          {isDance && (
+            <DanceWorkspace churchId={id as string} />
+          )}
         </div>
 
         <div className="space-y-8">
@@ -735,8 +910,15 @@ export default function MinistryDetailPage() {
             </div>
           </section>
 
-          {type === "multimidia" && (
-            <section className="bg-purple-600 rounded-[3rem] p-10 text-white shadow-2xl shadow-purple-500/20 relative overflow-hidden">
+          {(type === "multimidia" || isDance) && (
+            <section
+              className={cn(
+                "rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden",
+                isDance
+                  ? "bg-rose-700 shadow-rose-600/20"
+                  : "bg-purple-600 shadow-purple-500/20"
+              )}
+            >
               <div className="absolute bottom-0 right-0 w-64 h-64 bg-white/5 blur-[80px] -mb-32 -mr-32"></div>
               <div className="relative z-10">
                 <h3 className="text-2xl font-display font-black leading-tight mb-4">
@@ -744,15 +926,23 @@ export default function MinistryDetailPage() {
                   <br />
                   Integrantes
                 </h3>
-                <p className="text-purple-100 text-xs mb-8 leading-relaxed font-semibold">
-                  Deseja adicionar mais integrantes para o ministério de
-                  multimídia? Compartilhe o link de convite ou realize o
-                  cadastro manual.
+                <p
+                  className={cn(
+                    "text-xs mb-8 leading-relaxed font-semibold",
+                    isDance ? "text-rose-100" : "text-purple-100"
+                  )}
+                >
+                  Deseja adicionar mais integrantes para o ministério de{" "}
+                  {isDance ? "dança" : "multimídia"}? Compartilhe o link de convite
+                  ou realize o cadastro manual.
                 </p>
                 <div className="flex flex-col gap-3">
                   <Link
                     href="/dashboard/members"
-                    className="w-full inline-flex items-center justify-center gap-3 bg-white text-purple-800 py-4.5 rounded-2xl font-bold shadow-xl shadow-black/10 hover:scale-[1.02] active:scale-[0.98] transition-all text-sm text-center"
+                    className={cn(
+                      "w-full inline-flex items-center justify-center gap-3 bg-white py-4.5 rounded-2xl font-bold shadow-xl shadow-black/10 hover:scale-[1.02] active:scale-[0.98] transition-all text-sm text-center",
+                      isDance ? "text-rose-800" : "text-purple-800"
+                    )}
                   >
                     Cadastrar Manualmente
                   </Link>
@@ -761,7 +951,9 @@ export default function MinistryDetailPage() {
                     className={`w-full inline-flex items-center justify-center gap-3 py-4.5 rounded-2xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98] border text-sm cursor-pointer ${
                       copied
                         ? "bg-emerald-500 text-white border-emerald-400 shadow-xl shadow-emerald-500/20"
-                        : "bg-purple-700/50 text-white border-white/20 hover:bg-purple-700 shadow-xl shadow-black/10"
+                        : isDance
+                          ? "bg-rose-800/50 text-white border-white/20 hover:bg-rose-800 shadow-xl shadow-black/10"
+                          : "bg-purple-700/50 text-white border-white/20 hover:bg-purple-700 shadow-xl shadow-black/10"
                     }`}
                   >
                     {copied ? (
@@ -823,28 +1015,135 @@ export default function MinistryDetailPage() {
           </motion.div>
         </div>
       )}
-    </div>
-  );
-}
 
-function Users({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
+      {/* Modal de Ajuda Rápida - Próximos Passos da Escala */}
+      {isScaleHelpModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white dark:bg-slate-800 rounded-[2.5rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto p-8 md:p-10 shadow-2xl relative border border-slate-100 dark:border-slate-700"
+          >
+            <button
+              onClick={() => setIsScaleHelpModalOpen(false)}
+              className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-full transition-colors cursor-pointer"
+            >
+              <X size={22} />
+            </button>
+
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-14 h-14 rounded-2xl bg-blue-100/80 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 flex items-center justify-center shadow-xs">
+                <Sliders className="w-7 h-7" />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">
+                  Ajuda Rápida & Planejamento
+                </span>
+                <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100">
+                  Próximos Passos da Escala de Louvor
+                </h3>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
+              Siga este roteiro resumido com os passos recomendados para montar e gerenciar a escala do Ministério de Louvor:
+            </p>
+
+            <div className="space-y-3.5 mb-8">
+              <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                  1
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm mb-1">
+                    Definir Parâmetros & Vagas por Função
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Configure a quantidade necessária de líderes de louvor, vocalistas (backings) e instrumentistas (bateria, violão, teclado, baixo, guitarra) para cada culto.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                  2
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm mb-1">
+                    Conferir a Disponibilidade dos Músicos
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Consulte a aba de Disponibilidade para verificar quem já declarou estar livre para as datas pretendidas, evitando ausências de última hora e sobrecarga.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                  3
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm mb-1">
+                    Montar a Escala e Designar Bandas
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Selecione as bandas já formadas ou distribua os integrantes individualmente nos slots de cada culto, designando quem assume a liderança do louvor.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                  4
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm mb-1">
+                    Vincular Repertório e Cifras
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Associe as músicas que serão ministradas, confirmando os tons e disponibilizando links de cifras e áudios de ensaio para os músicos se prepararem.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                <div className="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                  5
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm mb-1">
+                    Publicar e Notificar a Equipe
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Ao finalizar, confirme e publique a escala oficial. Os integrantes escalados receberão alertas automáticos para confirmar presença.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-6 border-t border-slate-100 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setIsScaleHelpModalOpen(false)}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-2xl font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-sm cursor-pointer"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsScaleHelpModalOpen(false);
+                  router.push(`/dashboard/churches/${id}/ministries/louvor/scale-config`);
+                }}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-2xl font-bold bg-blue-800 hover:bg-blue-900 text-white transition-all shadow-lg shadow-blue-800/20 text-sm inline-flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>Acessar Painel de Configurações</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </div>
   );
 }

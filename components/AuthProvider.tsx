@@ -12,7 +12,7 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
-  signUpWithEmail: (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string, roles?: { worship: string[], multimedia: string[], secretariat: string[] } }) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string, roles?: { worship?: string[], multimedia?: string[], secretariat?: string[], dance?: string[] } }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 vocalRange: '',
                 churchId: '',
                 status: 'active',
-                roles: { worship: [], multimedia: [], secretariat: [] },
+                roles: { worship: [], multimedia: [], secretariat: [], dance: [] },
                 createdAt: serverTimestamp()
               };
               try {
@@ -128,7 +128,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               needsUpdate = true;
             }
             if (!currentData.roles) {
-              updates.roles = { worship: [], multimedia: [], secretariat: [] };
+              updates.roles = { worship: [], multimedia: [], secretariat: [], dance: [] };
+              needsUpdate = true;
+            } else if (!currentData.roles.dance) {
+              updates.roles = { ...currentData.roles, dance: [] };
               needsUpdate = true;
             }
 
@@ -168,13 +171,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithEmailAndPassword(auth, email, pass);
   };
 
-  const signUpWithEmail = async (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string, roles?: { worship: string[], multimedia: string[], secretariat: string[] } }) => {
+  const signUpWithEmail = async (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string, roles?: { worship?: string[], multimedia?: string[], secretariat?: string[], dance?: string[] } }) => {
     signingUpRef.current = true;
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       const user = userCredential.user;
       
-      const defaultRoles = { worship: [], multimedia: [], secretariat: [] };
+      const defaultRoles = { worship: [], multimedia: [], secretariat: [], dance: [] };
       const newUserData = {
         uid: user.uid,
         name: name,
@@ -194,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Save user to the respective church department subcollections if churchId is supplied
       if (data.churchId && data.roles) {
-        const depts = ['worship', 'multimedia', 'secretariat'] as const;
+        const depts = ['worship', 'multimedia', 'secretariat', 'dance'] as const;
         for (const dept of depts) {
           const deptRoles = data.roles[dept] || [];
           if (deptRoles.length > 0) {

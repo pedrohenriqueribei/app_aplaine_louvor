@@ -173,43 +173,59 @@ export default function MusicianProfilePage() {
           setMusician(data);
 
           if (data.churchId) {
-            const churchRef = doc(db, "churches", data.churchId);
-            const churchSnap = await getDoc(churchRef);
-            if (churchSnap.exists()) {
-              setChurchName(churchSnap.data().name);
+            try {
+              const churchRef = doc(db, "churches", data.churchId);
+              const churchSnap = await getDoc(churchRef);
+              if (churchSnap.exists()) {
+                setChurchName(churchSnap.data().name);
+              }
+            } catch (err) {
+              console.warn("Could not load church details:", err);
             }
           }
 
           // Fetch songs for this user
-          const songsQuery = query(
-            collection(db, "songs"),
-            where("ownerId", "==", id),
-            orderBy("createdAt", "desc"),
-          );
-          const songsSnap = await getDocs(songsQuery);
-          setSongs(
-            songsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Song),
-          );
+          try {
+            const songsQuery = query(
+              collection(db, "songs"),
+              where("ownerId", "==", id),
+              orderBy("createdAt", "desc"),
+            );
+            const songsSnap = await getDocs(songsQuery);
+            setSongs(
+              songsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Song),
+            );
+          } catch (err) {
+            console.warn("Could not load user songs:", err);
+          }
 
           // Fetch bands this user is part of
-          const bandsQuery = query(
-            collection(db, "bands"),
-            where("memberIds", "array-contains", id),
-          );
-          const bandsSnap = await getDocs(bandsQuery);
-          setBands(
-            bandsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Band),
-          );
+          try {
+            const bandsQuery = query(
+              collection(db, "bands"),
+              where("memberIds", "array-contains", id),
+            );
+            const bandsSnap = await getDocs(bandsQuery);
+            setBands(
+              bandsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Band),
+            );
+          } catch (err) {
+            console.warn("Could not load user bands:", err);
+          }
         }
 
         // Fetch churches list for dropdown
-        const churchesQuery = await getDocs(collection(db, "churches"));
-        setChurches(
-          churchesQuery.docs.map((d) => ({
-            id: d.id,
-            name: d.data().name || d.id,
-          })),
-        );
+        try {
+          const churchesQuery = await getDocs(collection(db, "churches"));
+          setChurches(
+            churchesQuery.docs.map((d) => ({
+              id: d.id,
+              name: d.data().name || d.id,
+            })),
+          );
+        } catch (err) {
+          console.warn("Could not load churches dropdown:", err);
+        }
       } catch (err) {
         handleFirestoreError(err, OperationType.GET, `users/${id}`);
       } finally {

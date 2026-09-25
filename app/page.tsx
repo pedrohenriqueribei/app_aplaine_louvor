@@ -181,15 +181,35 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  <FeatureCard
-                    icon={Calendar}
-                    iconColor="text-blue-600"
-                    title="Escalas"
-                    desc="Organize semanalmente"
-                  />
+                  {/* Escalas com Imagem de Calendário */}
+                  <div className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm group" id="card-escalas">
+                    <div className="relative h-36 rounded-2xl overflow-hidden" id="card-escalas-image-container">
+                      <img
+                        id="card-escalas-image"
+                        src="/images/calendar_schedule_1790306007642.jpg"
+                        alt="Calendário de Escalas"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/20 to-transparent"></div>
+                      <div className="absolute bottom-3 left-3 flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-xl bg-blue-600/90 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <Calendar className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <h3 className="text-white font-bold text-sm leading-tight">
+                            Escalas
+                          </h3>
+                          <p className="text-[10px] text-blue-100/90 font-medium">
+                            Organize cultos semanalmente
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Secretaria */}
-                  <div className="bg-white/90 backdrop-blur-md rounded-3xl p-5 border border-white shadow-sm">
+                  <div className="bg-white/90 backdrop-blur-md rounded-3xl p-5 border border-white shadow-sm" id="card-secretaria">
                     <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-700 mb-3">
                       <Users className="w-4 h-4" />
                     </div>
@@ -204,16 +224,9 @@ export default function HomePage() {
                 </div>
 
                 <div className="space-y-4 pt-10">
-                  <FeatureCard
-                    icon={Music}
-                    iconColor="text-purple-600"
-                    title="Repertório"
-                    desc="Central de cifras e tons"
-                  />
-
-                  {/* Ministério de Multimídia */}
+                  {/* Ministério de Multimídia (Substituindo o Repertório) */}
                   <div className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm group" id="card-multimedia">
-                    <div className="relative h-48 rounded-2xl overflow-hidden" id="card-multimedia-image-container">
+                    <div className="relative h-44 rounded-2xl overflow-hidden" id="card-multimedia-image-container">
                       <img
                         id="card-multimedia-image"
                         src="/images/multimedia.png"
@@ -221,11 +234,36 @@ export default function HomePage() {
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         referrerPolicy="no-referrer"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/10 to-transparent"></div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/20 to-transparent"></div>
                       <div className="absolute bottom-3 left-3">
                         <h3 className="text-white font-bold text-sm">
                           Ministério de Multimídia
                         </h3>
+                        <p className="text-[10px] text-purple-200 font-medium">
+                          Gestão de áudio, projeção e transmissões
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Ministério de Dança */}
+                  <div className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm group" id="card-danca">
+                    <div className="relative h-44 rounded-2xl overflow-hidden" id="card-danca-image-container">
+                      <img
+                        id="card-danca-image"
+                        src="/images/church_dance_ministry_1790305997872.jpg"
+                        alt="Meninas dançando durante o louvor na igreja"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/20 to-transparent"></div>
+                      <div className="absolute bottom-3 left-3">
+                        <h3 className="text-white font-bold text-sm">
+                          Ministério de Dança
+                        </h3>
+                        <p className="text-[10px] text-rose-200 font-medium">
+                          Adoração com gestos e vestes ministeriais
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -233,8 +271,8 @@ export default function HomePage() {
                   <FeatureCard
                     icon={Users}
                     iconColor="text-emerald-600"
-                    title="Equipe"
-                    desc="Gestão de músicos e talentos"
+                    title="Equipe & Talentos"
+                    desc="Músicos, voluntários e liderança"
                   />
                 </div>
               </div>

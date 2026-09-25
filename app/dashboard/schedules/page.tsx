@@ -36,8 +36,27 @@ import {
   ShieldAlert,
   Mic2,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
+  User as UserIcon,
+  Youtube,
+  ExternalLink,
+  FileText,
+  Info,
+  Copy,
+  Check,
+  Volume2,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useNotifications } from "@/hooks/useNotifications";
+
+function getYoutubeId(url?: string): string | null {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const match = url.match(regExp);
+  return match && match[2].length === 11 ? match[2] : null;
+}
 
 interface Schedule {
   id: string;
@@ -103,6 +122,15 @@ interface Song {
   title: string;
   artist: string;
   bpm?: string;
+  key?: string;
+  sheet?: string;
+  link?: string;
+  timeSignature?: string;
+  tags?: string[];
+  observations?: string;
+  ownerId?: string;
+  createdBy?: string;
+  createdAt?: any;
 }
 
 interface Band {
@@ -151,6 +179,8 @@ export default function SchedulesPage() {
 
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [viewMode, setViewMode] = useState<"week" | "month">("week");
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+  const [monthOffset, setMonthOffset] = useState<number>(0);
   const [churches, setChurches] = useState<Church[]>([]);
   const [bands, setBands] = useState<Band[]>([]);
   const [services, setServices] = useState<ServiceType[]>([]);
@@ -169,9 +199,88 @@ export default function SchedulesPage() {
   const [selectedPlaylistSongs, setSelectedPlaylistSongs] = useState<string[]>([]);
   const [savingPlaylist, setSavingPlaylist] = useState(false);
   const [playlistSearchTerm, setPlaylistSearchTerm] = useState("");
+  const [viewingSongDetails, setViewingSongDetails] = useState<Song | null>(null);
+  const [copiedSheet, setCopiedSheet] = useState(false);
+
+  const getSongAddedByInfo = (song: Song) => {
+    const authorId = song.ownerId || song.createdBy;
+    if (!authorId) {
+      return {
+        name: "Equipe de Louvor",
+        role: "Ministério de Louvor",
+      };
+    }
+    if (user && user.uid === authorId) {
+      return {
+        name: userData?.name || user.displayName || "Você",
+        role: "Ministro / Músico",
+      };
+    }
+    const member = members.find((m) => m.uid === authorId);
+    if (member) {
+      return {
+        name: member.name,
+        role: member.role || "Membro do Louvor",
+      };
+    }
+    return {
+      name: "Integrante do Ministério",
+      role: "Ministério de Louvor",
+    };
+  };
+
+  const handleOpenSongDetails = async (songId: string, preloadedSong?: Song) => {
+    if (preloadedSong && (preloadedSong.key || preloadedSong.sheet || preloadedSong.ownerId || preloadedSong.link)) {
+      setViewingSongDetails(preloadedSong);
+      return;
+    }
+
+    const found = songs.find((s) => s.id === songId) || personalSongs.find((s) => s.id === songId);
+    if (found && (found.key || found.sheet || found.ownerId || found.link)) {
+      setViewingSongDetails(found);
+      return;
+    }
+
+    try {
+      const docSnap = await getDoc(doc(db, "songs", songId));
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const fullSong: Song = {
+          id: docSnap.id,
+          title: data.title || found?.title || "Música",
+          artist: data.artist || found?.artist || "",
+          key: data.key || "",
+          bpm: data.bpm || "",
+          sheet: data.sheet || "",
+          link: data.link || "",
+          timeSignature: data.timeSignature || "",
+          tags: data.tags || [],
+          observations: data.observations || "",
+          ownerId: data.ownerId || data.createdBy || "",
+          createdBy: data.createdBy || "",
+          createdAt: data.createdAt,
+        };
+        setViewingSongDetails(fullSong);
+      } else if (found) {
+        setViewingSongDetails(found);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar detalhes da música:", err);
+      if (found) setViewingSongDetails(found);
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<"worship" | "multimedia">("worship");
   const [selectedScheduleForView, setSelectedScheduleForView] = useState<Schedule | null>(null);
+  const [dayMultipleSchedulesModal, setDayMultipleSchedulesModal] = useState<{
+    dateStr: string;
+    dayNumber: number;
+    schedules: Schedule[];
+  } | null>(null);
+  const [dayEmptyModal, setDayEmptyModal] = useState<{
+    dateStr: string;
+    dayNumber: number;
+  } | null>(null);
   const [isMultimediaModalOpen, setIsMultimediaModalOpen] = useState(false);
   const [multimediaDate, setMultimediaDate] = useState("");
   const [multimediaLocationType, setMultimediaLocationType] = useState<"internal" | "external">("internal");
@@ -651,7 +760,7 @@ export default function SchedulesPage() {
             };
           }
         } catch (err) {
-          console.error(`Error loading schedule availability for user ${member.uid}:`, err);
+          console.warn(`Could not load schedule availability for user ${member.uid}:`, err);
         }
         return null;
       });
@@ -739,11 +848,24 @@ export default function SchedulesPage() {
     );
     const snap = await getDocs(q);
     setSongs(
-      snap.docs.map((doc) => ({
-        id: doc.id,
-        title: doc.data().title,
-        artist: doc.data().artist,
-      })),
+      snap.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.title || "",
+          artist: data.artist || "",
+          key: data.key || "",
+          bpm: data.bpm || "",
+          sheet: data.sheet || "",
+          link: data.link || "",
+          timeSignature: data.timeSignature || "",
+          tags: data.tags || [],
+          observations: data.observations || "",
+          ownerId: data.ownerId || data.createdBy || "",
+          createdBy: data.createdBy || "",
+          createdAt: data.createdAt,
+        };
+      }),
     );
   }
 
@@ -756,11 +878,24 @@ export default function SchedulesPage() {
       );
       const snap = await getDocs(q);
       setPersonalSongs(
-        snap.docs.map((doc) => ({
-          id: doc.id,
-          title: doc.data().title || "",
-          artist: doc.data().artist || "",
-        })) as Song[]
+        snap.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: data.title || "",
+            artist: data.artist || "",
+            key: data.key || "",
+            bpm: data.bpm || "",
+            sheet: data.sheet || "",
+            link: data.link || "",
+            timeSignature: data.timeSignature || "",
+            tags: data.tags || [],
+            observations: data.observations || "",
+            ownerId: data.ownerId || user.uid,
+            createdBy: data.createdBy || user.uid,
+            createdAt: data.createdAt,
+          };
+        }) as Song[]
       );
     } catch (err) {
       console.error("Error fetching personal songs:", err);
@@ -1044,7 +1179,7 @@ export default function SchedulesPage() {
           });
         }
       } catch (notifErr) {
-        console.error("Failed to handle notifications:", notifErr);
+        console.warn("Could not dispatch schedule notifications:", notifErr);
       }
 
       setIsModalOpen(false);
@@ -1394,50 +1529,104 @@ export default function SchedulesPage() {
     });
   };
 
+  const getWeekRange = (offset = 0) => {
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset * 7);
+    const day = target.getDay(); // 0 is Sunday
+    const start = new Date(target.getFullYear(), target.getMonth(), target.getDate() - day, 0, 0, 0, 0);
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59, 999);
+    return { start, end };
+  };
+
+  const getMonthRange = (offset = 0) => {
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    const start = new Date(target.getFullYear(), target.getMonth(), 1, 0, 0, 0, 0);
+    const end = new Date(target.getFullYear(), target.getMonth() + 1, 0, 23, 59, 59, 999);
+    return { start, end };
+  };
+
+  const formatWeekLabel = (start: Date, end: Date) => {
+    const startDay = start.getDate();
+    const endDay = end.getDate();
+    const startMonth = start.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+    const endMonth = end.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+    const year = end.getFullYear();
+
+    if (start.getMonth() === end.getMonth()) {
+      return `${startDay} a ${endDay} de ${endMonth}. de ${year}`;
+    } else {
+      return `${startDay} de ${startMonth}. a ${endDay} de ${endMonth}. de ${year}`;
+    }
+  };
+
+  const getWeekBadgeTitle = (offset: number) => {
+    if (offset === 0) return "Semana Atual";
+    if (offset === -1) return "Semana Anterior";
+    if (offset === 1) return "Próxima Semana";
+    if (offset < -1) return `${Math.abs(offset)} semanas atrás`;
+    return `Daqui a ${offset} semanas`;
+  };
+
   const groupSchedules = () => {
     if (viewMode === "month") {
-      const groups: { [key: string]: Schedule[] } = {};
-      schedules.forEach((s) => {
-        const date = new Date(
-          s.date.includes("T") ? s.date : `${s.date}T12:00:00`,
-        );
-        const key = date.toLocaleDateString("pt-BR", {
-          month: "long",
-          year: "numeric",
-        });
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(s);
+      const { start, end } = getMonthRange(monthOffset);
+      const filtered = schedules.filter((s) => {
+        const safeDate = s.date.includes("T") ? s.date : `${s.date}T12:00:00`;
+        const time = new Date(safeDate).getTime();
+        return time >= start.getTime() && time <= end.getTime();
       });
-      return Object.entries(groups).sort((a, b) => {
-        // Sort keys by actual date descending
-        const dateA = new Date(a[1][0].date);
-        const dateB = new Date(b[1][0].date);
-        return dateB.getTime() - dateA.getTime();
-      });
-    } else {
-      // Group by week
-      const groups: { [key: string]: Schedule[] } = {};
-      schedules.forEach((s) => {
-        const date = new Date(
-          s.date.includes("T") ? s.date : `${s.date}T12:00:00`,
-        );
-        // Get start of week (Sunday)
-        const day = date.getDay();
-        const diff = date.getDate() - day;
-        const startOfWeek = new Date(date);
-        startOfWeek.setDate(date.getDate() - day);
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-        const key = `${startOfWeek.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} à ${endOfWeek.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(s);
+      const monthTitle = start.toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric",
       });
-      return Object.entries(groups).sort((a, b) => {
-        const dateA = new Date(a[1][0].date);
-        const dateB = new Date(b[1][0].date);
-        return dateB.getTime() - dateA.getTime();
+      const capitalizedMonth =
+        monthTitle.charAt(0).toUpperCase() + monthTitle.slice(1);
+
+      if (filtered.length === 0) return [];
+
+      filtered.sort((a, b) => {
+        const dateA = new Date(
+          a.date.includes("T") ? a.date : `${a.date}T12:00:00`
+        ).getTime();
+        const dateB = new Date(
+          b.date.includes("T") ? b.date : `${b.date}T12:00:00`
+        ).getTime();
+        return dateA - dateB;
       });
+
+      return [[capitalizedMonth, filtered]] as [string, Schedule[]][];
+    } else {
+      // Apresenta apenas as escalas da semana selecionada (padrão: semana atual, offset = 0)
+      const { start, end } = getWeekRange(weekOffset);
+      const filtered = schedules.filter((s) => {
+        const safeDate = s.date.includes("T") ? s.date : `${s.date}T12:00:00`;
+        const time = new Date(safeDate).getTime();
+        return time >= start.getTime() && time <= end.getTime();
+      });
+
+      const key = `${start.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+      })} à ${end.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+      })}`;
+
+      if (filtered.length === 0) return [];
+
+      filtered.sort((a, b) => {
+        const dateA = new Date(
+          a.date.includes("T") ? a.date : `${a.date}T12:00:00`
+        ).getTime();
+        const dateB = new Date(
+          b.date.includes("T") ? b.date : `${b.date}T12:00:00`
+        ).getTime();
+        return dateA - dateB;
+      });
+
+      return [[key, filtered]] as [string, Schedule[]][];
     }
   };
 
@@ -1684,7 +1873,7 @@ export default function SchedulesPage() {
           });
         }
       } catch (notifErr) {
-        console.error("Failed to make multimedia notifications:", notifErr);
+        console.warn("Could not dispatch multimedia notifications:", notifErr);
       }
 
       setIsMultimediaModalOpen(false);
@@ -1752,6 +1941,46 @@ export default function SchedulesPage() {
   };
 
   const groupedData = groupSchedules();
+  const currentWeekRange = getWeekRange(weekOffset);
+  const currentMonthDate = new Date(
+    new Date().getFullYear(),
+    new Date().getMonth() + monthOffset,
+    1
+  );
+  const currentMonthLabel = currentMonthDate.toLocaleDateString("pt-BR", {
+    month: "long",
+    year: "numeric",
+  });
+  const currentYear = currentMonthDate.getFullYear();
+  const currentMonth = currentMonthDate.getMonth();
+  const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay();
+  const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+  const handleDayClick = (dayNumber: number) => {
+    const dateString = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
+    const daySchedules = schedules.filter(
+      (s) => s.date.split("T")[0] === dateString
+    );
+
+    if (daySchedules.length === 1) {
+      setSelectedScheduleForView(daySchedules[0]);
+    } else if (daySchedules.length > 1) {
+      setDayMultipleSchedulesModal({
+        dateStr: dateString,
+        dayNumber,
+        schedules: daySchedules,
+      });
+    } else {
+      setDayEmptyModal({
+        dateStr: dateString,
+        dayNumber,
+      });
+    }
+  };
+  const schedulesCountInPeriod = groupedData.reduce(
+    (acc, curr) => acc + curr[1].length,
+    0
+  );
 
   const isSuperUser = userData?.super_admin === true;
 
@@ -1773,6 +2002,111 @@ export default function SchedulesPage() {
   const viewSafeDate = viewSchedule ? (viewSchedule.date.includes("T") ? viewSchedule.date : `${viewSchedule.date}T12:00:00`) : "";
   const viewServiceName = viewSchedule && viewSchedule.serviceId ? services.find((s) => s.id === viewSchedule.serviceId)?.name : null;
   const viewChurchName = viewSchedule ? (churches.find((c) => c.id === viewSchedule.churchId)?.name || "Igreja") : "";
+
+  // Busca escala complementar de multimídia caso esteja vinculada ou em outro documento do mesmo culto/dia
+  const matchingMultimediaSchedule = viewSchedule
+    ? schedules.find(
+        (s) =>
+          s.id !== viewSchedule.id &&
+          s.churchId === viewSchedule.churchId &&
+          s.date.split("T")[0] === viewSchedule.date.split("T")[0] &&
+          (s.serviceId === viewSchedule.serviceId || (!s.serviceId && !viewSchedule.serviceId))
+      )
+    : null;
+
+  const mergedMediaRoles = viewSchedule
+    ? {
+        ...(matchingMultimediaSchedule?.roles || {}),
+        ...(viewSchedule.roles || {}),
+      }
+    : {};
+
+  const getMediaRolesForDisplay = () => {
+    const standardMediaRoles = [
+      {
+        title: "Som & Áudio",
+        keys: ["audioTech", "audioOperator", "audioOperators", "soundTech", "audio"],
+        configKey: "audioOperator",
+        icon: Volume2,
+        color: "text-amber-500 dark:text-amber-400",
+        bgBadge: "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200/60 dark:border-amber-900/40",
+      },
+      {
+        title: "Projeção & Telão (PC)",
+        keys: ["projectionOperator", "pcOperators", "pcOperator"],
+        configKey: "pcOperator",
+        icon: Monitor,
+        color: "text-blue-500 dark:text-blue-400",
+        bgBadge: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200/60 dark:border-blue-900/40",
+      },
+      {
+        title: "Redes Sociais & Transmissão",
+        keys: ["socialMediaManager", "socialMediaOperators", "socialMediaOperator"],
+        configKey: "socialMediaOperator",
+        icon: Share2,
+        color: "text-emerald-500 dark:text-emerald-400",
+        bgBadge: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-900/40",
+      },
+      {
+        title: "Fotografia & Filmagem",
+        keys: ["photographyOperators", "photographyOperator"],
+        configKey: "photographyOperator",
+        icon: Camera,
+        color: "text-rose-500 dark:text-rose-400",
+        bgBadge: "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200/60 dark:border-rose-900/40",
+      },
+      {
+        title: "Operador de Câmera (Corte)",
+        keys: ["cameraOperators", "cameraOperator", "mediaCreator"],
+        configKey: "cameraOperator",
+        icon: Video,
+        color: "text-indigo-500 dark:text-indigo-400",
+        bgBadge: "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200/60 dark:border-indigo-900/40",
+      },
+    ];
+
+    const customRolesList: typeof standardMediaRoles = [];
+    Object.keys(multimediaConfig).forEach((configKey) => {
+      const isKnown = [
+        "audioOperator", "audioTech", "pcOperator", "projectionOperator",
+        "socialMediaOperator", "photographyOperator", "cameraOperator"
+      ].includes(configKey);
+      if (!isKnown) {
+        const cfg = multimediaConfig[configKey];
+        if (cfg && cfg.enabled) {
+          const meta = multimediaCustomRoleMetadata[configKey] || { label: configKey };
+          const pluralKey = configKey.endsWith("s") ? configKey : `${configKey}s`;
+          customRolesList.push({
+            title: meta.label || configKey,
+            keys: [configKey, pluralKey],
+            configKey: configKey,
+            icon: Sliders,
+            color: "text-purple-500 dark:text-purple-400",
+            bgBadge: "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200/60 dark:border-purple-900/40",
+          });
+        }
+      }
+    });
+
+    return [...standardMediaRoles, ...customRolesList];
+  };
+
+  const getMediaUids = (keys: string[]) => {
+    const list: string[] = [];
+    keys.forEach((k) => {
+      const val = (mergedMediaRoles as any)?.[k];
+      if (Array.isArray(val)) {
+        val.forEach((id) => {
+          if (id && typeof id === "string" && !list.includes(id)) {
+            list.push(id);
+          }
+        });
+      } else if (val && typeof val === "string" && val.trim() && !list.includes(val)) {
+        list.push(val.trim());
+      }
+    });
+    return list;
+  };
 
   return (
     <div className="space-y-8 max-w-6xl">
@@ -1892,10 +2226,228 @@ export default function SchedulesPage() {
         )}
       </div>
 
+      {/* Navegador de Semanas / Períodos com Botões Anterior e Próxima */}
+      <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 shadow-sm relative z-10">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          {/* Botão Anterior */}
+          <button
+            type="button"
+            id="btn-semana-anterior"
+            onClick={() => {
+              if (viewMode === "week") {
+                setWeekOffset((prev) => prev - 1);
+              } else {
+                setMonthOffset((prev) => prev - 1);
+              }
+            }}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>Anterior</span>
+          </button>
+
+          {/* Indicador Central da Semana Atual / Selecionada */}
+          <div className="flex flex-col items-center text-center gap-1.5">
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider",
+                  (viewMode === "week" ? weekOffset === 0 : monthOffset === 0)
+                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50"
+                    : "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50"
+                )}
+              >
+                {viewMode === "week"
+                  ? getWeekBadgeTitle(weekOffset)
+                  : monthOffset === 0
+                  ? "Mês Atual"
+                  : monthOffset === -1
+                  ? "Mês Passado"
+                  : monthOffset === 1
+                  ? "Próximo Mês"
+                  : `${Math.abs(monthOffset)} meses ${monthOffset < 0 ? "atrás" : "à frente"}`}
+              </span>
+
+              {((viewMode === "week" && weekOffset !== 0) ||
+                (viewMode === "month" && monthOffset !== 0)) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWeekOffset(0);
+                    setMonthOffset(0);
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 underline cursor-pointer"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Ir para semana atual
+                </button>
+              )}
+            </div>
+
+            <span className="text-base sm:text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">
+              {viewMode === "week"
+                ? formatWeekLabel(currentWeekRange.start, currentWeekRange.end)
+                : currentMonthLabel}
+            </span>
+
+            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+              {schedulesCountInPeriod === 0
+                ? "Nenhuma escala agendada para este período"
+                : `${schedulesCountInPeriod} ${
+                    schedulesCountInPeriod === 1
+                      ? "escala agendada para este período"
+                      : "escalas agendadas para este período"
+                  }`}
+            </span>
+          </div>
+
+          {/* Botão Próxima */}
+          <button
+            type="button"
+            id="btn-semana-proxima"
+            onClick={() => {
+              if (viewMode === "week") {
+                setWeekOffset((prev) => prev + 1);
+              } else {
+                setMonthOffset((prev) => prev + 1);
+              }
+            }}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
+          >
+            <span>Próxima</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
       <div className="space-y-12">
         {loading ? (
           <div className="flex justify-center p-20">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-800"></div>
+          </div>
+        ) : viewMode === "month" ? (
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200/80 dark:border-slate-800 p-6 sm:p-10 shadow-sm space-y-8">
+            {/* Cabeçalho do Calendário */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h3 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-3">
+                  <CalendarIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                  <span className="capitalize">{currentMonthLabel}</span>
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 font-medium mt-1">
+                  Clique no dia com escala para abrir as informações da escala.
+                </p>
+              </div>
+
+              {/* Legenda das Cores */}
+              <div className="flex flex-wrap items-center gap-4 text-xs font-bold">
+                <div className="flex items-center gap-2">
+                  <span className="w-4 h-4 rounded-md bg-blue-50 border border-blue-200 dark:bg-blue-950/50 dark:border-blue-800 flex items-center justify-center text-[10px] text-blue-600 dark:text-blue-400 font-black">
+                    ●
+                  </span>
+                  <span className="text-slate-700 dark:text-slate-300">Com escala</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-4 h-4 rounded-md bg-slate-100 border border-slate-200/80 dark:bg-slate-800 dark:border-slate-700"></span>
+                  <span className="text-slate-400 dark:text-slate-500">Sem escala</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Grid dos Dias da Semana e Dias do Mês */}
+            <div className="grid grid-cols-7 gap-2 sm:gap-3 text-center">
+              {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((dayName, idx) => (
+                <div
+                  key={dayName}
+                  className={cn(
+                    "py-2 text-[11px] sm:text-xs font-black uppercase tracking-wider",
+                    idx === 0 || idx === 6
+                      ? "text-blue-600 dark:text-blue-400"
+                      : "text-slate-400 dark:text-slate-500"
+                  )}
+                >
+                  {dayName}
+                </div>
+              ))}
+
+              {/* Células em branco dos dias que antecedem o dia 1 do mês */}
+              {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
+                <div
+                  key={`blank-prev-${idx}`}
+                  className="aspect-square w-full rounded-2xl bg-slate-50/30 dark:bg-slate-900/20 border border-dashed border-slate-100 dark:border-slate-800/40 flex items-center justify-center opacity-25 select-none"
+                />
+              ))}
+
+              {/* Dias do Mês (apenas números dos dias) */}
+              {Array.from({ length: totalDaysInMonth }).map((_, idx) => {
+                const dayNumber = idx + 1;
+                const dateString = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
+                const daySchedules = schedules.filter(
+                  (s) => s.date.split("T")[0] === dateString
+                );
+                const hasSchedule = daySchedules.length > 0;
+                const isToday =
+                  new Date().toISOString().split("T")[0] === dateString;
+
+                return (
+                  <button
+                    key={`day-${dayNumber}`}
+                    type="button"
+                    id={`btn-calendario-dia-${dayNumber}`}
+                    onClick={() => handleDayClick(dayNumber)}
+                    className={cn(
+                      "aspect-square w-full rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer relative group active:scale-95 shadow-xs",
+                      hasSchedule
+                        ? "bg-blue-50 text-blue-600 border border-blue-200/90 hover:bg-blue-100 hover:border-blue-300 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/50 hover:shadow-md font-bold"
+                        : "bg-slate-50 text-slate-400 border border-slate-100 dark:bg-slate-800/40 dark:text-slate-500 dark:border-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-400 font-medium",
+                      isToday && "ring-2 ring-blue-500/50 ring-offset-2 dark:ring-offset-slate-900"
+                    )}
+                    title={
+                      hasSchedule
+                        ? `${dayNumber} de ${currentMonthLabel} - ${daySchedules.length} ${daySchedules.length === 1 ? "escala" : "escalas"}`
+                        : `${dayNumber} de ${currentMonthLabel} - Nenhuma escala`
+                    }
+                  >
+                    {/* Apenas o número do dia */}
+                    <span className="text-base sm:text-2xl font-black tracking-tight">
+                      {dayNumber}
+                    </span>
+
+                    {/* Badge indicador de quantidade se houver múltiplas escalas */}
+                    {hasSchedule && daySchedules.length > 1 && (
+                      <span className="absolute bottom-1 sm:bottom-1.5 px-1.5 py-0.2 rounded-full text-[9px] font-black bg-blue-200/70 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300">
+                        {daySchedules.length}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : groupedData.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] p-12 text-center space-y-4 shadow-xs">
+            <div className="w-16 h-16 mx-auto rounded-3xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+              <CalendarIcon className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                Nenhuma escala encontrada
+              </h4>
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                Não há escalas agendadas para a semana selecionada ({formatWeekLabel(currentWeekRange.start, currentWeekRange.end)}).
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              {weekOffset !== 0 && viewMode === "week" && (
+                <button
+                  type="button"
+                  onClick={() => setWeekOffset(0)}
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Voltar para Semana Atual
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           groupedData.map(([groupTitle, items]) => (
@@ -2206,20 +2758,6 @@ export default function SchedulesPage() {
             </div>
           ))
         )}
-
-        {!loading && groupedData.length === 0 && (
-          <div className="p-20 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[3rem] flex flex-col items-center text-center bg-white/50 dark:bg-slate-900/50">
-            <div className="w-24 h-24 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6">
-              <CalendarIcon className="w-10 h-10 text-slate-300 dark:text-slate-600" />
-            </div>
-            <h3 className="text-xl font-black text-slate-900 dark:text-slate-100 italic tracking-tight">
-              Nenhuma escala programada
-            </h3>
-            <p className="text-slate-500 max-w-xs mt-2 font-medium">
-              Comece planejando o próximo louvor clicando em &quot;Nova Escala&quot;.
-            </p>
-          </div>
-        )}
       </div>
 
       {/* Detailed Schedule Viewer Popup */}
@@ -2346,58 +2884,137 @@ export default function SchedulesPage() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Detalhes do Ensaio */}
-                    <div className="p-4 bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2.5">
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">
-                        🗓️ Ensaio Agendado
-                      </span>
-                      {viewSchedule.rehearsalDate ? (
-                        <div className="space-y-1">
-                          <p className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase">
-                            {new Date(`${viewSchedule.rehearsalDate}T12:00:00`).toLocaleDateString("pt-BR", {
-                              weekday: "long",
-                              day: "numeric",
-                              month: "long",
-                            })}
-                          </p>
-                          <p className="text-xs text-indigo-600 dark:text-indigo-400 font-extrabold flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" /> às {viewSchedule.rehearsalTime || "00:00"}
-                          </p>
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+                    {/* Detalhes do Ensaio - Compacto e organizado (lg:col-span-4) */}
+                    <div className="lg:col-span-4 p-5 bg-white dark:bg-slate-900/60 rounded-3xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between shadow-xs">
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="p-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                            <Clock className="w-4 h-4" />
+                          </span>
+                          <div>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                              Ensaio Agendado
+                            </span>
+                            <h5 className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                              Data e Horário
+                            </h5>
+                          </div>
                         </div>
-                      ) : (
-                        <p className="text-xs text-slate-400 italic">Nenhum ensaio agendado para esta escala ainda.</p>
+
+                        {viewSchedule.rehearsalDate ? (
+                          <div className="p-4 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1.5">
+                            <p className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 capitalize">
+                              {new Date(`${viewSchedule.rehearsalDate}T12:00:00`).toLocaleDateString("pt-BR", {
+                                weekday: "long",
+                                day: "numeric",
+                                month: "long",
+                              })}
+                            </p>
+                            <p className="text-xs text-indigo-600 dark:text-indigo-400 font-extrabold flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5" /> às {viewSchedule.rehearsalTime || "00:00"}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="p-6 bg-slate-50/60 dark:bg-slate-850/60 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-center">
+                            <Clock className="w-6 h-6 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                            <p className="text-xs text-slate-400 font-medium">Nenhum ensaio agendado ainda.</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {viewSchedule.rehearsalDate && (
+                        <p className="text-[10px] text-slate-400 font-medium mt-3 italic">
+                          Músicos escalados devem comparecer preparados.
+                        </p>
                       )}
                     </div>
 
-                    {/* Detalhes da Playlist */}
-                    <div className="p-4 bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2.5">
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">
-                        🎵 Músicas para Estudo ({viewSchedule.playlist?.length || 0})
-                      </span>
+                    {/* Detalhes da Playlist - DESTAQUE PRINCIPAL (lg:col-span-8, muito mais visível) */}
+                    <div className="lg:col-span-8 p-5 sm:p-6 bg-gradient-to-br from-indigo-50/50 via-white to-blue-50/30 dark:from-slate-900 dark:via-slate-900/90 dark:to-slate-850 rounded-3xl border-2 border-indigo-100 dark:border-indigo-900/40 shadow-sm space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100/60 dark:border-slate-800 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <span className="p-2.5 bg-indigo-600 text-white rounded-2xl shadow-md shadow-indigo-600/20">
+                            <Music className="w-4 h-4" />
+                          </span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight">
+                                Músicas para Estudo
+                              </h4>
+                              <span className="px-2.5 py-0.5 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-black rounded-full text-[10px]">
+                                {viewSchedule.playlist?.length || 0} {viewSchedule.playlist?.length === 1 ? "música" : "músicas"}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                              Clique na música para abrir letra, cifra, áudio e quem a adicionou
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
                       {viewSchedule.playlist && viewSchedule.playlist.length > 0 ? (
-                        <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
+                        <div className="space-y-2 max-h-80 overflow-y-auto pr-1.5 custom-scrollbar">
                           {viewSchedule.playlist.map((songId) => {
                             const songObj = songs.find((s) => s.id === songId) || personalSongs.find((s) => s.id === songId);
+                            const songKey = songObj?.key?.trim();
                             return (
                               <div
                                 key={songId}
-                                className="flex items-center justify-between text-xs px-2.5 py-1.5 bg-slate-50 dark:bg-slate-850 rounded-xl border border-slate-100/50 dark:border-slate-800"
+                                onClick={() => handleOpenSongDetails(songId, songObj)}
+                                className="group flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/80 hover:bg-indigo-50/80 dark:hover:bg-indigo-950/50 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300 dark:hover:border-indigo-600 transition-all cursor-pointer shadow-xs hover:shadow-md active:scale-[0.99]"
+                                title="Clique para abrir informações da música"
                               >
-                                <span className="font-extrabold text-slate-750 dark:text-slate-250 truncate max-w-[140px]">
-                                  {songObj?.title || `Música ID: ${songId.slice(0, 5)}...`}
-                                </span>
-                                {songObj?.artist && (
-                                  <span className="text-[9px] text-slate-400 font-medium truncate max-w-[100px]">
-                                    {songObj.artist}
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700/60 group-hover:bg-indigo-600 group-hover:text-white text-slate-500 dark:text-slate-300 flex items-center justify-center shrink-0 transition-colors">
+                                    <Music className="w-4 h-4" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <h5 className="font-extrabold text-sm text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
+                                      {songObj?.title || `Música ID: ${songId.slice(0, 6)}...`}
+                                    </h5>
+                                    <p className="text-xs text-slate-400 dark:text-slate-400 font-medium truncate mt-0.5">
+                                      {songObj?.artist || "Artista não informado"}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2.5 shrink-0 ml-3">
+                                  {/* TOM da Música destacado */}
+                                  <span className={cn(
+                                    "px-2.5 py-1 rounded-xl text-xs font-black flex items-center gap-1 border transition-colors",
+                                    songKey
+                                      ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-750 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
+                                      : "bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
+                                  )}>
+                                    <span className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">Tom:</span>
+                                    <span>{songKey || "—"}</span>
                                   </span>
-                                )}
+
+                                  {songObj?.bpm && (
+                                    <span className="hidden sm:inline-block px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-bold rounded-lg">
+                                      {songObj.bpm} BPM
+                                    </span>
+                                  )}
+
+                                  <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/60 text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 flex items-center justify-center transition-all">
+                                    <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                                  </div>
+                                </div>
                               </div>
                             );
                           })}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-400 italic">Nenhuma música adicionada na playlist de estudo ainda.</p>
+                        <div className="py-12 px-4 text-center bg-white/60 dark:bg-slate-900/40 rounded-2xl border border-dashed border-indigo-200 dark:border-slate-800">
+                          <Music className="w-8 h-8 text-indigo-300 dark:text-indigo-700 mx-auto mb-2 opacity-60" />
+                          <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                            Nenhuma música adicionada na playlist de estudo ainda.
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            O Ministro Principal pode gerenciar e adicionar as músicas para ensaio.
+                          </p>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -2415,27 +3032,42 @@ export default function SchedulesPage() {
                     {viewSchedule.songs && viewSchedule.songs.length > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {viewSchedule.songs.map((songId, sIdx) => {
-                          const songObj = songs.find((s) => s.id === songId);
+                          const songObj = songs.find((s) => s.id === songId) || personalSongs.find((s) => s.id === songId);
+                          const songKey = songObj?.key?.trim();
                           return (
                             <div
                               key={`${songId}-${sIdx}`}
-                              className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-2xl flex items-center justify-between"
+                              onClick={() => handleOpenSongDetails(songId, songObj)}
+                              className="group p-4 bg-slate-50 dark:bg-slate-800/40 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/40 border border-slate-100 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 rounded-2xl flex items-center justify-between cursor-pointer transition-all shadow-xs hover:shadow-md"
+                              title="Clique para abrir detalhes da música"
                             >
-                              <div>
-                                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                              <div className="min-w-0 flex-1 mr-2">
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
                                   {songObj?.title || `Música ID: ${songId}`}
                                 </p>
                                 {songObj?.artist && (
-                                  <p className="text-[10px] text-slate-400 font-medium">
+                                  <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
                                     {songObj.artist}
                                   </p>
                                 )}
                               </div>
-                              {songObj?.bpm && (
-                                <span className="px-2 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-md text-[9px] font-black">
-                                  {songObj.bpm} BPM
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className={cn(
+                                  "px-2.5 py-1 rounded-xl text-xs font-black flex items-center gap-1 border transition-colors",
+                                  songKey
+                                    ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-750 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
+                                    : "bg-slate-200/70 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700"
+                                )}>
+                                  <span className="text-[9px] font-bold uppercase text-slate-400">Tom:</span>
+                                  <span>{songKey || "—"}</span>
                                 </span>
-                              )}
+                                {songObj?.bpm && (
+                                  <span className="hidden sm:inline-block px-2 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-md text-[9px] font-black">
+                                    {songObj.bpm} BPM
+                                  </span>
+                                )}
+                                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" />
+                              </div>
                             </div>
                           );
                         })}
@@ -2666,39 +3298,194 @@ export default function SchedulesPage() {
 
                     </div>
                   </div>
+
+                  {/* Escala do Ministério de Mídia (No final / parte de baixo da escala) */}
+                  <div className="pt-8 border-t-2 border-dashed border-slate-200/90 dark:border-slate-800 space-y-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-purple-50/80 via-indigo-50/40 to-slate-50/60 dark:from-purple-950/20 dark:via-indigo-950/15 dark:to-slate-900/40 p-4 sm:p-5 rounded-3xl border border-purple-100/90 dark:border-purple-900/40 shadow-2xs">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-purple-600 text-white rounded-2xl shadow-md shadow-purple-600/25 shrink-0">
+                          <Monitor className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-black uppercase tracking-tight text-slate-900 dark:text-slate-100">
+                              Escala do Ministério de Mídia
+                            </h4>
+                            <span className="px-2.5 py-0.5 bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-black rounded-full text-[10px]">
+                              {getMediaRolesForDisplay().reduce((acc, r) => acc + getMediaUids(r.keys).length, 0)} {getMediaRolesForDisplay().reduce((acc, r) => acc + getMediaUids(r.keys).length, 0) === 1 ? "escalado" : "escalados"}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                            Equipe técnica de som, projeção, transmissão, fotografia e câmeras escalada para este culto.
+                          </p>
+                        </div>
+                      </div>
+
+                      {canManageMultimedia && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const matching = matchingMultimediaSchedule || viewSchedule;
+                            setEditingSchedule(matching);
+                            setMultimediaDate(matching.date.split("T")[0]);
+                            setMultimediaLocationType(matching.locationType || "internal");
+                            setMultimediaLocationName(matching.locationName || "");
+                            setMultimediaServiceId(matching.serviceId || "");
+                            setMultimediaNotes(matching.multimediaNotes || "");
+
+                            const newForm: Record<string, string[]> = {};
+                            getMediaRolesForDisplay().forEach((r) => {
+                              newForm[r.configKey] = getMediaUids(r.keys);
+                            });
+                            setMultimediaRolesForm(newForm);
+                            setIsMultimediaModalOpen(true);
+                          }}
+                          className="self-start sm:self-auto px-4 py-2 bg-white dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Gerenciar Mídia</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Grid das Funções da Mídia */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {getMediaRolesForDisplay().map((role) => {
+                        const uids = getMediaUids(role.keys);
+                        const RoleIcon = role.icon;
+                        return (
+                          <div
+                            key={role.configKey}
+                            className="p-4 bg-slate-50/70 dark:bg-slate-850/60 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2.5 shadow-2xs hover:border-purple-200 dark:hover:border-purple-900/50 transition-colors"
+                          >
+                            <div className="flex items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-800 pb-2">
+                              <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 truncate">
+                                <RoleIcon className={`w-3.5 h-3.5 ${role.color} shrink-0`} />
+                                <span className="truncate">{role.title}</span>
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold border shrink-0 ${uids.length > 0 ? role.bgBadge : "bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"}`}>
+                                {uids.length > 0 ? `${uids.length} ${uids.length === 1 ? "operador" : "operadores"}` : "Vago"}
+                              </span>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              {uids.length === 0 ? (
+                                <span className="text-xs text-slate-400 italic font-medium block py-1">
+                                  Nenhum operador alocado
+                                </span>
+                              ) : (
+                                uids.map((uid, idx) => {
+                                  const memberObj = members.find((m) => m.uid === uid);
+                                  return (
+                                    <div
+                                      key={`${uid}-${idx}`}
+                                      className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/60 shadow-2xs"
+                                    >
+                                      <div className="w-6 h-6 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-black text-[10px] flex items-center justify-center shrink-0">
+                                        {memberObj?.name ? memberObj.name.charAt(0).toUpperCase() : "M"}
+                                      </div>
+                                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate flex-1">
+                                        {memberObj?.name || "Membro"}
+                                      </span>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </>
               ) : (
                 /* Multimedia / Media scale: list of operators */
-                <div className="space-y-6 pt-2">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-2">
-                    <Users className="w-3.5 h-3.5" /> Operadores Escalados
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {[
-                      { title: "Projeção (Letras & Imagens)", key: "pcOperators", icon: Monitor, color: "text-blue-500" },
-                      { title: "Redes Sociais (Transmissão / Live)", key: "socialMediaOperators", icon: Share2, color: "text-green-500" },
-                      { title: "Fotografia & Filmagem", key: "photographyOperators", icon: Camera, color: "text-amber-500" },
-                      { title: "Operador de Câmera (Corte)", key: "cameraOperators", icon: Video, color: "text-indigo-500" },
-                    ].map((role) => {
-                      const uids = (viewSchedule.roles as any)?.[role.key] || [];
-                      const IconComp = role.icon;
-                      return (
-                        <div key={role.key} className="p-5 border border-slate-100 dark:border-slate-800/80 rounded-2xl space-y-3 bg-slate-50/50 dark:bg-slate-900/50">
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                            <IconComp className={`w-4 h-4 ${role.color}`} /> {role.title}
+                <div className="space-y-5 pt-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-purple-50/80 via-indigo-50/40 to-slate-50/60 dark:from-purple-950/20 dark:via-indigo-950/15 dark:to-slate-900/40 p-4 sm:p-5 rounded-3xl border border-purple-100/90 dark:border-purple-900/40 shadow-2xs">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-purple-600 text-white rounded-2xl shadow-md shadow-purple-600/25 shrink-0">
+                        <Monitor className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-black uppercase tracking-tight text-slate-900 dark:text-slate-100">
+                            Operadores Escalados
+                          </h4>
+                          <span className="px-2.5 py-0.5 bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-black rounded-full text-[10px]">
+                            {getMediaRolesForDisplay().reduce((acc, r) => acc + getMediaUids(r.keys).length, 0)} {getMediaRolesForDisplay().reduce((acc, r) => acc + getMediaUids(r.keys).length, 0) === 1 ? "escalado" : "escalados"}
                           </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                          Funções técnicas distribuídas para som, projeção, transmissão, fotografia e câmeras.
+                        </p>
+                      </div>
+                    </div>
+
+                    {canManageMultimedia && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const matching = matchingMultimediaSchedule || viewSchedule;
+                          setEditingSchedule(matching);
+                          setMultimediaDate(matching.date.split("T")[0]);
+                          setMultimediaLocationType(matching.locationType || "internal");
+                          setMultimediaLocationName(matching.locationName || "");
+                          setMultimediaServiceId(matching.serviceId || "");
+                          setMultimediaNotes(matching.multimediaNotes || "");
+
+                          const newForm: Record<string, string[]> = {};
+                          getMediaRolesForDisplay().forEach((r) => {
+                            newForm[r.configKey] = getMediaUids(r.keys);
+                          });
+                          setMultimediaRolesForm(newForm);
+                          setIsMultimediaModalOpen(true);
+                        }}
+                        className="self-start sm:self-auto px-4 py-2 bg-white dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Gerenciar Escala</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                    {getMediaRolesForDisplay().map((role) => {
+                      const uids = getMediaUids(role.keys);
+                      const RoleIcon = role.icon;
+                      return (
+                        <div
+                          key={role.configKey}
+                          className="p-4 bg-slate-50/70 dark:bg-slate-850/60 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2.5 shadow-2xs"
+                        >
+                          <div className="flex items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-800 pb-2">
+                            <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 truncate">
+                              <RoleIcon className={`w-3.5 h-3.5 ${role.color} shrink-0`} />
+                              <span className="truncate">{role.title}</span>
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold border shrink-0 ${uids.length > 0 ? role.bgBadge : "bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"}`}>
+                              {uids.length > 0 ? `${uids.length} ${uids.length === 1 ? "operador" : "operadores"}` : "Vago"}
+                            </span>
+                          </div>
+
                           <div className="space-y-1.5">
-                            {uids.filter(Boolean).length === 0 ? (
-                              <span className="text-xs text-slate-400 italic font-medium block">Vago</span>
+                            {uids.length === 0 ? (
+                              <span className="text-xs text-slate-400 italic font-medium block py-1">
+                                Nenhum operador alocado
+                              </span>
                             ) : (
-                              uids.filter(Boolean).map((uid: string, uIdx: number) => {
-                                const nameStr = members.find((m) => m.uid === uid)?.name || "Membro";
+                              uids.map((uid, idx) => {
+                                const memberObj = members.find((m) => m.uid === uid);
                                 return (
                                   <div
-                                    key={`${uid}-${uIdx}`}
-                                    className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-2 rounded-xl shadow-xs border border-slate-100 dark:border-slate-700/50"
+                                    key={`${uid}-${idx}`}
+                                    className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/60 shadow-2xs"
                                   >
-                                    {nameStr}
+                                    <div className="w-6 h-6 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-black text-[10px] flex items-center justify-center shrink-0">
+                                      {memberObj?.name ? memberObj.name.charAt(0).toUpperCase() : "M"}
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate flex-1">
+                                      {memberObj?.name || "Membro"}
+                                    </span>
                                   </div>
                                 );
                               })
@@ -3688,6 +4475,384 @@ export default function SchedulesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para dias com Múltiplas Escalas */}
+      {dayMultipleSchedulesModal && (
+        <div
+          onClick={() => setDayMultipleSchedulesModal(null)}
+          className="fixed inset-0 z-[110] bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 p-8 max-w-lg w-full shadow-2xl space-y-6 relative"
+          >
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                  <CalendarIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  Escalas do Dia {new Date(`${dayMultipleSchedulesModal.dateStr}T12:00:00`).toLocaleDateString("pt-BR")}
+                </h3>
+                <p className="text-xs text-slate-400 font-medium">
+                  {dayMultipleSchedulesModal.schedules.length} escalas encontradas. Selecione para ver os detalhes:
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDayMultipleSchedulesModal(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {dayMultipleSchedulesModal.schedules.map((schedule, sIdx) => {
+                const serviceName = schedule.serviceId
+                  ? services.find((s) => s.id === schedule.serviceId)?.name
+                  : null;
+                const churchName =
+                  churches.find((c) => c.id === schedule.churchId)?.name || "Igreja";
+                const isMultimedia = activeTab === "multimedia";
+
+                return (
+                  <div
+                    key={schedule.id || sIdx}
+                    onClick={() => {
+                      setSelectedScheduleForView(schedule);
+                      setDayMultipleSchedulesModal(null);
+                    }}
+                    className="p-5 bg-slate-50 hover:bg-blue-50/80 dark:bg-slate-800/60 dark:hover:bg-blue-950/40 border border-slate-200/80 hover:border-blue-200 dark:border-slate-700/80 dark:hover:border-blue-800 rounded-2xl transition-all cursor-pointer group flex items-center justify-between shadow-xs hover:shadow-md"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300">
+                          {isMultimedia ? "Multimídia" : "Louvor"}
+                        </span>
+                        <h4 className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          {serviceName || `Culto #${sIdx + 1}`}
+                        </h4>
+                      </div>
+                      <p className="text-xs text-slate-400 font-medium">
+                        {churchName} • {schedule.locationType === "external" ? `Externo: ${schedule.locationName || "Local"}` : "Interno"}
+                      </p>
+                    </div>
+
+                    <span className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider group-hover:translate-x-1 transition-transform">
+                      Ver Informações →
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setDayMultipleSchedulesModal(null)}
+              className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para dias sem Escala */}
+      {dayEmptyModal && (
+        <div
+          onClick={() => setDayEmptyModal(null)}
+          className="fixed inset-0 z-[110] bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 p-8 max-w-md w-full shadow-2xl space-y-6 text-center"
+          >
+            <div className="w-16 h-16 mx-auto rounded-3xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+              <CalendarIcon className="w-8 h-8 text-slate-400" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                Dia {new Date(`${dayEmptyModal.dateStr}T12:00:00`).toLocaleDateString("pt-BR")}
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Nenhuma escala agendada para este dia.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2">
+              {activeTab === "worship" && canManageWorship && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetDate = dayEmptyModal.dateStr;
+                    setDayEmptyModal(null);
+                    setEditingSchedule(null);
+                    setSelectedProfileId("padrao");
+                    setFormData({
+                      date: targetDate,
+                      churchId: userData?.churchId || "",
+                      bandId: "master",
+                      serviceId: "",
+                      songs: [],
+                      roles: {
+                        mainMinister: "",
+                        drummer: "",
+                        bassist: "",
+                        keyboardist: "",
+                        acousticGuitarist: "",
+                        electricGuitarist: "",
+                        baritone: "",
+                        contralto: "",
+                        soprano: "",
+                        mezzoSoprano: "",
+                        audioTech: "",
+                        projectionOperator: "",
+                        mediaCreator: "",
+                        socialMediaManager: "",
+                      },
+                      notes: "",
+                      locationType: "internal",
+                      locationName: "",
+                    });
+                    setIsModalOpen(true);
+                  }}
+                  className="w-full py-3.5 bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-blue-800/20 active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Criar Escala de Louvor
+                </button>
+              )}
+
+              {activeTab === "multimedia" && canManageMultimedia && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetDate = dayEmptyModal.dateStr;
+                    setDayEmptyModal(null);
+                    handleOpenMultimediaModal(null);
+                    setMultimediaDate(targetDate);
+                  }}
+                  className="w-full py-3.5 bg-purple-800 hover:bg-purple-900 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-purple-800/20 active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Criar Escala de Multimídia
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setDayEmptyModal(null)}
+                className="w-full py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal com todas as informações da música e quem adicionou */}
+      {viewingSongDetails && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 sm:p-6 transition-all animate-fadeIn">
+          {/* Backdrop */}
+          <div
+            onClick={() => setViewingSongDetails(null)}
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md transition-opacity"
+          />
+
+          {/* Modal Container */}
+          <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col z-10">
+            {/* Header com Gradiente */}
+            <div className="p-6 sm:p-8 bg-gradient-to-br from-indigo-700 via-indigo-800 to-blue-900 text-white relative">
+              <button
+                type="button"
+                onClick={() => setViewingSongDetails(null)}
+                className="absolute top-6 right-6 p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/20">
+                  <Music className="w-7 h-7 text-white" />
+                </div>
+                <div className="space-y-1 min-w-0">
+                  <span className="px-3 py-0.5 bg-white/20 text-white text-[10px] font-black uppercase tracking-wider rounded-full backdrop-blur-sm">
+                    Informações da Música
+                  </span>
+                  <h3 className="text-2xl sm:text-3xl font-display font-black tracking-tight text-white truncate">
+                    {viewingSongDetails.title}
+                  </h3>
+                  <p className="text-indigo-200 text-sm font-semibold truncate">
+                    {viewingSongDetails.artist || "Artista não informado"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Informações rápidas em destaque: TOM e QUEM ADICIONOU */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+                {/* TOM */}
+                <div className="bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-200 block">
+                    Tom da Música
+                  </span>
+                  <p className="text-xl font-black text-white mt-0.5">
+                    {viewingSongDetails.key || "Não definido"}
+                  </p>
+                </div>
+
+                {/* QUEM ADICIONOU A MÚSICA */}
+                <div className="bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 col-span-1 sm:col-span-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-200 block flex items-center gap-1">
+                    <UserIcon className="w-3 h-3" /> Adicionada por
+                  </span>
+                  <p className="text-sm font-black text-white mt-0.5 truncate">
+                    {getSongAddedByInfo(viewingSongDetails).name}
+                  </p>
+                  <p className="text-[10px] text-indigo-200 font-medium truncate">
+                    {getSongAddedByInfo(viewingSongDetails).role}
+                  </p>
+                </div>
+
+                {/* BPM / COMPASSO */}
+                <div className="bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-200 block">
+                    BPM / Compasso
+                  </span>
+                  <p className="text-sm font-black text-white mt-1">
+                    {viewingSongDetails.bpm ? `${viewingSongDetails.bpm} BPM` : "—"}
+                    {viewingSongDetails.timeSignature ? ` • ${viewingSongDetails.timeSignature}` : ""}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Conteúdo rolável */}
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 custom-scrollbar">
+              {/* Tags */}
+              {viewingSongDetails.tags && viewingSongDetails.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {viewingSongDetails.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-3 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-full text-[10px] font-black uppercase tracking-wider border border-indigo-100 dark:border-indigo-800"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* YouTube / Link de Áudio */}
+              {viewingSongDetails.link && (
+                <div className="space-y-2">
+                  <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Youtube className="w-4 h-4 text-red-500" /> Áudio / Vídeo de Referência
+                  </h4>
+                  {getYoutubeId(viewingSongDetails.link) ? (
+                    <div className="aspect-video w-full rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-800 bg-black">
+                      <iframe
+                        width="100%"
+                        height="100%"
+                        src={`https://www.youtube.com/embed/${getYoutubeId(viewingSongDetails.link)}`}
+                        title="YouTube video player"
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : (
+                    <a
+                      href={viewingSongDetails.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-5 py-3 bg-slate-100 hover:bg-indigo-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-2xl text-xs font-bold transition-all border border-slate-200 dark:border-slate-700"
+                    >
+                      <ExternalLink className="w-4 h-4" /> Acessar Link de Referência da Música
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Observações */}
+              {viewingSongDetails.observations && (
+                <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/60 rounded-2xl space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                    <Info className="w-3.5 h-3.5" /> Observações do Ministro / Arranjo
+                  </span>
+                  <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed font-medium">
+                    {viewingSongDetails.observations}
+                  </p>
+                </div>
+              )}
+
+              {/* Cifra e Letra */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-indigo-500" /> Cifra e Letra Completa
+                  </h4>
+                  {viewingSongDetails.sheet && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (viewingSongDetails.sheet) {
+                          navigator.clipboard.writeText(viewingSongDetails.sheet);
+                          setCopiedSheet(true);
+                          setTimeout(() => setCopiedSheet(false), 2000);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    >
+                      {copiedSheet ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          <span className="text-emerald-600 dark:text-emerald-400">Copiada!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copiar Cifra</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                {viewingSongDetails.sheet ? (
+                  <div className="p-5 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto max-h-96">
+                    <pre className="font-mono text-xs sm:text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">
+                      {viewingSongDetails.sheet}
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="p-8 text-center bg-slate-50/70 dark:bg-slate-850/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                    <FileText className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      Nenhuma cifra cadastrada para esta música ainda.
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      A cifra pode ser adicionada no módulo de Músicas pelo ministro ou quem a adicionou.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 sm:p-6 bg-slate-50 dark:bg-slate-850 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingSongDetails(null)}
+                className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
