@@ -12,7 +12,7 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
-  signUpWithEmail: (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string, roles?: { worship?: string[], multimedia?: string[], secretariat?: string[], dance?: string[] } }) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string, roles?: { worship?: string[], multimedia?: string[], secretariat?: string[], dance?: string[] }, danceStyles?: string[], danceGroups?: string[], [key: string]: any }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -171,20 +171,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithEmailAndPassword(auth, email, pass);
   };
 
-  const signUpWithEmail = async (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string, roles?: { worship?: string[], multimedia?: string[], secretariat?: string[], dance?: string[] } }) => {
+  const signUpWithEmail = async (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string, roles?: { worship?: string[], multimedia?: string[], secretariat?: string[], dance?: string[] }, danceStyles?: string[], danceGroups?: string[], [key: string]: any }) => {
     signingUpRef.current = true;
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       const user = userCredential.user;
       
       const defaultRoles = { worship: [], multimedia: [], secretariat: [], dance: [] };
-      const newUserData = {
+      const newUserData: any = {
         uid: user.uid,
         name: name,
         email: email,
         phone: data.phone,
-        instruments: data.instruments,
-        vocalRange: data.vocalRange,
+        instruments: data.instruments || [],
+        vocalRange: data.vocalRange || '',
         churchId: data.churchId || '',
         roles: data.roles || defaultRoles,
         status: 'active',
@@ -193,6 +193,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         createdBy: user.uid,
         updatedBy: user.uid
       };
+
+      if (data.danceStyles && Array.isArray(data.danceStyles)) {
+        newUserData.danceStyles = data.danceStyles;
+      }
+      if (data.danceGroups && Array.isArray(data.danceGroups)) {
+        newUserData.danceGroups = data.danceGroups;
+      }
+
       await setDoc(doc(db, 'users', user.uid), newUserData);
 
       // Save user to the respective church department subcollections if churchId is supplied
@@ -202,7 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const deptRoles = data.roles[dept] || [];
           if (deptRoles.length > 0) {
             const memberRef = doc(db, 'churches', data.churchId, 'departments', dept, 'members', user.uid);
-            await setDoc(memberRef, {
+            const memberData: any = {
               userId: user.uid,
               roles: deptRoles,
               createdAt: serverTimestamp(),
@@ -210,7 +218,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               updatedAt: serverTimestamp(),
               updatedBy: user.uid,
               joinedAt: serverTimestamp()
-            });
+            };
+            if (dept === 'dance' && data.danceStyles) {
+              memberData.danceStyles = data.danceStyles;
+            }
+            await setDoc(memberRef, memberData);
           }
         }
       }

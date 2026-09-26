@@ -22,6 +22,8 @@
             "dance": { "type": "array", "items": { "type": "string" } }
           }
         },
+        "danceStyles": { "type": "array", "items": { "type": "string" }, "description": "Estilos de dança praticados pelo integrante" },
+        "danceGroups": { "type": "array", "items": { "type": "string" }, "description": "Grupos de dança que o integrante participa" },
         "status": { "type": "string", "enum": ["active", "inactive"] },
         "fcmTokens": { "type": "array", "items": { "type": "string" }, "description": "Tokens FCM para notificações push" },
         "createdAt": { "type": "string", "format": "date-time" }
