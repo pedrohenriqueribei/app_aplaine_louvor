@@ -47,11 +47,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
-      <div
-        dangerouslySetInnerHTML={{
-          __html: "<!-- deploy-test: abacaxi-de-tungstenio-8f31c7 -->",
-        }}
-      />
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -61,9 +56,9 @@ export default function HomePage() {
             id="nav-logo-link"
           >
             <img
-              src="/logo_aplane.png"
+              src="/logo_aplane_transparent.png"
               alt="Applane Logo"
-              className="h-10 md:h-12 w-auto object-contain"
+              className="h-10 md:h-12 w-auto object-contain bg-transparent"
             />
           </Link>
           <div className="flex items-center gap-4">
@@ -134,7 +129,7 @@ export default function HomePage() {
               </span>{" "}
               perfeita.
             </h1>
-            <p className="text-xl text-slate-500 mb-10 leading-relaxed max-w-lg">
+            <p className="text-xl text-[#6b6a90] mb-10 leading-relaxed max-w-lg">
               A plataforma definitiva para gerir ministérios de louvor,
               multimídia, escalas, músicas e equipe de forma integrada e
               intuitiva.
@@ -314,7 +309,7 @@ export default function HomePage() {
               className="h-9 w-auto object-contain"
             />
           </Link>
-          <p className="text-sm font-medium text-slate-500 text-center md:text-right">
+          <p suppressHydrationWarning className="text-sm font-medium text-slate-500 text-center md:text-right">
             © {new Date().getFullYear()} Applane. Gestão ministerial com excelência.
           </p>
         </div>

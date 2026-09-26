@@ -13,7 +13,8 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
-import { Bell, CheckCircle, Trash2, Clock, Calendar } from "lucide-react";
+import { Bell, CheckCircle, Trash2, Clock, Calendar, Sliders } from "lucide-react";
+import { NotificationSettings } from "@/components/NotificationSettings";
 
 interface Notification {
   id: string;
@@ -29,6 +30,7 @@ export default function NotificationsPage() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"list" | "settings">("list");
 
   useEffect(() => {
     if (!user) return;
@@ -85,18 +87,20 @@ export default function NotificationsPage() {
     await updateDoc(doc(db, "notifications", id), { read: true });
   };
 
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
   return (
     <div className="max-w-4xl space-y-8">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-display font-bold text-slate-800 dark:text-slate-100">
             Notificações
           </h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            Acompanhe suas convocações e avisos
+            Acompanhe suas convocações e configure seus avisos automáticos via FCM
           </p>
         </div>
-        {notifications.some((n) => !n.read) && (
+        {activeTab === "list" && unreadCount > 0 && (
           <button
             onClick={markAllAsRead}
             className="flex items-center gap-2 text-sm font-bold text-blue-800 dark:text-blue-400 hover:underline"
@@ -107,7 +111,44 @@ export default function NotificationsPage() {
         )}
       </div>
 
-      <div className="space-y-4">
+      {/* Tabs */}
+      <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-2xl w-fit">
+        <button
+          type="button"
+          onClick={() => setActiveTab("list")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === "list"
+              ? "bg-white dark:bg-slate-900 text-blue-800 dark:text-blue-400 shadow-sm"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+          }`}
+        >
+          <Bell className="w-4 h-4" />
+          <span>Avisos Recebidos</span>
+          {unreadCount > 0 && (
+            <span className="w-5 h-5 rounded-full bg-blue-800 text-white text-[10px] flex items-center justify-center font-black">
+              {unreadCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("settings")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === "settings"
+              ? "bg-white dark:bg-slate-900 text-blue-800 dark:text-blue-400 shadow-sm"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+          }`}
+        >
+          <Sliders className="w-4 h-4" />
+          <span>Configurações de Antecedência (FCM)</span>
+        </button>
+      </div>
+
+      {activeTab === "settings" ? (
+        <NotificationSettings />
+      ) : (
+        <div className="space-y-4">
         {loading ? (
           <div className="flex justify-center p-20">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-800"></div>
@@ -190,7 +231,8 @@ export default function NotificationsPage() {
             ))}
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

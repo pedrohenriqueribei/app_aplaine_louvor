@@ -849,9 +849,16 @@ export default function MinistryDetailPage() {
               {members.filter((m) => m.role === "líder").length > 0 ? (
                 members
                   .filter((m) => m.role === "líder")
-                  .map((leader) => (
-                    <div
+                  .map((leader, index) => (
+                    <motion.div
                       key={leader.uid}
+                      initial={{ opacity: 0, y: 14 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        duration: 0.35,
+                        delay: Math.min(index * 0.06, 0.3),
+                        ease: [0.25, 0.1, 0.25, 1],
+                      }}
                       className="flex items-center gap-4 group"
                     >
                       <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center font-black text-xl text-blue-400 border border-white/10 group-hover:bg-blue-800 group-hover:text-white transition-all">
@@ -865,7 +872,7 @@ export default function MinistryDetailPage() {
                           Líder de {ministryTitle}
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   ))
               ) : (
                 <p className="text-slate-500 italic text-sm">
@@ -884,10 +891,18 @@ export default function MinistryDetailPage() {
               {members.filter((m) => m.role !== "líder").length > 0 ? (
                 members
                   .filter((m) => m.role !== "líder")
-                  .map((member) => (
-                    <div
+                  .map((member, index) => (
+                    <motion.div
                       key={member.uid}
-                      className="flex items-center gap-4 p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border border-transparent hover:border-slate-100 dark:hover:border-slate-700"
+                      initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{
+                        duration: 0.35,
+                        delay: Math.min(index * 0.05, 0.4),
+                        ease: [0.25, 0.1, 0.25, 1],
+                      }}
+                      whileHover={{ scale: 1.015, x: 2, transition: { duration: 0.15 } }}
+                      className="flex items-center gap-4 p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border border-transparent hover:border-slate-100 dark:hover:border-slate-700 cursor-default"
                     >
                       <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-2xl flex items-center justify-center font-bold">
                         {member.name.charAt(0)}
@@ -900,7 +915,7 @@ export default function MinistryDetailPage() {
                           {getRoleLabels(member)}
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   ))
               ) : (
                 <p className="text-slate-400 italic text-sm py-4">

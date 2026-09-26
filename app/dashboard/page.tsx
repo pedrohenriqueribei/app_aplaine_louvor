@@ -20,6 +20,7 @@ import { motion } from "motion/react";
 import { useAuth } from "@/components/AuthProvider";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { NotificationSettings } from "@/components/NotificationSettings";
 
 export default function DashboardPage() {
   const { userData } = useAuth();
@@ -214,6 +215,11 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Configurações de Notificações de Escala via FCM */}
+      <section id="configuracoes-notificacao" className="space-y-4 pt-4">
+        <NotificationSettings />
+      </section>
 
       <div className="pt-12 border-t border-slate-100 dark:border-slate-800 mt-20">
         <div className="bg-slate-50 dark:bg-slate-900 rounded-[3rem] p-12 flex flex-col md:flex-row items-center justify-between gap-8 border border-white dark:border-slate-800">

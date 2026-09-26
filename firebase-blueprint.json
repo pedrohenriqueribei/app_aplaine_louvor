@@ -26,6 +26,21 @@
         "danceGroups": { "type": "array", "items": { "type": "string" }, "description": "Grupos de dança que o integrante participa" },
         "status": { "type": "string", "enum": ["active", "inactive"] },
         "fcmTokens": { "type": "array", "items": { "type": "string" }, "description": "Tokens FCM para notificações push" },
+        "notificationSettings": {
+          "type": "object",
+          "description": "Configurações de avisos de escala e notificações FCM",
+          "properties": {
+            "advanceNoticeHours": { "type": "number", "description": "Horas de antecedência para aviso de escala via FCM" },
+            "fcmEnabled": { "type": "boolean" },
+            "enableReminder2h": { "type": "boolean" },
+            "notifyOnNewSchedule": { "type": "boolean" },
+            "notifyOnSongChanges": { "type": "boolean" },
+            "quietHoursEnabled": { "type": "boolean" },
+            "quietHoursStart": { "type": "string" },
+            "quietHoursEnd": { "type": "string" }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "name", "email", "status"]
