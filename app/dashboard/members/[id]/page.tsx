@@ -18,6 +18,7 @@ import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
 import { motion, AnimatePresence } from "motion/react";
 import { formatPhone } from "@/lib/utils";
+import { BallerinaIcon } from "@/components/BallerinaIcon";
 import {
   ArrowLeft,
   Mail,
@@ -40,6 +41,7 @@ import {
   Check,
   UserMinus,
   AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 
 interface Musician {
@@ -56,7 +58,9 @@ interface Musician {
     worship?: string[];
     secretariat?: string[];
     multimedia?: string[];
+    dance?: string[];
   };
+  danceStyles?: string[];
   status: "active" | "inactive";
   createdAt: any;
 }
@@ -113,7 +117,9 @@ export default function MusicianProfilePage() {
       worship: [] as string[],
       multimedia: [] as string[],
       secretariat: [] as string[],
+      dance: [] as string[],
     },
+    danceStyles: [] as string[],
   });
 
   const vocalRangeList = [
@@ -161,6 +167,23 @@ export default function MusicianProfilePage() {
   ];
 
   const secretariatRolesList = [{ id: "admin", label: "Secretário" }];
+
+  const danceRolesList = [
+    { id: "dance_leader", label: "Líder de Dança" },
+    { id: "dancer", label: "Dançarino(a)" },
+    { id: "choreographer", label: "Coreógrafo(a)" },
+    { id: "costume_manager", label: "Figurino & Acessórios" },
+    { id: "rehearsal_director", label: "Diretor(a) de Ensaio" },
+  ];
+
+  const danceStylesList = [
+    "Ballet Clássico / Adoração",
+    "Dança Contemporânea",
+    "Dança Profética / Espontâneo",
+    "Dança com Fitas / Estandartes",
+    "Hip-Hop / Street Gospel",
+    "Expressão Corporal",
+  ];
 
   useEffect(() => {
     async function fetchMusician() {
@@ -250,7 +273,9 @@ export default function MusicianProfilePage() {
         worship: musician.roles?.worship || [],
         multimedia: musician.roles?.multimedia || [],
         secretariat: musician.roles?.secretariat || [],
+        dance: musician.roles?.dance || [],
       },
+      danceStyles: musician.danceStyles || [],
     });
     setFeedback(null);
     setIsEditModalOpen(true);
@@ -282,7 +307,7 @@ export default function MusicianProfilePage() {
   };
 
   const toggleRole = (
-    dept: "worship" | "multimedia" | "secretariat",
+    dept: "worship" | "multimedia" | "secretariat" | "dance",
     roleId: string,
   ) => {
     setFormData((prev) => {
@@ -300,6 +325,19 @@ export default function MusicianProfilePage() {
     });
   };
 
+  const toggleDanceStyle = (style: string) => {
+    setFormData((prev) => {
+      const current = prev.danceStyles || [];
+      const exists = current.includes(style);
+      return {
+        ...prev,
+        danceStyles: exists
+          ? current.filter((s) => s !== style)
+          : [...current, style],
+      };
+    });
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!id || !musician) return;
@@ -312,6 +350,18 @@ export default function MusicianProfilePage() {
     setFeedback(null);
 
     try {
+      let danceRoles = formData.roles.dance || [];
+      if (danceRoles.includes("dance_leader") && !danceRoles.includes("leader")) {
+        danceRoles = [...danceRoles, "leader"];
+      }
+
+      const finalRoles = {
+        worship: formData.roles.worship || [],
+        multimedia: formData.roles.multimedia || [],
+        secretariat: formData.roles.secretariat || [],
+        dance: danceRoles,
+      };
+
       const payload: any = {
         uid: musician.uid || (id as string),
         name: formData.name.trim(),
@@ -322,7 +372,8 @@ export default function MusicianProfilePage() {
         level: formData.level,
         churchId: formData.churchId,
         status: formData.status,
-        roles: formData.roles,
+        roles: finalRoles,
+        danceStyles: formData.danceStyles || [],
         updatedAt: serverTimestamp(),
       };
 
@@ -381,7 +432,7 @@ export default function MusicianProfilePage() {
 
       // Remove from church department subcollections if present
       if (oldChurchId) {
-        const depts = ["worship", "multimedia", "secretariat"];
+        const depts = ["worship", "multimedia", "secretariat", "dance"];
         for (const dept of depts) {
           try {
             await deleteDoc(
@@ -452,9 +503,12 @@ export default function MusicianProfilePage() {
   const isLeader =
     musician.roles?.worship?.includes("leader") ||
     musician.roles?.multimedia?.includes("leader") ||
-    musician.roles?.secretariat?.includes("leader");
+    musician.roles?.secretariat?.includes("leader") ||
+    musician.roles?.dance?.includes("leader") ||
+    musician.roles?.dance?.includes("dance_leader");
   const isMultimedia = (musician.roles?.multimedia?.length ?? 0) > 0;
   const isSecretariat = (musician.roles?.secretariat?.length ?? 0) > 0;
+  const isDance = (musician.roles?.dance?.length ?? 0) > 0 || (musician.danceStyles?.length ?? 0) > 0;
 
   // Check if the current authenticated user has a leader profile
   const isCurrentUserLeader = Boolean(
@@ -464,7 +518,9 @@ export default function MusicianProfilePage() {
       userData?.roles?.worship?.includes("leader") ||
       userData?.roles?.multimedia?.includes("leader") ||
       userData?.roles?.multimedia?.includes("multimedia_leader") ||
-      userData?.roles?.secretariat?.includes("leader"),
+      userData?.roles?.secretariat?.includes("leader") ||
+      userData?.roles?.dance?.includes("leader") ||
+      userData?.roles?.dance?.includes("dance_leader"),
   );
 
   let displayRole = "Instrumentista Integrante";
@@ -475,6 +531,10 @@ export default function MusicianProfilePage() {
     displayRole = "Líder de Ministério";
     displayRoleShort = "Líder";
     shieldColor = "text-amber-500";
+  } else if (isDance && !isMultimedia && !isSecretariat && !musician.instruments?.length && !musician.vocalRange) {
+    displayRole = "Ministério de Dança";
+    displayRoleShort = "Dança";
+    shieldColor = "text-rose-500";
   } else if (isMultimedia) {
     displayRole = "Multimídia";
     displayRoleShort = "Multimídia";
@@ -765,6 +825,58 @@ export default function MusicianProfilePage() {
                       </div>
                     </section>
                   )}
+
+                {((musician.roles?.dance && musician.roles.dance.length > 0) ||
+                  (musician.danceStyles && musician.danceStyles.length > 0)) && (
+                  <section>
+                    <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-1.5">
+                      <BallerinaIcon className="w-4 h-4 text-rose-600" />
+                      <span>Ministério de Dança</span>
+                    </h3>
+                    <div className="space-y-4">
+                      {musician.roles?.dance && musician.roles.dance.length > 0 && (
+                        <div className="space-y-2">
+                          <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                            Funções e Cargos
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            {musician.roles.dance.map((roleId) => {
+                              const found = danceRolesList.find((r) => r.id === roleId);
+                              const label = found ? found.label : (roleId === "leader" ? "Líder de Dança" : roleId);
+                              return (
+                                <span
+                                  key={roleId}
+                                  className="px-4 py-2 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 rounded-xl text-xs font-bold border border-rose-100 dark:border-rose-900/50 uppercase"
+                                >
+                                  {label}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {musician.danceStyles && musician.danceStyles.length > 0 && (
+                        <div className="space-y-2">
+                          <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-rose-500" />
+                            <span>Estilos Praticados</span>
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            {musician.danceStyles.map((style) => (
+                              <span
+                                key={style}
+                                className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700"
+                              >
+                                {style}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
 
                 {((musician.instruments && musician.instruments.length > 0) ||
                   musician.vocalRange ||
@@ -1243,6 +1355,53 @@ export default function MusicianProfilePage() {
                           {r.label}
                         </button>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* Dança */}
+                  <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1.5">
+                      <BallerinaIcon className="w-4 h-4 text-rose-600" />
+                      <span>Ministério de Dança</span>
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {danceRolesList.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => toggleRole("dance", r.id)}
+                          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                            formData.roles.dance?.includes(r.id)
+                              ? "bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/20"
+                              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-rose-300"
+                          }`}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2 flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-rose-500" />
+                        <span>Estilos & Habilidades Praticadas</span>
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {danceStylesList.map((st) => (
+                          <button
+                            key={st}
+                            type="button"
+                            onClick={() => toggleDanceStyle(st)}
+                            className={`py-1.5 px-3 rounded-lg text-[11px] font-bold transition-all border cursor-pointer ${
+                              formData.danceStyles?.includes(st)
+                                ? "bg-rose-50 text-rose-700 border-rose-400 dark:bg-rose-950/40 dark:text-rose-300 font-black shadow-xs"
+                                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 hover:border-rose-300"
+                            }`}
+                          >
+                            {st}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>

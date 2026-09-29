@@ -207,9 +207,9 @@ export default function BandDetailPage() {
 
               <div className="grid grid-cols-1 gap-4">
                 {members.length > 0 ? (
-                  members.map((member) => (
+                  members.map((member, mIdx) => (
                     <motion.div
-                      key={member.uid}
+                      key={`band-member-${member.uid}-${mIdx}`}
                       layout
                       className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/50 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 group transition-all hover:border-blue-200 dark:hover:border-blue-800"
                     >
@@ -291,9 +291,9 @@ export default function BandDetailPage() {
                 <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                   {churchMembers
                     .filter((m) => !band.memberIds.includes(m.uid))
-                    .map((member) => (
+                    .map((member, mIdx) => (
                       <button
-                        key={member.uid}
+                        key={`add-member-${member.uid}-${mIdx}`}
                         disabled={updating}
                         onClick={() =>
                           handleUpdateMembers([...band.memberIds, member.uid])

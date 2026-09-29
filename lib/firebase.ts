@@ -1,11 +1,22 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, getFirestore } from 'firebase/firestore';
 import { getMessaging, isSupported } from 'firebase/messaging';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+
+const dbInstance = (() => {
+  try {
+    return initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+    }, (firebaseConfig as any).firestoreDatabaseId);
+  } catch {
+    return getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+  }
+})();
+
+export const db = dbInstance;
 export const auth = getAuth(app);
 
 // Messaging initialization - check for browser support and window existence

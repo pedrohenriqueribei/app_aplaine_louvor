@@ -100,14 +100,18 @@ export async function POST(req: NextRequest) {
       const errMsg = fcmError instanceof Error ? fcmError.message : String(fcmError);
       const isPermissionDenied = errMsg.includes('PERMISSION_DENIED') ||
                                  fcmError.code === 'messaging/permission-denied';
+      const isCredentialError = errMsg.includes('ENOENT') ||
+                                errMsg.includes('credential') ||
+                                errMsg.includes('Could not load the default credentials');
 
-      if (isPermissionDenied) {
-        console.warn('FCM permission denied. Enable the Cloud Messaging API and grant the service account access.', errMsg);
+      if (isPermissionDenied || isCredentialError) {
+        console.warn('FCM service account or credentials unavailable:', errMsg);
         return NextResponse.json({
           success: false,
-          error: 'FCM_PERMISSION_DENIED',
-          message: 'A API do Firebase Cloud Messaging não está habilitada ou a service account não tem permissão.'
-        }, { status: 503 });
+          error: isCredentialError ? 'FCM_CREDENTIALS_UNAVAILABLE' : 'FCM_PERMISSION_DENIED',
+          message: 'As credenciais do serviço de mensagens (FCM) não estão disponíveis neste ambiente de execução.',
+          skipped
+        }, { status: 200 });
       }
 
       throw fcmError;
@@ -115,6 +119,6 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error('Error sending push notification:', error);
-    return NextResponse.json({ error: 'Falha ao enviar notificação.' }, { status: 500 });
+    return NextResponse.json({ error: 'Falha ao processar envio de notificações.', details: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }

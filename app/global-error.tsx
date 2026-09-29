@@ -9,9 +9,31 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const isChunkError =
+    error?.name === 'ChunkLoadError' ||
+    error?.message?.includes('Loading chunk') ||
+    error?.message?.includes('Failed to fetch dynamically imported module');
+
   useEffect(() => {
+    if (isChunkError && typeof window !== 'undefined') {
+      const lastReload = sessionStorage.getItem('last_chunk_reload');
+      const now = Date.now();
+      if (!lastReload || now - parseInt(lastReload, 10) > 10000) {
+        sessionStorage.setItem('last_chunk_reload', now.toString());
+        window.location.reload();
+        return;
+      }
+    }
     console.error('Global application error:', error);
-  }, [error]);
+  }, [error, isChunkError]);
+
+  const handleRetry = () => {
+    if (isChunkError && typeof window !== 'undefined') {
+      window.location.reload();
+    } else {
+      reset();
+    }
+  };
 
   return (
     <html lang="pt-br">
@@ -27,7 +49,7 @@ export default function GlobalError({
             Ocorreu um erro no carregamento da aplicação.
           </p>
           <button
-            onClick={() => reset()}
+            onClick={handleRetry}
             className="bg-blue-800 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-blue-900 transition-all shadow-md active:scale-95"
           >
             Tentar novamente

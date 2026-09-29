@@ -19,7 +19,9 @@ import {
   Mic2,
   Home,
   Church,
+  Sparkles,
 } from "lucide-react";
+import { BallerinaIcon } from "@/components/BallerinaIcon";
 import { auth, db } from "@/lib/firebase";
 import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { formatPhone } from "@/lib/utils";
@@ -31,16 +33,35 @@ function RegisterForm() {
   const churchIdFromUrl = searchParams.get("churchId");
   const redirectPath = searchParams.get("redirect") || "/dashboard";
   const roleFromUrl = searchParams.get("role"); // Don't default to musico directly
+  const normalizedInitialRole = roleFromUrl === "dance" ? "danca" : roleFromUrl;
 
-  const [selectedRole, setSelectedRole] = useState<string | null>(roleFromUrl);
+  const [selectedRole, setSelectedRole] = useState<string | null>(normalizedInitialRole);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [instrumentsSelected, setInstrumentsSelected] = useState<string[]>([]);
+  const [danceStylesSelected, setDanceStylesSelected] = useState<string[]>([]);
   const [vocalRange, setVocalRange] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const danceRolesList = [
+    { id: "dancer", label: "Dançarino(a)" },
+    { id: "choreographer", label: "Coreógrafo(a)" },
+    { id: "dance_leader", label: "Líder de Dança" },
+    { id: "costume_manager", label: "Figurino & Acessórios" },
+    { id: "rehearsal_director", label: "Diretor(a) de Ensaio" },
+  ];
+
+  const danceStylesList = [
+    "Ballet Clássico / Adoração",
+    "Dança Contemporânea",
+    "Dança Profética / Espontâneo",
+    "Dança com Fitas / Estandartes",
+    "Hip-Hop / Street Gospel",
+    "Expressão Corporal & Teatro",
+  ];
 
   const [dynamicInstruments, setDynamicInstruments] = useState<any[]>([
     { id: "acousticGuitarist", label: "Violão", value: "Violão" },
@@ -192,16 +213,30 @@ function RegisterForm() {
         if (instrumentsSelected.length === 0) {
           throw new Error("A seleção de pelo menos uma função técnica/digital é obrigatória.");
         }
+      } else if (selectedRole === "danca") {
+        if (instrumentsSelected.length === 0 && danceStylesSelected.length === 0) {
+          throw new Error("Selecione pelo menos uma função ou estilo de dança.");
+        }
       }
 
       const multimediaRoles = selectedRole === "multimidia" ? [...instrumentsSelected] : [];
       if (multimediaRoles.includes("multimedia_leader") && !multimediaRoles.includes("leader")) {
         multimediaRoles.push("leader");
       }
+
+      const danceRoles = selectedRole === "danca" ? [...instrumentsSelected] : [];
+      if (danceRoles.includes("dance_leader") && !danceRoles.includes("leader")) {
+        danceRoles.push("leader");
+      }
+      if (selectedRole === "danca" && danceRoles.length === 0) {
+        danceRoles.push("dancer");
+      }
+
       const userRoles = {
         worship: selectedRole === "musico" ? instrumentsSelected : [],
         multimedia: multimediaRoles,
         secretariat: selectedRole === "secretaria" ? ["admin"] : [],
+        dance: danceRoles,
       };
 
       await signUpWithEmail(email, password, name, {
@@ -210,6 +245,7 @@ function RegisterForm() {
         vocalRange: selectedRole === "musico" ? vocalRange : "",
         churchId: churchIdFromUrl || "",
         roles: userRoles,
+        danceStyles: selectedRole === "danca" ? danceStylesSelected : [],
       });
 
       router.push(redirectPath);
@@ -227,6 +263,14 @@ function RegisterForm() {
         setVocalRange("");
       }
       return isSelected ? prev.filter((i) => i !== inst) : [...prev, inst];
+    });
+  };
+
+  const toggleDanceStyle = (style: string) => {
+    setDanceStylesSelected((prev) => {
+      return prev.includes(style)
+        ? prev.filter((s) => s !== style)
+        : [...prev, style];
     });
   };
 
@@ -357,6 +401,30 @@ function RegisterForm() {
                     </p>
                   </div>
                 </button>
+
+                {/* Dança Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedRole("danca");
+                    if (instrumentsSelected.length === 0) {
+                      setInstrumentsSelected(["dancer"]);
+                    }
+                  }}
+                  className="w-full bg-white p-6 rounded-3xl border-2 border-slate-200 hover:border-rose-500 hover:shadow-xl hover:shadow-rose-900/5 transition-all duration-300 text-left cursor-pointer group flex items-center gap-4"
+                >
+                  <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-110">
+                    <BallerinaIcon className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 group-hover:text-rose-600 transition-colors">
+                      Ministério de Dança
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
+                      Participe do louvor com coreografias, expressão corporal, fitas e estandartes.
+                    </p>
+                  </div>
+                </button>
               </div>
 
               <p className="text-center text-slate-600 font-medium">
@@ -403,14 +471,18 @@ function RegisterForm() {
                     ? "Cadastro de Músico"
                     : selectedRole === "multimidia"
                       ? "Cadastro de Multimídia"
-                      : "Cadastro de Secretaria"}
+                      : selectedRole === "danca"
+                        ? "Cadastro de Dança"
+                        : "Cadastro de Secretaria"}
                 </h1>
                 <p className="text-slate-500 font-medium">
                   {selectedRole === "musico"
-                    ? "Preencha os dados abaixo para se juntar ao ministério."
+                    ? "Preencha os dados abaixo para se juntar ao ministério de louvor."
                     : selectedRole === "multimidia"
                       ? "Preencha os dados abaixo para apoiar na equipe técnica."
-                      : "Preencha os dados abaixo para apoiar na secretaria."}
+                      : selectedRole === "danca"
+                        ? "Preencha os dados abaixo para participar do ministério de dança."
+                        : "Preencha os dados abaixo para apoiar na secretaria."}
                 </p>
               </div>
 
@@ -586,6 +658,67 @@ function RegisterForm() {
                             }`}
                           >
                             {spec.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedRole === "danca" && (
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-slate-700 ml-1 flex items-center gap-1">
+                        <BallerinaIcon className="w-4 h-4 text-rose-600" />
+                        <span>Funções no Ministério de Dança</span>
+                        <span className="text-red-500 font-bold">*</span>
+                      </label>
+                      <p className="text-xs text-slate-400 ml-1 -mt-1 font-medium">
+                        Selecione suas funções ministeriais (pode marcar mais de uma).
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        {danceRolesList.map((role) => (
+                          <button
+                            key={role.id}
+                            type="button"
+                            onClick={() => toggleInstrument(role.id)}
+                            className={`py-3 px-2 rounded-xl text-xs font-bold transition-all border ${
+                              instrumentsSelected.includes(role.id)
+                                ? "bg-rose-600 text-white border-rose-600 shadow-lg shadow-rose-600/20"
+                                : "bg-white text-slate-600 border-slate-200 hover:border-rose-300"
+                            }`}
+                          >
+                            {role.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-slate-700 ml-1 flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-rose-500" />
+                        <span>Estilos & Habilidades Praticadas</span>
+                        <span className="text-xs text-slate-400 font-normal">(opcional)</span>
+                      </label>
+                      <p className="text-xs text-slate-400 ml-1 -mt-1 font-medium">
+                        Quais estilos você dança ou tem interesse em atuar?
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                        {danceStylesList.map((style) => (
+                          <button
+                            key={style}
+                            type="button"
+                            onClick={() => toggleDanceStyle(style)}
+                            className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all border text-left flex items-center justify-between ${
+                              danceStylesSelected.includes(style)
+                                ? "bg-rose-50 text-rose-700 border-rose-400 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-700 font-black shadow-xs"
+                                : "bg-white text-slate-600 border-slate-200 hover:border-rose-300"
+                            }`}
+                          >
+                            <span>{style}</span>
+                            {danceStylesSelected.includes(style) && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            )}
                           </button>
                         ))}
                       </div>

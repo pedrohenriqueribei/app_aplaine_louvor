@@ -659,6 +659,28 @@ export default function MinistryDetailPage() {
                 </Link>
               </div>
             )}
+            {isDance && isDeptLeader && (
+              <div className="pt-4">
+                <Link
+                  id="btn-configurar-escala-danca"
+                  href={`/dashboard/churches/${id}/ministries/danca/scale-config`}
+                  className="inline-flex items-center gap-2 bg-rose-600 hover:bg-rose-700 dark:bg-rose-600 dark:hover:bg-rose-500 text-white font-bold px-6 py-3 rounded-2xl shadow-lg shadow-rose-600/15 active:scale-95 transition-all text-sm cursor-pointer"
+                >
+                  <Sliders className="w-4 h-4" /> Configurar Escala de Dança
+                </Link>
+              </div>
+            )}
+            {type === "louvor" && isDeptLeader && (
+              <div className="pt-4">
+                <Link
+                  id="btn-configurar-escala-louvor"
+                  href={`/dashboard/churches/${id}/ministries/louvor/scale-config`}
+                  className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 dark:bg-blue-800 dark:hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-2xl shadow-lg shadow-blue-800/15 active:scale-95 transition-all text-sm cursor-pointer"
+                >
+                  <Sliders className="w-4 h-4" /> Configurar Escala de Louvor
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -851,7 +873,7 @@ export default function MinistryDetailPage() {
                   .filter((m) => m.role === "líder")
                   .map((leader, index) => (
                     <motion.div
-                      key={leader.uid}
+                      key={`leader-${leader.uid}-${index}`}
                       initial={{ opacity: 0, y: 14 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{
@@ -893,7 +915,7 @@ export default function MinistryDetailPage() {
                   .filter((m) => m.role !== "líder")
                   .map((member, index) => (
                     <motion.div
-                      key={member.uid}
+                      key={`member-${member.uid}-${index}`}
                       initial={{ opacity: 0, y: 16, scale: 0.98 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       transition={{

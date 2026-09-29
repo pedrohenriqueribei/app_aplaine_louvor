@@ -3,7 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Music, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, KeyRound, CheckCircle2 } from 'lucide-react';
+import { auth } from '@/lib/firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import Link from 'next/link';
 
 export default function AdminLogin() {
@@ -33,11 +35,13 @@ export default function AdminLogin() {
 }
 
 function AdminLoginForm() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('pedrohenriqueribei@gmail.com');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isSuperAdmin, loading, signInWithEmail, signInWithGoogle } = useAuth();
@@ -46,7 +50,7 @@ function AdminLoginForm() {
 
   useEffect(() => {
     if (!loading && user) {
-      if (isSuperAdmin) {
+      if (isSuperAdmin || user.email === 'pedrohenriqueribei@gmail.com') {
         router.push(redirect);
       } else {
         router.push('/dashboard');
@@ -63,6 +67,7 @@ function AdminLoginForm() {
 
     setIsSubmitting(true);
     setError('');
+    setSuccessMsg('');
 
     try {
       await signInWithEmail(email, password);
@@ -81,6 +86,7 @@ function AdminLoginForm() {
   const handleGoogleSignIn = async () => {
     setIsSubmitting(true);
     setError('');
+    setSuccessMsg('');
     try {
       await signInWithGoogle();
       // O useEffect cuidará do redirecionamento
@@ -88,6 +94,29 @@ function AdminLoginForm() {
       console.error(err);
       setError('Erro ao fazer login com o Google.');
       setIsSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Por favor, informe seu e-mail no campo acima para redefinir a senha.');
+      return;
+    }
+    setIsResetting(true);
+    setError('');
+    setSuccessMsg('');
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setSuccessMsg(`Enviamos um link de redefinição de senha para ${email}. Verifique sua caixa de entrada e spam.`);
+    } catch (err: any) {
+      console.error('Error sending password reset email:', err);
+      if (err.code === 'auth/user-not-found') {
+        setError('Nenhuma conta encontrada com este e-mail.');
+      } else {
+        setError('Não foi possível enviar o e-mail de redefinição. Verifique o endereço digitado.');
+      }
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -121,6 +150,27 @@ function AdminLoginForm() {
           </div>
         )}
 
+        {successMsg && (
+          <div className="mb-6 p-4 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 rounded-xl text-sm font-medium border border-emerald-200 dark:border-emerald-800 flex items-start gap-2">
+            <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-600 mt-0.5" />
+            <span>{successMsg}</span>
+          </div>
+        )}
+
+        {/* Informações da conta administrativa */}
+        <div className="mb-6 p-4 bg-blue-50/70 dark:bg-blue-950/40 rounded-2xl border border-blue-100 dark:border-blue-900/50 space-y-1">
+          <p className="text-[11px] font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>Conta Super Administrador Registrada</span>
+          </p>
+          <p className="text-xs text-slate-600 dark:text-slate-300 font-mono font-medium">
+            pedrohenriqueribei@gmail.com
+          </p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Você pode entrar com 1 clique usando o botão <b>Google</b> abaixo ou sua senha cadastrada.
+          </p>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
@@ -131,28 +181,38 @@ function AdminLoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all dark:text-white"
-              placeholder="admin@applaine.com.br"
+              placeholder="pedrohenriqueribei@gmail.com"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
-              Senha
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">
+                Senha
+              </label>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={isResetting}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium cursor-pointer"
+              >
+                {isResetting ? 'Enviando link...' : 'Esqueceu a senha?'}
+              </button>
+            </div>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all dark:text-white"
-                placeholder="Sua senha segura"
+                placeholder="Sua senha secreta"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
               >
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
@@ -162,7 +222,7 @@ function AdminLoginForm() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             {isSubmitting ? (
               <Loader2 className="w-5 h-5 animate-spin" />

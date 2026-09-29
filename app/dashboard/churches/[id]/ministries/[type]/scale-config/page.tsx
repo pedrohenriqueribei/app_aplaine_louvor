@@ -24,7 +24,11 @@ import {
   Mic2,
   Layers,
   Trash2,
+  Sparkles,
+  Tag,
+  Users,
 } from "lucide-react";
+import { BallerinaIcon } from "@/components/BallerinaIcon";
 
 const KeyboardIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
@@ -162,7 +166,14 @@ const DEFAULT_ROLES_CONFIG: Record<string, Record<string, RoleConfig>> = {
     contralto: { enabled: false, count: 0 },
     baritone: { enabled: false, count: 0 },
     mezzoSoprano: { enabled: false, count: 0 },
-  }
+  },
+  danca: {
+    danceLeader: { enabled: true, count: 1 },
+    choreographer: { enabled: true, count: 1 },
+    costume: { enabled: true, count: 1 },
+    dancers: { enabled: true, count: 4 },
+    rehearsalDirector: { enabled: false, count: 0 },
+  },
 };
 
 const ROLE_METADATA: Record<
@@ -248,6 +259,33 @@ const ROLE_METADATA: Record<
       icon: Mic2,
     },
   },
+  danca: {
+    danceLeader: {
+      label: "Líder de Dança",
+      desc: "Lidera os ensaios, ministrações e conduz o ministério de dança no altar.",
+      icon: BallerinaIcon,
+    },
+    choreographer: {
+      label: "Coreógrafo(a)",
+      desc: "Responsável pela criação, dinâmica, sequências e ensaios das coreografias.",
+      icon: Sparkles,
+    },
+    costume: {
+      label: "Figurinista",
+      desc: "Responsável pelas vestimentas, túnicas, tecidos, paleta de cores e adereços de dança.",
+      icon: Tag,
+    },
+    dancers: {
+      label: "Bailarinos(as)",
+      desc: "Integrantes que executam a dança e ministração no altar ou apresentações.",
+      icon: Users,
+    },
+    rehearsalDirector: {
+      label: "Diretor(a) de Ensaio",
+      desc: "Coordena a pontualidade, repetições e organização dos ensaios de dança.",
+      icon: Clock,
+    },
+  },
 };
 
 export default function ScaleConfigPage() {
@@ -259,8 +297,10 @@ export default function ScaleConfigPage() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const activeType = type === "louvor" ? "louvor" : "multimidia";
-  const isWorship = activeType === "louvor";
+  const isDance = type === "danca" || type === "dance";
+  const isWorship = type === "louvor";
+  const isMultimedia = type === "multimidia";
+  const activeType = isDance ? "danca" : isWorship ? "louvor" : "multimidia";
 
   interface ScaleProfile {
     id: string;
@@ -309,14 +349,16 @@ export default function ScaleConfigPage() {
   const [editingMoments, setEditingMoments] = useState<ServiceMoment[]>([]);
 
   useEffect(() => {
-    if (type !== "multimidia" && type !== "louvor") {
+    if (type !== "multimidia" && type !== "louvor" && type !== "danca" && type !== "dance") {
       setLoading(false);
       return;
     }
 
     async function loadConfig() {
       try {
-        const configDocId = isWorship
+        const configDocId = isDance
+          ? `dance_scale_config_${churchId}`
+          : isWorship
           ? `worship_scale_config_${churchId}`
           : `multimedia_scale_config_${churchId}`;
 
@@ -396,7 +438,7 @@ export default function ScaleConfigPage() {
         // Fetch direct department member subroles for the authenticated user
         const userUid = user?.uid || userData?.uid;
         if (userUid && churchId) {
-          const deptKey = type === "louvor" ? "worship" : "multimedia";
+          const deptKey = isDance ? "dance" : type === "louvor" ? "worship" : "multimedia";
           const dMemberRef = doc(
             db,
             "churches",
@@ -422,7 +464,7 @@ export default function ScaleConfigPage() {
     if (churchId) {
       loadConfig();
     }
-  }, [churchId, type, activeType, isWorship, user, userData]);
+  }, [churchId, type, activeType, isDance, isWorship, user, userData]);
 
   useEffect(() => {
     if (!churchId) return;
@@ -511,9 +553,12 @@ export default function ScaleConfigPage() {
     }
   };
 
+  const deptKey = isDance ? "dance" : type === "louvor" ? "worship" : "multimedia";
+
   const isLeader =
     memberSubroles.includes("leader") ||
-    userData?.roles?.[type === "louvor" ? "worship" : "multimedia"]?.includes("leader") ||
+    userData?.roles?.[deptKey]?.includes("leader") ||
+    (isDance && (userData?.roles?.dance?.includes("dance_leader") || userData?.roles?.dance?.includes("leader"))) ||
     userData?.role === "líder" ||
     userData?.super_admin === true;
 
@@ -525,7 +570,7 @@ export default function ScaleConfigPage() {
           Acesso Restrito
         </h2>
         <p className="text-slate-500 dark:text-slate-400 text-sm mb-8 leading-relaxed">
-          Apenas líderes certificados do Ministério de {isWorship ? "Louvor" : "Multimídia"} possuem autorização para configurar o modelo de escala.
+          Apenas líderes certificados do Ministério de {isDance ? "Dança" : isWorship ? "Louvor" : "Multimídia"} possuem autorização para configurar o modelo de escala.
         </p>
         <button
           onClick={() => router.back()}
@@ -537,7 +582,7 @@ export default function ScaleConfigPage() {
     );
   }
 
-  if (type !== "multimidia" && type !== "louvor" && !loading) {
+  if (type !== "multimidia" && type !== "louvor" && type !== "danca" && type !== "dance" && !loading) {
     return (
       <div className="max-w-md mx-auto mt-20 text-center p-12 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[3rem] shadow-xl">
         <ShieldAlert className="w-16 h-16 text-purple-500 mx-auto mb-6" />
@@ -565,28 +610,30 @@ export default function ScaleConfigPage() {
     if (custom) {
       return {
         label: custom.label,
-        desc: custom.desc || "Instrumento personalizado adicionado pelo líder.",
-        icon: Music,
+        desc: custom.desc || (isDance ? "Função personalizada de dança adicionada pelo líder." : "Instrumento personalizado adicionado pelo líder."),
+        icon: isDance ? BallerinaIcon : Music,
       };
     }
 
     return {
       label: key,
-      desc: "Função personalizada do ministério.",
-      icon: Music,
+      desc: isDance ? "Função personalizada do ministério de dança." : "Função personalizada do ministério.",
+      icon: isDance ? BallerinaIcon : Music,
     };
   };
 
   const handleAddCustomInstrument = (name: string) => {
     if (!name.trim()) return;
-    const slug = `custom_instrument_${Date.now()}`;
+    const slug = isDance ? `custom_dance_${Date.now()}` : `custom_instrument_${Date.now()}`;
 
     // 1. Update customMetadata
     setCustomMetadata((prev) => ({
       ...prev,
       [slug]: {
         label: name.trim(),
-        desc: "Instrumento personalizado adicionado pelo líder.",
+        desc: isDance
+          ? "Função de dança personalizada adicionada pelo líder."
+          : "Instrumento personalizado adicionado pelo líder.",
         isCustom: true,
       }
     }));
@@ -763,7 +810,9 @@ export default function ScaleConfigPage() {
 
     try {
       const userUid = userData?.uid || user?.uid || "system";
-      const configDocId = isWorship
+      const configDocId = isDance
+        ? `dance_scale_config_${churchId}`
+        : isWorship
         ? `worship_scale_config_${churchId}`
         : `multimedia_scale_config_${churchId}`;
 
@@ -808,7 +857,9 @@ export default function ScaleConfigPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className={`w-16 h-16 border-4 border-slate-100 rounded-full animate-spin ${isWorship ? "border-t-blue-800" : "border-t-purple-800"}`}></div>
+        <div className={`w-16 h-16 border-4 border-slate-100 rounded-full animate-spin ${
+          isDance ? "border-t-rose-600" : isWorship ? "border-t-blue-800" : "border-t-purple-800"
+        }`}></div>
       </div>
     );
   }
@@ -816,7 +867,7 @@ export default function ScaleConfigPage() {
   // Generate Slots representation for Interactive Preview
   const previewSlots: { roleName: string; icon: any }[] = [];
   Object.entries(roles).forEach(([key, val]) => {
-    const isAvailable = !isWorship || availableInstruments.includes(key);
+    const isAvailable = availableInstruments.includes(key);
     if (val.enabled && isAvailable) {
       const meta = getRoleMetadata(key);
       if (meta) {
@@ -835,31 +886,55 @@ export default function ScaleConfigPage() {
       <header className="flex items-center justify-between">
         <button
           onClick={() => router.back()}
-          className={`flex items-center gap-2 text-slate-400 dark:text-slate-500 font-bold transition-colors group cursor-pointer ${isWorship ? "hover:text-blue-800 dark:hover:text-blue-400" : "hover:text-purple-800 dark:hover:text-purple-400"}`}
+          className={`flex items-center gap-2 text-slate-400 dark:text-slate-500 font-bold transition-colors group cursor-pointer ${
+            isDance
+              ? "hover:text-rose-600 dark:hover:text-rose-400"
+              : isWorship
+              ? "hover:text-blue-800 dark:hover:text-blue-400"
+              : "hover:text-purple-800 dark:hover:text-purple-400"
+          }`}
         >
           <div className="w-10 h-10 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center border border-slate-100 dark:border-slate-800 group-hover:shadow-lg transition-all">
             <ArrowLeft className="w-5 h-5" />
           </div>
-          <span>Voltar para {isWorship ? "Ministério de Louvor" : "Multimídia"}</span>
+          <span>Voltar para {isDance ? "Ministério de Dança" : isWorship ? "Ministério de Louvor" : "Multimídia"}</span>
         </button>
       </header>
 
       {/* Banner introduction */}
       <section className="bg-white dark:bg-slate-900 rounded-[3.5rem] p-12 border border-slate-150 dark:border-slate-800 shadow-sm relative overflow-hidden">
-        <div className={`absolute top-0 right-0 w-96 h-96 blur-[120px] -mr-48 -mt-48 opacity-40 ${isWorship ? "bg-blue-100 dark:bg-blue-900/15" : "bg-purple-100 dark:bg-purple-900/15"}`}></div>
+        <div className={`absolute top-0 right-0 w-96 h-96 blur-[120px] -mr-48 -mt-48 opacity-40 ${
+          isDance
+            ? "bg-rose-100 dark:bg-rose-900/15"
+            : isWorship
+            ? "bg-blue-100 dark:bg-blue-900/15"
+            : "bg-purple-100 dark:bg-purple-900/15"
+        }`}></div>
         <div className="relative z-10 flex flex-col md:flex-row gap-10 items-center">
-          <div className={`w-24 h-24 rounded-[2.5rem] shadow-2xl flex items-center justify-center text-white shrink-0 ${isWorship ? "bg-blue-800 shadow-blue-800/35" : "bg-purple-800 shadow-purple-800/35"}`}>
-            <Sliders size={42} />
+          <div className={`w-24 h-24 rounded-[2.5rem] shadow-2xl flex items-center justify-center text-white shrink-0 ${
+            isDance
+              ? "bg-rose-600 shadow-rose-600/35"
+              : isWorship
+              ? "bg-blue-800 shadow-blue-800/35"
+              : "bg-purple-800 shadow-purple-800/35"
+          }`}>
+            {isDance ? <BallerinaIcon className="w-12 h-12" /> : <Sliders size={42} />}
           </div>
           <div className="space-y-3">
-            <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${isWorship ? "bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 border-blue-100 dark:border-blue-900/40" : "bg-purple-50 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400 border-purple-100 dark:border-purple-900/40"}`}>
+            <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${
+              isDance
+                ? "bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 border-rose-100 dark:border-rose-900/40"
+                : isWorship
+                ? "bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 border-blue-100 dark:border-blue-900/40"
+                : "bg-purple-50 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400 border-purple-100 dark:border-purple-900/40"
+            }`}>
               Escala de Voluntários
             </span>
             <h1 className="text-3xl md:text-4xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tight">
-              Configurar Escala de {isWorship ? "Louvor" : "Multimídia"}
+              Configurar Escala de {isDance ? "Dança" : isWorship ? "Louvor" : "Multimídia"}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 font-medium text-base max-w-2xl">
-              Defina os papéis que fazem parte da sua escala semanal de {isWorship ? "louvor" : "multimídia"} e o número necessário de integrantes por função.
+              Defina os papéis que fazem parte da sua escala semanal de {isDance ? "dança" : isWorship ? "louvor" : "multimídia"} e o número necessário de integrantes por função (líderes, coreógrafos, figurinistas e bailarinos).
             </p>
           </div>
         </div>
@@ -874,7 +949,7 @@ export default function ScaleConfigPage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-lg font-display font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                    <Layers className={`w-5 h-5 ${isWorship ? "text-blue-600" : "text-purple-600"}`} />
+                    <Layers className={`w-5 h-5 ${isDance ? "text-rose-600" : isWorship ? "text-blue-600" : "text-purple-600"}`} />
                     Perfis de Escala
                   </h3>
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
@@ -887,7 +962,9 @@ export default function ScaleConfigPage() {
                   <button
                     onClick={() => setIsAddingProfile(true)}
                     className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm ${
-                      isWorship
+                      isDance
+                        ? "bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/45 dark:hover:bg-rose-900/35 dark:text-rose-300"
+                        : isWorship
                         ? "bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/45 dark:hover:bg-blue-900/35 dark:text-blue-300"
                         : "bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/45 dark:hover:bg-purple-900/35 dark:text-purple-300"
                     }`}
@@ -902,7 +979,7 @@ export default function ScaleConfigPage() {
                       placeholder="Nome do perfil..."
                       value={newProfileName}
                       onChange={(e) => setNewProfileName(e.target.value)}
-                      className="bg-transparent border-0 outline-none text-xs px-2.5 py-1.5 w-full text-slate-800 dark:text-slate-100"
+                      className="bg-transparent border-0 outline-none text-xs px-2.5 py-1.5 w-full text-slate-800 dark:text-slate-100 font-bold"
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleAddProfile();
@@ -916,7 +993,11 @@ export default function ScaleConfigPage() {
                       onClick={handleAddProfile}
                       disabled={!newProfileName.trim()}
                       className={`p-2 rounded-lg text-white font-bold disabled:opacity-45 cursor-pointer ${
-                        isWorship ? "bg-blue-800 hover:bg-blue-900" : "bg-purple-800 hover:bg-purple-900"
+                        isDance
+                          ? "bg-rose-600 hover:bg-rose-700"
+                          : isWorship
+                          ? "bg-blue-800 hover:bg-blue-900"
+                          : "bg-purple-800 hover:bg-purple-900"
                       }`}
                     >
                       <Check className="w-3.5 h-3.5" />
@@ -947,7 +1028,9 @@ export default function ScaleConfigPage() {
                       onClick={() => !isActive && handleSwitchProfile(p.id)}
                       className={`group relative flex flex-col justify-between p-5 rounded-[2rem] border transition-all duration-300 cursor-pointer overflow-hidden ${
                         isActive
-                          ? isWorship
+                          ? isDance
+                            ? "bg-gradient-to-br from-rose-600 via-rose-700 to-pink-950 border-rose-500 shadow-xl shadow-rose-500/20 text-white"
+                            : isWorship
                             ? "bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-950 border-blue-600 shadow-xl shadow-blue-500/20 text-white"
                             : "bg-gradient-to-br from-purple-700 via-purple-800 to-indigo-950 border-purple-600 shadow-xl shadow-purple-500/20 text-white"
                           : "bg-white dark:bg-slate-900 border-slate-150 dark:border-slate-800/80 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-lg hover:shadow-slate-100/50 dark:hover:shadow-none hover:-translate-y-0.5"
@@ -964,7 +1047,9 @@ export default function ScaleConfigPage() {
                           <div className={`p-2 rounded-xl shrink-0 transition-all ${
                             isActive
                               ? "bg-white/20 text-white"
-                              : isWorship
+                              : isDance
+                                ? "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300"
+                                : isWorship
                                 ? "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300"
                                 : "bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300"
                           }`}>
@@ -1176,7 +1261,151 @@ export default function ScaleConfigPage() {
               </div>
             )}
 
-            {!isWorship && (
+            {isDance && (
+              <div className="p-6 md:p-8 bg-slate-50/50 dark:bg-slate-950/25 rounded-[3.5rem] border border-slate-150 dark:border-slate-800/80 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-display font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                      <BallerinaIcon className="w-5 h-5 text-rose-600 shrink-0" />
+                      Cargos e Funções de Dança
+                    </h3>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 leading-normal">
+                      Ative ou desative os cargos disponíveis no ministério de dança da sua igreja (líderes, coreógrafos, figurinistas e bailarinos). Apenas os marcados estarão expostos para configurar vagas e escalar voluntários.
+                    </p>
+                  </div>
+
+                  {/* Add dynamic custom role input/button */}
+                  {!isAddingInstrument ? (
+                    <button
+                      onClick={() => setIsAddingInstrument(true)}
+                      className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm bg-rose-50 hover:bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:hover:bg-rose-900/30 dark:text-rose-300 shrink-0 active:scale-95"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Adicionar Função Customizada
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 max-w-sm w-full bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
+                      <input
+                        type="text"
+                        placeholder="Nome da função..."
+                        value={newInstrumentName}
+                        onChange={(e) => setNewInstrumentName(e.target.value)}
+                        className="bg-transparent border-0 outline-none text-xs px-2.5 py-1.5 w-full text-slate-800 dark:text-slate-100 font-bold"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddCustomInstrument(newInstrumentName);
+                          if (e.key === "Escape") {
+                            setIsAddingInstrument(false);
+                            setNewInstrumentName("");
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={() => handleAddCustomInstrument(newInstrumentName)}
+                        disabled={!newInstrumentName.trim()}
+                        className="p-2 rounded-lg text-white font-bold disabled:opacity-45 cursor-pointer bg-rose-600 hover:bg-rose-700 shrink-0"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsAddingInstrument(false);
+                          setNewInstrumentName("");
+                        }}
+                        className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer shrink-0"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {/* Category: Standard Dance Roles */}
+                  <div>
+                    <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 dark:text-slate-500 mb-2.5 block">
+                      Funções Padrão de Dança
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.keys(DEFAULT_ROLES_CONFIG.danca).map((key) => {
+                        const meta = getRoleMetadata(key);
+                        const isSelected = availableInstruments.includes(key);
+                        const isCore = key === "danceLeader";
+
+                        return (
+                          <div
+                            key={key}
+                            onClick={() => !isCore && handleToggleAvailable(key)}
+                            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-2xl border text-xs font-bold transition-all ${
+                              isSelected
+                                ? "bg-rose-50/80 border-rose-200 text-rose-800 dark:bg-rose-950/30 dark:border-rose-900/40 dark:text-rose-300"
+                                : "bg-white border-slate-200 text-slate-400 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-850"
+                            } ${isCore ? "opacity-75 cursor-default" : "cursor-pointer"}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              readOnly
+                              disabled={isCore}
+                              className="accent-rose-600 w-3.5 h-3.5 rounded"
+                            />
+                            <span>{meta.label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Category: Custom Administered Roles */}
+                  {Object.keys(customMetadata).length > 0 && (
+                    <div className="pt-2">
+                      <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 dark:text-slate-500 mb-2.5 block">
+                        Funções Personalizadas Adicionadas
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.keys(customMetadata).map((key) => {
+                          const meta = getRoleMetadata(key);
+                          const isSelected = availableInstruments.includes(key);
+
+                          return (
+                            <div
+                              key={key}
+                              onClick={() => handleToggleAvailable(key)}
+                              className={`group flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+                                isSelected
+                                  ? "bg-rose-50/80 border-rose-200 text-rose-800 dark:bg-rose-950/30 dark:border-rose-900/40 dark:text-rose-300"
+                                  : "bg-white border-slate-200 text-slate-400 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-850"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                readOnly
+                                className="accent-rose-600 w-3.5 h-3.5 rounded"
+                              />
+                              <span>{meta.label}</span>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCustomInstrument(key);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 ml-1 rounded-md text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                title="Remover função permanentemente"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {isMultimedia && (
               <div className="p-6 md:p-8 bg-slate-50/50 dark:bg-slate-950/25 rounded-[3.5rem] border border-slate-150 dark:border-slate-800/80 space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
@@ -1340,7 +1569,9 @@ export default function ScaleConfigPage() {
                     key={key}
                     className={`p-6 rounded-[2rem] border transition-all flex flex-col md:flex-row md:items-center justify-between gap-6 ${
                       config.enabled
-                        ? isWorship
+                        ? isDance
+                          ? "bg-rose-50/20 dark:bg-rose-950/5 border-rose-300 dark:border-rose-850 shadow-md ring-1 ring-rose-500/10"
+                          : isWorship
                           ? "bg-blue-50/20 dark:bg-blue-950/5 border-blue-350 dark:border-blue-850 shadow-md ring-1 ring-blue-550/10"
                           : "bg-purple-50/20 dark:bg-purple-950/5 border-purple-350 dark:border-purple-850 shadow-md ring-1 ring-purple-500/10"
                         : "bg-slate-50/50 dark:bg-slate-900/40 border-slate-100 dark:border-slate-800"
@@ -1351,7 +1582,9 @@ export default function ScaleConfigPage() {
                         onClick={() => handleToggle(key)}
                         className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold cursor-pointer transition-all ${
                           config.enabled
-                            ? isWorship
+                            ? isDance
+                              ? "bg-rose-600 text-white shadow-lg shadow-rose-600/15"
+                              : isWorship
                               ? "bg-blue-800 text-white shadow-lg shadow-blue-800/15"
                               : "bg-purple-800 text-white shadow-lg shadow-purple-800/15"
                             : "bg-slate-200 dark:bg-slate-800 text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700"
@@ -1385,7 +1618,7 @@ export default function ScaleConfigPage() {
                       </div>
                       <div className="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 shadow-sm">
                         <button
-                          disabled={!config.enabled || config.count <= ((isWorship && key === "mainMinister") ? 1 : 0)}
+                          disabled={!config.enabled || config.count <= (((isWorship && key === "mainMinister") || (isDance && key === "danceLeader")) ? 1 : 0)}
                           onClick={() => handleAdjustCount(key, -1)}
                           className="p-1 px-2.5 rounded-lg font-black hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 disabled:opacity-30 transition-all cursor-pointer"
                         >
@@ -1436,7 +1669,9 @@ export default function ScaleConfigPage() {
                 onClick={handleSave}
                 disabled={saving}
                 className={`text-white px-12 py-5 rounded-3xl font-black text-sm transition-all duration-300 shadow-2xl hover:scale-[1.03] active:scale-[0.98] flex items-center gap-3.5 disabled:opacity-50 cursor-pointer ${
-                  isWorship
+                  isDance
+                    ? "bg-gradient-to-r from-rose-600 via-rose-700 to-pink-900 border border-rose-500/20 shadow-rose-500/20"
+                    : isWorship
                     ? "bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 border border-blue-600/20 shadow-blue-500/20"
                     : "bg-gradient-to-r from-purple-700 via-purple-800 to-indigo-900 border border-purple-600/20 shadow-purple-500/20"
                 }`}
@@ -1453,13 +1688,15 @@ export default function ScaleConfigPage() {
           <div className="bg-slate-900 text-white rounded-[3.5rem] p-8 shadow-2xl relative overflow-hidden flex flex-col justify-between min-h-[420px]">
             {/* Ambient scanning lines */}
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(18,24,38,0)_50%,rgba(0,0,0,0.2)_50%),linear-gradient(90deg,rgba(59,130,246,0.02),rgba(59,130,246,0.04))] bg-[length:100%_4px,3px_100%] opacity-40"></div>
-            <div className={`absolute bottom-0 right-0 w-64 h-64 blur-[80px] -mb-32 -mr-32 ${isWorship ? "bg-blue-600/10" : "bg-purple-600/10"}`}></div>
+            <div className={`absolute bottom-0 right-0 w-64 h-64 blur-[80px] -mb-32 -mr-32 ${
+              isDance ? "bg-rose-600/10" : isWorship ? "bg-blue-600/10" : "bg-purple-600/10"
+            }`}></div>
 
             <div className="space-y-6 relative z-10">
               <div className="flex justify-between items-center pb-4 border-b border-slate-800/80">
                 <div className="flex items-center gap-2">
-                  <Calendar className={`w-5 h-5 ${isWorship ? "text-blue-400" : "text-purple-400"}`} />
-                  <span className={`font-mono text-xs font-black uppercase tracking-wider ${isWorship ? "text-blue-400" : "text-purple-400"}`}>
+                  <Calendar className={`w-5 h-5 ${isDance ? "text-rose-400" : isWorship ? "text-blue-400" : "text-purple-400"}`} />
+                  <span className={`font-mono text-xs font-black uppercase tracking-wider ${isDance ? "text-rose-400" : isWorship ? "text-blue-400" : "text-purple-400"}`}>
                     Preview da Escala
                   </span>
                 </div>
@@ -1487,7 +1724,13 @@ export default function ScaleConfigPage() {
                         className="flex items-center justify-between p-3.5 bg-slate-850/80 border border-slate-800/40 rounded-xl"
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 ${isWorship ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-purple-500/10 text-purple-400 border-purple-500/20"}`}>
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 ${
+                            isDance
+                              ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                              : isWorship
+                              ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                              : "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                          }`}>
                             <SlotIcon className="w-4 h-4" />
                           </div>
                           <span className="text-xs font-bold text-slate-300">
@@ -1509,8 +1752,8 @@ export default function ScaleConfigPage() {
             </div>
 
             <div className="border-t border-slate-800/80 pt-4 flex justify-between items-center text-[10px] text-slate-500 font-mono mt-6 relative z-10">
-              <span>{isWorship ? "WORSHIP_SCHEMA v1.0" : "MULTIMEDIA_SCHEMA v1.0"}</span>
-              <span className={`font-semibold ${isWorship ? "text-blue-400" : "text-purple-400"}`}>
+              <span>{isDance ? "DANCE_SCHEMA v1.0" : isWorship ? "WORSHIP_SCHEMA v1.0" : "MULTIMEDIA_SCHEMA v1.0"}</span>
+              <span className={`font-semibold ${isDance ? "text-rose-400" : isWorship ? "text-blue-400" : "text-purple-400"}`}>
                 {previewSlots.length} Vagas Totais
               </span>
             </div>

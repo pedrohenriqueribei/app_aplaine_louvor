@@ -37,9 +37,13 @@ export function useNotifications() {
           if (fcmToken) {
             setToken(fcmToken);
             // Save token to user profile
-            await updateDoc(doc(db, 'users', user.uid), {
-              fcmTokens: arrayUnion(fcmToken)
-            });
+            try {
+              await updateDoc(doc(db, 'users', user.uid), {
+                fcmTokens: arrayUnion(fcmToken)
+              });
+            } catch (tokenErr) {
+              console.warn('Could not save FCM token to user profile:', tokenErr);
+            }
           }
         }
       } catch (error) {

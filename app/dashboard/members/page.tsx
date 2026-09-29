@@ -27,6 +27,7 @@ import {
   Mic,
   Music,
 } from "lucide-react";
+import { BallerinaIcon } from "@/components/BallerinaIcon";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { motion } from "motion/react";
@@ -47,7 +48,9 @@ interface Member {
     worship?: string[];
     multimedia?: string[];
     secretariat?: string[];
+    dance?: string[];
   };
+  danceStyles?: string[];
 }
 
 export default function MembersPage() {
@@ -58,7 +61,7 @@ export default function MembersPage() {
   const [selectedChurchForLink, setSelectedChurchForLink] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState<"all" | "worship" | "multimedia" | "secretariat">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "worship" | "multimedia" | "dance" | "secretariat">("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
@@ -82,11 +85,13 @@ export default function MembersPage() {
     level: "" as "aprendiz" | "intermediário" | "experiente" | "",
     churchId: "",
     status: "active" as "active" | "inactive",
-    roles: { worship: [], multimedia: [], secretariat: [] } as {
+    roles: { worship: [], multimedia: [], secretariat: [], dance: [] } as {
       worship: string[];
       multimedia: string[];
       secretariat: string[];
+      dance: string[];
     },
+    danceStyles: [] as string[],
   });
 
   const worshipRolesList = [
@@ -107,9 +112,24 @@ export default function MembersPage() {
     { id: "social_media_manager", label: "Social Media (Legado)" },
   ];
   const secretariatRolesList = [{ id: "admin", label: "Secretário" }];
+  const danceRolesList = [
+    { id: "dance_leader", label: "Líder de Dança" },
+    { id: "dancer", label: "Dançarino(a)" },
+    { id: "choreographer", label: "Coreógrafo(a)" },
+    { id: "costume_manager", label: "Figurino" },
+    { id: "rehearsal_director", label: "Diretor(a) de Ensaio" },
+  ];
+  const danceStylesList = [
+    "Ballet Clássico / Adoração",
+    "Dança Contemporânea",
+    "Dança Profética / Espontâneo",
+    "Dança com Fitas / Estandartes",
+    "Hip-Hop / Street Gospel",
+    "Expressão Corporal",
+  ];
 
   const handleRoleToggle = (
-    department: "worship" | "multimedia" | "secretariat",
+    department: "worship" | "multimedia" | "secretariat" | "dance",
     roleId: string,
   ) => {
     setFormData((prev) => ({
@@ -396,9 +416,10 @@ export default function MembersPage() {
       }
 
       const snap = await getDocs(q);
-      setMembers(
-        snap.docs.map((doc) => ({ ...doc.data(), uid: doc.id }) as Member),
+      const uniqueDocs = Array.from(
+        new Map(snap.docs.map((doc) => [doc.id, { ...doc.data(), uid: doc.id } as Member])).values()
       );
+      setMembers(uniqueDocs);
     } catch (e) {
       handleFirestoreError(e, OperationType.LIST, "users");
     } finally {
@@ -412,6 +433,7 @@ export default function MembersPage() {
       const worshipRoles = formData.roles?.worship || [];
       let multimediaRoles = formData.roles?.multimedia || [];
       const secretariatRoles = formData.roles?.secretariat || [];
+      let danceRoles = formData.roles?.dance || [];
 
       // Sync "leader" with the presence of "multimedia_leader"
       if (multimediaRoles.includes("multimedia_leader")) {
@@ -422,10 +444,20 @@ export default function MembersPage() {
         multimediaRoles = multimediaRoles.filter((r) => r !== "leader");
       }
 
+      // Sync "leader" with the presence of "dance_leader"
+      if (danceRoles.includes("dance_leader")) {
+        if (!danceRoles.includes("leader")) {
+          danceRoles = [...danceRoles, "leader"];
+        }
+      } else if (!worshipRoles.includes("leader") && !multimediaRoles.includes("leader") && !secretariatRoles.includes("leader")) {
+        danceRoles = danceRoles.filter((r) => r !== "leader");
+      }
+
       const finalRoles = {
         worship: worshipRoles,
         multimedia: multimediaRoles,
         secretariat: secretariatRoles,
+        dance: danceRoles,
       };
 
       const finalPayload = {
@@ -461,7 +493,8 @@ export default function MembersPage() {
         level: "",
         churchId: "",
         status: "active",
-        roles: { worship: [], multimedia: [], secretariat: [] },
+        roles: { worship: [], multimedia: [], secretariat: [], dance: [] },
+        danceStyles: [],
       });
       fetchMembers(userProfile?.churchId);
     } catch (err) {
@@ -488,6 +521,14 @@ export default function MembersPage() {
       (m.roles?.multimedia &&
         m.roles.multimedia.some((skill) =>
           skill.toLowerCase().includes(searchTerm.toLowerCase()),
+        )) ||
+      (m.roles?.dance &&
+        m.roles.dance.some((skill) =>
+          skill.toLowerCase().includes(searchTerm.toLowerCase()),
+        )) ||
+      (m.danceStyles &&
+        m.danceStyles.some((st) =>
+          st.toLowerCase().includes(searchTerm.toLowerCase()),
         )),
   );
 
@@ -495,6 +536,7 @@ export default function MembersPage() {
     if (activeTab === "all") return true;
     if (activeTab === "worship") return (m.roles?.worship?.length ?? 0) > 0;
     if (activeTab === "multimedia") return (m.roles?.multimedia?.length ?? 0) > 0;
+    if (activeTab === "dance") return (m.roles?.dance?.length ?? 0) > 0 || (m.danceStyles?.length ?? 0) > 0;
     if (activeTab === "secretariat") return (m.roles?.secretariat?.length ?? 0) > 0;
     return true;
   });
@@ -502,6 +544,7 @@ export default function MembersPage() {
   const allCount = filteredMembers.length;
   const worshipCount = filteredMembers.filter(m => (m.roles?.worship?.length ?? 0) > 0).length;
   const multimediaCount = filteredMembers.filter(m => (m.roles?.multimedia?.length ?? 0) > 0).length;
+  const danceCount = filteredMembers.filter(m => (m.roles?.dance?.length ?? 0) > 0 || (m.danceStyles?.length ?? 0) > 0).length;
   const secretariatCount = filteredMembers.filter(m => (m.roles?.secretariat?.length ?? 0) > 0).length;
 
   const handleBroadcast = async (e: React.FormEvent) => {
@@ -626,7 +669,7 @@ export default function MembersPage() {
           />
         </div>
         <div className="flex gap-4 w-full md:w-auto relative">
-          {(userProfile?.roles?.worship?.includes("leader") || userProfile?.roles?.multimedia?.includes("leader") || userProfile?.roles?.secretariat?.includes("leader")) && (
+          {(userProfile?.roles?.worship?.includes("leader") || userProfile?.roles?.multimedia?.includes("leader") || userProfile?.roles?.secretariat?.includes("leader") || userProfile?.roles?.dance?.includes("leader") || userProfile?.roles?.dance?.includes("dance_leader") || isSuperAdmin) && (
             <>
               <button
                 onClick={() => setIsBroadcastModalOpen(true)}
@@ -668,7 +711,9 @@ export default function MembersPage() {
                               worship: [],
                               multimedia: [],
                               secretariat: [],
+                              dance: [],
                             },
+                            danceStyles: [],
                           });
                           setIsModalOpen(true);
                           setIsAddMenuOpen(false);
@@ -681,7 +726,43 @@ export default function MembersPage() {
                         <div>
                           <p className="font-bold text-sm">Registrar Novo</p>
                           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                            Criar Cadastro
+                            Criar Cadastro Geral
+                          </p>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setEditingMember(null);
+                          setFormData({
+                            name: "",
+                            email: "",
+                            phone: "",
+                            instruments: [],
+                            vocalRange: "",
+                            level: "",
+                            churchId: userProfile?.churchId || "",
+                            status: "active",
+                            roles: {
+                              worship: [],
+                              multimedia: [],
+                              secretariat: [],
+                              dance: ["dancer"],
+                            },
+                            danceStyles: [],
+                          });
+                          setIsModalOpen(true);
+                          setIsAddMenuOpen(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-6 py-4 hover:bg-rose-50 dark:hover:bg-rose-900/20 text-slate-700 dark:text-slate-200 rounded-2xl transition-colors text-left"
+                      >
+                        <div className="w-10 h-10 bg-rose-100 dark:bg-rose-900/40 rounded-xl flex items-center justify-center text-rose-600">
+                          <BallerinaIcon className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm">Ministério de Dança</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                            Novo Integrante de Dança
                           </p>
                         </div>
                       </button>
@@ -702,7 +783,7 @@ export default function MembersPage() {
                           <p className="font-bold text-sm">
                             Vincular Existente
                           </p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking_wider">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                             Buscar por Nome
                           </p>
                         </div>
@@ -718,7 +799,7 @@ export default function MembersPage() {
 
       {/* Tabs para cada ministério */}
       <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100/80 dark:bg-slate-900/40 rounded-3xl w-fit border border-slate-200/50 dark:border-slate-800/50">
-        {(["all", "worship", "multimedia", "secretariat"] as const).map((tab) => {
+        {(["all", "worship", "multimedia", "dance", "secretariat"] as const).map((tab) => {
           const isActive = activeTab === tab;
           let label = "Todos";
           let count = allCount;
@@ -735,6 +816,11 @@ export default function MembersPage() {
             count = multimediaCount;
             activeTextColorClass = "text-amber-700 dark:text-amber-400";
             activeBadgeColorClass = "bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300";
+          } else if (tab === "dance") {
+            label = "Ministério de Dança";
+            count = danceCount;
+            activeTextColorClass = "text-rose-700 dark:text-rose-400";
+            activeBadgeColorClass = "bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300";
           } else if (tab === "secretariat") {
             label = "Secretaria";
             count = secretariatCount;
@@ -783,7 +869,7 @@ export default function MembersPage() {
                 Integrante
               </th>
               <th className="px-10 py-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                {activeTab === "multimedia" ? "Papéis na Multimídia" : activeTab === "secretariat" ? "Funções na Secretaria" : "Vocal / Instrumento"}
+                {activeTab === "multimedia" ? "Papéis na Multimídia" : activeTab === "secretariat" ? "Funções na Secretaria" : activeTab === "dance" ? "Funções & Estilos na Dança" : "Vocal / Instrumento"}
               </th>
               <th id="papel-col-header" className="px-10 py-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
                 Papel
@@ -794,9 +880,9 @@ export default function MembersPage() {
             </tr>
           </thead>
           <tbody>
-            {displayedMembers.map((member) => (
+            {displayedMembers.map((member, mIdx) => (
               <tr
-                key={member.uid}
+                key={`${member.uid}-${mIdx}`}
                 className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors"
               >
                 <td className="px-10 py-6 border-b border-dashed border-slate-100 dark:border-slate-800">
@@ -826,6 +912,36 @@ export default function MembersPage() {
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-wrap gap-1.5">
                       {(() => {
+                        if (activeTab === "dance") {
+                          const danceRoles = member.roles?.dance || [];
+                          const styles = member.danceStyles || [];
+                          if (danceRoles.length > 0 || styles.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-1.5 items-center">
+                                {danceRoles.map((roleId) => {
+                                  const found = danceRolesList.find((r) => r.id === roleId);
+                                  const label = found ? found.label : (roleId === "leader" ? "Líder" : roleId);
+                                  return (
+                                    <span key={roleId} className="font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/20 border border-rose-200/50 dark:border-rose-800/50 px-3 py-1 rounded-lg text-[11px]">
+                                      {label}
+                                    </span>
+                                  );
+                                })}
+                                {styles.map((style) => (
+                                  <span key={style} className="font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg text-[10px]">
+                                    {style}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return (
+                            <span className="text-slate-300 dark:text-slate-700 font-bold">
+                              ---
+                            </span>
+                          );
+                        }
+
                         if (activeTab === "multimedia") {
                           const multimediaRoles = member.roles?.multimedia || [];
                           if (multimediaRoles.length > 0) {
@@ -906,12 +1022,22 @@ export default function MembersPage() {
                   <div className="flex flex-col gap-1.5">
                     <div className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 font-sans">
                       {(() => {
-                        const isLeader = member.roles?.worship?.includes("leader") || member.roles?.multimedia?.includes("leader") || member.roles?.secretariat?.includes("leader");
+                        const isLeader = member.roles?.worship?.includes("leader") || member.roles?.multimedia?.includes("leader") || member.roles?.secretariat?.includes("leader") || member.roles?.dance?.includes("leader") || member.roles?.dance?.includes("dance_leader");
                         if (isLeader) {
                           return (
                             <>
                               <Shield className="w-4 h-4 text-amber-500" />
                               <span>Líder</span>
+                            </>
+                          );
+                        }
+
+                        const isDance = (member.roles?.dance?.length ?? 0) > 0 || (member.danceStyles?.length ?? 0) > 0;
+                        if (activeTab === "dance" || (isDance && !member.roles?.worship?.length && !member.roles?.multimedia?.length && !member.roles?.secretariat?.length && !member.instruments?.length && !member.vocalRange)) {
+                          return (
+                            <>
+                              <BallerinaIcon className="w-4 h-4 text-rose-500" />
+                              <span>Dança</span>
                             </>
                           );
                         }
@@ -971,7 +1097,7 @@ export default function MembersPage() {
                   </div>
                 </td>
                 <td className="px-10 py-6 border-b border-dashed border-slate-100 dark:border-slate-800 text-right">
-                  {(userProfile?.roles?.worship?.includes("leader") || userProfile?.roles?.multimedia?.includes("leader") || userProfile?.roles?.secretariat?.includes("leader")) && (
+                  {(userProfile?.roles?.worship?.includes("leader") || userProfile?.roles?.multimedia?.includes("leader") || userProfile?.roles?.secretariat?.includes("leader") || userProfile?.roles?.dance?.includes("leader") || userProfile?.roles?.dance?.includes("dance_leader") || isSuperAdmin) && (
                     <button
                       onClick={() => {
                         setEditingMember(member);
@@ -988,7 +1114,9 @@ export default function MembersPage() {
                             worship: member.roles?.worship || [],
                             multimedia: member.roles?.multimedia || [],
                             secretariat: member.roles?.secretariat || [],
+                            dance: member.roles?.dance || [],
                           },
+                          danceStyles: member.danceStyles || [],
                         });
                         setIsModalOpen(true);
                       }}
@@ -1254,6 +1382,61 @@ export default function MembersPage() {
                       ))}
                     </div>
                   </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1 mb-3 block flex items-center gap-1.5">
+                      <BallerinaIcon className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Ministério de Dança</span>
+                    </label>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {danceRolesList.map((role) => (
+                        <button
+                          key={role.id}
+                          type="button"
+                          onClick={() =>
+                            handleRoleToggle("dance", role.id)
+                          }
+                          className={`py-2 px-4 rounded-xl text-xs font-bold transition-all border ${
+                            formData.roles.dance?.includes(role.id)
+                              ? "bg-rose-600 text-white border-rose-600 shadow-md"
+                              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
+                          }`}
+                        >
+                          {role.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest pl-1 mb-2 block">
+                      Estilos & Habilidades Praticadas
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {danceStylesList.map((style) => {
+                        const isSelected = formData.danceStyles?.includes(style);
+                        return (
+                          <button
+                            key={style}
+                            type="button"
+                            onClick={() => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                danceStyles: isSelected
+                                  ? prev.danceStyles.filter((s) => s !== style)
+                                  : [...(prev.danceStyles || []), style],
+                              }));
+                            }}
+                            className={`py-1.5 px-3 rounded-lg text-[10px] font-bold transition-all border ${
+                              isSelected
+                                ? "bg-rose-50 text-rose-700 border-rose-400 dark:bg-rose-950/40 dark:text-rose-300 font-bold"
+                                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500"
+                            }`}
+                          >
+                            {style}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1348,9 +1531,9 @@ export default function MembersPage() {
 
             <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
               {unlinkedUsers.length > 0
-                ? unlinkedUsers.map((u) => (
+                ? unlinkedUsers.map((u, uIdx) => (
                     <div
-                      key={u.uid}
+                      key={`${u.uid}-${uIdx}`}
                       className="p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center justify-between group"
                     >
                       <div>

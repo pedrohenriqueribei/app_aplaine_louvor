@@ -141,7 +141,7 @@ export default function NotificationsPage() {
           }`}
         >
           <Sliders className="w-4 h-4" />
-          <span>Configurações de Antecedência (FCM)</span>
+          <span>Painel de Avisos Automáticos (FCM)</span>
         </button>
       </div>
 

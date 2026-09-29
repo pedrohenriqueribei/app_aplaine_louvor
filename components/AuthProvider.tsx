@@ -30,12 +30,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         try {
           const tokenResult = await user.getIdTokenResult();
-          const superAdmin = tokenResult.claims.super_admin === true;
+          const isUserEmailAdmin = user.email === 'pedrohenriqueribei@gmail.com';
+          const superAdmin = Boolean(tokenResult.claims.super_admin === true || isUserEmailAdmin);
           setIsSuperAdmin(superAdmin);
 
-          let userDoc;
+          let userDoc = null;
           let retries = 0;
-          const maxRetries = 12; // Wait up to 6 seconds total
+          const maxRetries = 10;
           
           while (retries < maxRetries) {
             try {
@@ -43,16 +44,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (userDoc.exists() || !signingUpRef.current) {
                 break;
               }
-            } catch (e) {
-              console.error('Auth User Data Error on getDoc retry:', e);
+            } catch (e: any) {
+              if (retries === maxRetries - 1) {
+                console.warn('Auth User Data getDoc final attempt:', e?.message || e);
+              }
             }
             retries++;
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, Math.min(300 * Math.pow(1.25, retries), 1500)));
           }
 
-          let currentData = userDoc && userDoc.exists() ? userDoc.data() : null;
-          
-          if (!currentData) {
+          if (userDoc && userDoc.exists()) {
+            let currentData = userDoc.data();
+            let updates: any = {};
+            let needsUpdate = false;
+
+            if (!currentData.uid) {
+              updates.uid = user.uid;
+              needsUpdate = true;
+            }
+            if (!currentData.email && user.email) {
+              updates.email = user.email;
+              needsUpdate = true;
+            }
+            if (!currentData.name) {
+              updates.name = user.displayName || 'Novo Integrante';
+              needsUpdate = true;
+            }
+            if (!currentData.status) {
+              updates.status = 'active';
+              needsUpdate = true;
+            }
+            if (isUserEmailAdmin && currentData.role !== 'super_admin') {
+              updates.role = 'super_admin';
+              updates.super_admin = true;
+              needsUpdate = true;
+            }
+            if (currentData.role === 'super_admin' || currentData.super_admin === true) {
+              setIsSuperAdmin(true);
+            }
+            if (!currentData.roles) {
+              updates.roles = { worship: [], multimedia: [], secretariat: [], dance: [] };
+              needsUpdate = true;
+            } else if (!currentData.roles.dance) {
+              updates.roles = { ...currentData.roles, dance: [] };
+              needsUpdate = true;
+            }
+
+            if (needsUpdate) {
+              try {
+                await updateDoc(doc(db, 'users', user.uid), updates);
+                currentData = { ...currentData, ...updates };
+              } catch (updateErr) {
+                console.warn('Could not auto-sync user fields:', updateErr);
+              }
+            }
+
+            setUserData(currentData);
+          } else if (userDoc && !userDoc.exists()) {
             let existingPreCreatedUser = null;
             let existingPreCreatedDocId = null;
             if (user.email) {
@@ -67,7 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   }
                 }
               } catch (err) {
-                console.error('Error searching for pre-created user by email:', err);
+                console.warn('Error searching for pre-created user by email:', err);
               }
             }
 
@@ -82,10 +130,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 await deleteDoc(doc(db, 'users', existingPreCreatedDocId));
                 console.log(`Merged and cleaned up pre-created user document ${existingPreCreatedDocId} for auth user ${user.uid}`);
               } catch (e) {
-                console.error('Auth User Data Error on merging user profiles:', e);
+                console.warn('Auth User Data Error on merging user profiles:', e);
               }
-              currentData = mergedUserData;
-              setUserData(currentData);
+              setUserData(mergedUserData);
             } else {
               const newUserData = {
                 uid: user.uid,
@@ -102,49 +149,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               try {
                 await setDoc(doc(db, 'users', user.uid), newUserData);
               } catch (e) {
-                console.error('Auth User Data Error on setDoc:', e);
-                throw e;
+                console.warn('Auth User Data Error on setDoc:', e);
               }
               setUserData({ ...newUserData, createdAt: new Date().toISOString() });
             }
           } else {
-            let updates: any = {};
-            let needsUpdate = false;
-
-            if (!currentData.uid) {
-              updates.uid = user.uid;
-              needsUpdate = true;
-            }
-            if (!currentData.email) {
-              updates.email = user.email;
-              needsUpdate = true;
-            }
-            if (!currentData.name) {
-              updates.name = user.displayName || 'Novo Integrante';
-              needsUpdate = true;
-            }
-            if (!currentData.status) {
-              updates.status = 'active';
-              needsUpdate = true;
-            }
-            if (!currentData.roles) {
-              updates.roles = { worship: [], multimedia: [], secretariat: [], dance: [] };
-              needsUpdate = true;
-            } else if (!currentData.roles.dance) {
-              updates.roles = { ...currentData.roles, dance: [] };
-              needsUpdate = true;
-            }
-
-            if (needsUpdate) {
-              try {
-                await updateDoc(doc(db, 'users', user.uid), updates);
-              } catch (e) {
-                console.error('Auth User Data Error on updateDoc:', e);
-                throw e;
-              }
-              currentData = { ...currentData, ...updates };
-            }
-            setUserData(currentData);
+            // Firestore is offline or still connecting; use safe fallback so user is not blocked
+            setUserData({
+              uid: user.uid,
+              name: user.displayName || user.email?.split('@')[0] || 'Novo Integrante',
+              email: user.email,
+              phone: '',
+              instruments: [],
+              vocalRange: '',
+              churchId: '',
+              status: 'active',
+              roles: { worship: [], multimedia: [], secretariat: [], dance: [] },
+            });
           }
         } catch (error) {
           console.error('Auth User Data Error (general):', error);

@@ -1,8 +1,23 @@
+import fs from 'fs';
 import firebaseConfig from '../firebase-applet-config.json';
 import { initializeApp, getApps, getApp, App } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { getMessaging, Messaging } from 'firebase-admin/messaging';
 import { getAuth, Auth } from 'firebase-admin/auth';
+
+// Clean up invalid GOOGLE_APPLICATION_CREDENTIALS (e.g. local Windows path passed to Cloud/Linux environment)
+if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  try {
+    if (!fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+      console.warn(
+        `GOOGLE_APPLICATION_CREDENTIALS path "${process.env.GOOGLE_APPLICATION_CREDENTIALS}" does not exist. Clearing environment variable.`
+      );
+      delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    }
+  } catch {
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  }
+}
 
 // Set project identity for gRPC and cloud libraries
 if (firebaseConfig.projectId) {
@@ -11,7 +26,9 @@ if (firebaseConfig.projectId) {
 
 function getAdminApp(): App {
   if (getApps().length === 0) {
-    return initializeApp();
+    return initializeApp({
+      projectId: firebaseConfig.projectId,
+    });
   }
   return getApp();
 }

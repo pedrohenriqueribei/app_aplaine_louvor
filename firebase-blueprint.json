@@ -30,7 +30,17 @@
           "type": "object",
           "description": "Configurações de avisos de escala e notificações FCM",
           "properties": {
+            "advanceNoticeDays": { "type": "number", "description": "Dias de antecedência para aviso de escala via FCM (ex: 2, 3, 5 dias)" },
             "advanceNoticeHours": { "type": "number", "description": "Horas de antecedência para aviso de escala via FCM" },
+            "preferredDispatchHour": { "type": "string", "description": "Horário preferencial para disparo do aviso (ex: 09:00)" },
+            "targetMinistries": {
+              "type": "object",
+              "properties": {
+                "worship": { "type": "boolean" },
+                "dance": { "type": "boolean" },
+                "multimedia": { "type": "boolean" }
+              }
+            },
             "fcmEnabled": { "type": "boolean" },
             "enableReminder2h": { "type": "boolean" },
             "notifyOnNewSchedule": { "type": "boolean" },

@@ -49,34 +49,33 @@ export default function DashboardPage() {
       if (!userData) return;
 
       try {
-        // Members query is restricted by church for non-leaders
-        const membersQuery =
-          userData.role === "líder"
-            ? query(
-                collection(db, "users"),
-                where("churchId", "==", userData.churchId || ""),
-              )
-            : query(
-                collection(db, "users"),
-                where("churchId", "==", userData.churchId || ""),
-              );
-
-        const songsQuery = query(
-          collection(db, "songs"),
-          where("ownerId", "==", userData.uid || ""),
-        );
-
-        const schedulesQuery = query(
-          collection(db, "schedules"),
-          where("churchId", "==", userData.churchId || ""),
-        );
+        const hasChurch = Boolean(userData.churchId && userData.churchId.trim() !== "");
 
         const [membersSnap, songsSnap, schedulesSnap, churchesSnap] =
           await Promise.all([
-            getDocs(membersQuery),
-            getDocs(songsQuery),
-            getDocs(schedulesQuery),
-            userData.churchId
+            hasChurch
+              ? getDocs(
+                  query(
+                    collection(db, "users"),
+                    where("churchId", "==", userData.churchId),
+                  ),
+                )
+              : Promise.resolve({ size: 0 }),
+            getDocs(
+              query(
+                collection(db, "songs"),
+                where("ownerId", "==", userData.uid || ""),
+              ),
+            ),
+            hasChurch
+              ? getDocs(
+                  query(
+                    collection(db, "schedules"),
+                    where("churchId", "==", userData.churchId),
+                  ),
+                )
+              : Promise.resolve({ size: 0 }),
+            hasChurch
               ? getDocs(
                   query(
                     collection(db, "churches"),

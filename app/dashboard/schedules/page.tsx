@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   collection,
   getDocs,
@@ -47,7 +48,14 @@ import {
   Copy,
   Check,
   Volume2,
+  Sparkles,
+  Tag,
+  Building2,
+  Globe,
+  Play,
+  Headphones,
 } from "lucide-react";
+import { BallerinaIcon } from "@/components/BallerinaIcon";
 import { cn } from "@/lib/utils";
 import { useNotifications } from "@/hooks/useNotifications";
 
@@ -68,7 +76,7 @@ interface Schedule {
   members: string[];
   locationType?: "internal" | "external";
   locationName?: string;
-  ministry?: "worship" | "multimedia";
+  ministry?: "worship" | "multimedia" | "dance";
   profileId?: string; // Saved profileId for scale
   roles?: {
     mainMinister?: string;
@@ -91,10 +99,23 @@ interface Schedule {
     socialMediaOperators?: string[];
     photographyOperators?: string[];
     cameraOperators?: string[];
+    // Dance roles
+    danceLeader?: string[];
+    dancers?: string[];
+    choreographer?: string[];
+    choreographers?: string[];
+    costume?: string[];
+    costumeManagers?: string[];
+    rehearsalDirector?: string[];
+    rehearsalDirectors?: string[];
     [key: string]: any;
   };
   notes?: string;
   multimediaNotes?: string;
+  danceNotes?: string;
+  choreography?: string;
+  costume?: string;
+  danceProfileId?: string;
   createdAt?: any;
   createdBy?: string;
   updatedAt?: any;
@@ -153,7 +174,9 @@ interface Member {
     worship?: string[];
     multimedia?: string[];
     secretariat?: string[];
+    dance?: string[];
   };
+  danceStyles?: string[];
 }
 
 const isWorshipRole = (roleKey: string): boolean => {
@@ -201,6 +224,8 @@ export default function SchedulesPage() {
   const [playlistSearchTerm, setPlaylistSearchTerm] = useState("");
   const [viewingSongDetails, setViewingSongDetails] = useState<Song | null>(null);
   const [copiedSheet, setCopiedSheet] = useState(false);
+  const [copiedDancePlaylist, setCopiedDancePlaylist] = useState(false);
+  const [dancePlaylistSearchTerm, setDancePlaylistSearchTerm] = useState("");
 
   const getSongAddedByInfo = (song: Song) => {
     const authorId = song.ownerId || song.createdBy;
@@ -270,7 +295,7 @@ export default function SchedulesPage() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<"worship" | "multimedia">("worship");
+  const [activeTab, setActiveTab] = useState<"worship" | "multimedia" | "dance">("worship");
   const [selectedScheduleForView, setSelectedScheduleForView] = useState<Schedule | null>(null);
   const [dayMultipleSchedulesModal, setDayMultipleSchedulesModal] = useState<{
     dateStr: string;
@@ -308,6 +333,177 @@ export default function SchedulesPage() {
     photographyOperators: [],
     cameraOperators: [],
   });
+
+  // Dance Ministry States
+  const [isDanceModalOpen, setIsDanceModalOpen] = useState(false);
+  const [danceDate, setDanceDate] = useState("");
+  const [danceLocationType, setDanceLocationType] = useState<"internal" | "external">("internal");
+  const [danceLocationName, setDanceLocationName] = useState("");
+  const [danceServiceId, setDanceServiceId] = useState("");
+  const [danceChoreography, setDanceChoreography] = useState("");
+  const [danceCostume, setDanceCostume] = useState("");
+  const [danceNotes, setDanceNotes] = useState("");
+  const [danceDateError, setDanceDateError] = useState("");
+  const [danceDeptMemberUids, setDanceDeptMemberUids] = useState<string[]>([]);
+  const [danceConfig, setDanceConfig] = useState<Record<string, { enabled: boolean; count: number }>>({
+    danceLeader: { enabled: true, count: 1 },
+    dancers: { enabled: true, count: 4 },
+    choreographer: { enabled: true, count: 1 },
+    costume: { enabled: true, count: 1 },
+    rehearsalDirector: { enabled: true, count: 1 },
+  });
+  const [danceProfiles, setDanceProfiles] = useState<any[]>([]);
+  const [selectedDanceProfileId, setSelectedDanceProfileId] = useState<string>("padrao");
+  const [danceCustomRoleMetadata, setDanceCustomRoleMetadata] = useState<any>({});
+  const [danceRolesForm, setDanceRolesForm] = useState<Record<string, string[]>>({
+    danceLeader: [],
+    dancers: [],
+    choreographer: [],
+    costume: [],
+    rehearsalDirector: [],
+  });
+
+  const handleSelectDanceProfile = (profileId: string) => {
+    setSelectedDanceProfileId(profileId);
+    const targetProfile = danceProfiles.find((p) => p.id === profileId);
+    if (targetProfile && targetProfile.roles) {
+      setDanceConfig(targetProfile.roles);
+      setDanceRolesForm((prev) => {
+        const resetForm: Record<string, string[]> = { ...prev };
+        Object.keys(targetProfile.roles).forEach((key) => {
+          const targetCount = targetProfile.roles[key]?.count || 0;
+          const currentArr = prev[key] || [];
+          if (currentArr.length > targetCount) {
+            resetForm[key] = currentArr.slice(0, targetCount);
+          } else {
+            const filled = [...currentArr];
+            while (filled.length < targetCount) {
+              filled.push("");
+            }
+            resetForm[key] = filled;
+          }
+        });
+        return resetForm;
+      });
+    }
+  };
+
+  const getDanceRolesToDisplay = () => {
+    const standardMap: Record<string, { title: string; key: string; icon: any }> = {
+      danceLeader: { title: "Líder / Ministrante de Dança", key: "danceLeader", icon: BallerinaIcon },
+      dancers: { title: "Dançarinos(as) Integrantes", key: "dancers", icon: Users },
+      choreographer: { title: "Coreógrafo(a)", key: "choreographer", icon: Sparkles },
+      costume: { title: "Figurino & Acessórios", key: "costume", icon: Tag },
+      rehearsalDirector: { title: "Diretor(a) de Ensaio", key: "rehearsalDirector", icon: Clock },
+    };
+
+    const rolesList: { title: string; key: string; configKey: string; icon: any }[] = [];
+
+    Object.keys(standardMap).forEach((configKey) => {
+      const cfg = danceConfig[configKey];
+      if (cfg && cfg.enabled) {
+        rolesList.push({
+          title: standardMap[configKey].title,
+          key: standardMap[configKey].key,
+          configKey: configKey,
+          icon: standardMap[configKey].icon,
+        });
+      }
+    });
+
+    Object.keys(danceConfig).forEach((configKey) => {
+      if (standardMap[configKey]) return;
+      const cfg = danceConfig[configKey];
+      if (cfg && cfg.enabled) {
+        const meta = danceCustomRoleMetadata[configKey] || { label: configKey };
+        rolesList.push({
+          title: meta.label || configKey,
+          key: configKey,
+          configKey: configKey,
+          icon: Sliders,
+        });
+      }
+    });
+
+    return rolesList;
+  };
+
+  const fetchDanceDeptMembers = async () => {
+    if (!userData?.churchId) return;
+    try {
+      const snap = await getDocs(
+        collection(db, "churches", userData.churchId, "departments", "dance", "members")
+      );
+      const uids = snap.docs.map((d) => d.id);
+      setDanceDeptMemberUids(uids);
+    } catch (err) {
+      console.error("Error fetching dance dept members:", err);
+    }
+  };
+
+  const loadDanceConfig = async () => {
+    if (!userData?.churchId) return;
+    try {
+      const docRef = doc(db, "services", `dance_scale_config_${userData.churchId}`);
+      const snap = await getDoc(docRef);
+      const defaultRoles = {
+        danceLeader: { enabled: true, count: 1 },
+        dancers: { enabled: true, count: 4 },
+        choreographer: { enabled: true, count: 1 },
+        costume: { enabled: true, count: 1 },
+        rehearsalDirector: { enabled: true, count: 1 },
+      };
+
+      if (snap.exists()) {
+        const data = snap.data();
+        setDanceCustomRoleMetadata(data.customRoleMetadata || {});
+
+        const loadedCustomMetadata = data.customRoleMetadata || {};
+        const combinedDefaultRoles: Record<string, { enabled: boolean; count: number }> = { ...defaultRoles };
+        Object.keys(loadedCustomMetadata).forEach((key) => {
+          combinedDefaultRoles[key] = { enabled: false, count: 0 };
+        });
+
+        let loadedProfiles: any[] = [];
+        if (data.profiles && Array.isArray(data.profiles)) {
+          loadedProfiles = data.profiles;
+        } else if (data.profiles && typeof data.profiles === "object") {
+          loadedProfiles = Object.entries(data.profiles).map(([pId, pData]: [string, any]) => ({
+            id: pId,
+            name: pData.name || pId,
+            roles: pData.roles || combinedDefaultRoles,
+          }));
+        }
+
+        if (loadedProfiles.length === 0) {
+          loadedProfiles = [
+            {
+              id: "padrao",
+              name: "Padrão",
+              roles: data.roles || combinedDefaultRoles,
+            },
+          ];
+        }
+
+        setDanceProfiles(loadedProfiles);
+        const pId = selectedDanceProfileId || data.activeProfileId || "padrao";
+        const currentProfile = loadedProfiles.find((p) => p.id === pId) || loadedProfiles[0];
+        setDanceConfig(currentProfile.roles || data.roles || combinedDefaultRoles);
+      } else {
+        const fallbackProfiles = [
+          {
+            id: "padrao",
+            name: "Padrão",
+            roles: defaultRoles,
+          },
+        ];
+        setDanceProfiles(fallbackProfiles);
+        setDanceConfig(defaultRoles);
+      }
+    } catch (err) {
+      console.error("Error loading dance config:", err);
+    }
+  };
 
   const handleSelectMultimediaProfile = (profileId: string) => {
     setSelectedMultimediaProfileId(profileId);
@@ -585,7 +781,9 @@ export default function SchedulesPage() {
           fetchSongs(),
           fetchMembers(),
           fetchMultimediaDeptMembers(),
+          fetchDanceDeptMembers(),
           loadMultimediaConfig(),
+          loadDanceConfig(),
           loadWorshipScaleConfig(),
           fetchPersonalSongs(),
         ]);
@@ -597,6 +795,38 @@ export default function SchedulesPage() {
     }
     init();
   }, [userData?.churchId, user?.uid]);
+
+  useEffect(() => {
+    if (danceDate) {
+      fetchTeamAvailability(danceDate);
+
+      // Auto-select service for dance based on day of week
+      const selectedDate = new Date(`${danceDate}T12:00:00`);
+      const dayNames = [
+        "Domingo",
+        "Segunda-feira",
+        "Terça-feira",
+        "Quarta-feira",
+        "Quinta-feira",
+        "Sexta-feira",
+        "Sábado",
+      ];
+      const dayOfWeek = dayNames[selectedDate.getDay()];
+
+      const matchingService = services.find(
+        (s) => s.dayOfWeek === dayOfWeek && s.churchId === userData?.churchId,
+      );
+      const currentService = services.find((s) => s.id === danceServiceId);
+
+      // Change service if none is selected OR if the selected one doesn't match the new day
+      if (
+        matchingService &&
+        (!currentService || currentService.dayOfWeek !== dayOfWeek)
+      ) {
+        setDanceServiceId(matchingService.id);
+      }
+    }
+  }, [danceDate, userData?.churchId, isDanceModalOpen, services, danceServiceId]);
 
   // Real-time schedules observer
   useEffect(() => {
@@ -976,18 +1206,25 @@ export default function SchedulesPage() {
       where("churchId", "==", userData.churchId),
     );
     const snap = await getDocs(q);
-    setMembers(
-      snap.docs.map((doc) => ({
-        uid: doc.id,
-        name: doc.data().name,
-        role: doc.data().role,
-        churchId: doc.data().churchId,
-        instruments: doc.data().instruments,
-        vocalRange: doc.data().vocalRange,
-        roles: doc.data().roles,
-        fcmTokens: doc.data().fcmTokens || [],
-      })),
+    const uniqueMembers = Array.from(
+      new Map(
+        snap.docs.map((doc) => [
+          doc.id,
+          {
+            uid: doc.id,
+            name: doc.data().name,
+            role: doc.data().role,
+            churchId: doc.data().churchId,
+            instruments: doc.data().instruments,
+            vocalRange: doc.data().vocalRange,
+            roles: doc.data().roles,
+            fcmTokens: doc.data().fcmTokens || [],
+            danceStyles: doc.data().danceStyles || [],
+          },
+        ])
+      ).values()
     );
+    setMembers(uniqueMembers);
   }
 
   const getDeterministicScheduleId = (
@@ -1940,6 +2177,305 @@ export default function SchedulesPage() {
     });
   };
 
+  const handleOpenDanceModal = async (scheduleToEdit: Schedule | null = null) => {
+    await loadDanceConfig();
+    fetchDanceDeptMembers();
+
+    if (scheduleToEdit) {
+      setEditingSchedule(scheduleToEdit);
+      setDanceDate(scheduleToEdit.date.split("T")[0]);
+      setDanceLocationType(scheduleToEdit.locationType || "internal");
+      setDanceLocationName(scheduleToEdit.locationName || "");
+      setDanceServiceId(scheduleToEdit.serviceId || "");
+      setDanceChoreography((scheduleToEdit as any).choreography || "");
+      setDanceCostume((scheduleToEdit as any).costume || "");
+      setDanceNotes((scheduleToEdit as any).danceNotes || scheduleToEdit.notes || "");
+
+      const pId = (scheduleToEdit as any).danceProfileId || "padrao";
+      setSelectedDanceProfileId(pId);
+
+      const snap = await getDoc(doc(db, "services", `dance_scale_config_${userData?.churchId}`));
+      let activeRolesConfig = {
+        danceLeader: { enabled: true, count: 1 },
+        dancers: { enabled: true, count: 4 },
+        choreographer: { enabled: true, count: 1 },
+        costume: { enabled: true, count: 1 },
+        rehearsalDirector: { enabled: true, count: 1 },
+      };
+      if (snap.exists()) {
+        const data = snap.data();
+        let loadedProfiles: any[] = [];
+        if (data.profiles && Array.isArray(data.profiles)) {
+          loadedProfiles = data.profiles;
+        } else if (data.profiles && typeof data.profiles === "object") {
+          loadedProfiles = Object.entries(data.profiles).map(([profileId, pData]: [string, any]) => ({
+            id: profileId,
+            name: pData.name || profileId,
+            roles: pData.roles,
+          }));
+        }
+        const foundProf = loadedProfiles.find(p => p.id === pId) || loadedProfiles[0];
+        if (foundProf && foundProf.roles) {
+          activeRolesConfig = foundProf.roles;
+        } else if (data.roles) {
+          activeRolesConfig = data.roles;
+        }
+      }
+
+      setDanceConfig(activeRolesConfig);
+
+      const initialForm: Record<string, string[]> = {};
+      Object.keys(activeRolesConfig).forEach((key) => {
+        const arr = (scheduleToEdit.roles as any)?.[key] || [];
+        initialForm[key] = Array.isArray(arr) ? arr : (arr ? [arr] : []);
+      });
+      setDanceRolesForm(initialForm);
+    } else {
+      setEditingSchedule(null);
+      setDanceDate("");
+      setDanceLocationType("internal");
+      setDanceLocationName("");
+      setDanceServiceId("");
+      setDanceChoreography("");
+      setDanceCostume("");
+      setDanceNotes("");
+      setSelectedDanceProfileId("padrao");
+
+      const initialForm: Record<string, string[]> = {
+        danceLeader: [],
+        dancers: [],
+        choreographer: [],
+        costume: [],
+        rehearsalDirector: [],
+      };
+      setDanceRolesForm(initialForm);
+    }
+    setIsDanceModalOpen(true);
+  };
+
+  const handleSelectDanceMember = (
+    roleKey: string,
+    index: number,
+    memberUid: string
+  ) => {
+    setDanceRolesForm((prev) => {
+      const arr = [...(prev[roleKey] || [])];
+      while (arr.length <= index) {
+        arr.push("");
+      }
+      arr[index] = arr[index] === memberUid ? "" : memberUid;
+      return {
+        ...prev,
+        [roleKey]: arr,
+      };
+    });
+  };
+
+  const handleSaveDance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDanceDateError("");
+
+    if (!canManageDance) {
+      setDanceDateError("Você não tem permissão para gerenciar escalas de dança.");
+      return;
+    }
+
+    if (danceLocationType === "internal" && !danceServiceId) {
+      setDanceDateError("Por favor, selecione um culto para a escala interna.");
+      return;
+    }
+
+    if (danceLocationType === "external" && !danceLocationName.trim()) {
+      setDanceDateError("Por favor, digite o local da escala externa.");
+      return;
+    }
+
+    const customAllUids: string[] = [];
+    Object.values(danceRolesForm).forEach((uids) => {
+      if (Array.isArray(uids)) {
+        customAllUids.push(...uids);
+      }
+    });
+    const allAssignedUids = customAllUids.filter(Boolean);
+
+    try {
+      const churchId = userData?.churchId || "";
+      if (!churchId) {
+        setDanceDateError("ID da igreja não encontrado para o usuário atual.");
+        return;
+      }
+
+      const scheduleId = getDeterministicScheduleId(
+        churchId,
+        danceDate,
+        danceLocationType,
+        danceServiceId,
+        danceLocationName
+      );
+
+      const docRef = doc(db, "schedules", scheduleId);
+      const docSnap = await getDoc(docRef);
+      const existingData = docSnap.exists() ? docSnap.data() as any : null;
+
+      // Preserve existing worship and multimedia roles
+      const mergedRoles: any = {
+        ...(existingData?.roles || {}),
+      };
+      Object.entries(danceRolesForm).forEach(([roleKey, value]) => {
+        mergedRoles[roleKey] = value || [];
+      });
+
+      const existingMembers = existingData?.members || [];
+      const mergedMembers = Array.from(new Set([...existingMembers, ...allAssignedUids]));
+
+      const scheduleData = {
+        id: scheduleId,
+        date: danceDate,
+        churchId: churchId,
+        bandId: existingData?.bandId || "master",
+        serviceId: danceServiceId || "",
+        songs: existingData?.songs || [],
+        roles: mergedRoles,
+        members: mergedMembers,
+        notes: existingData?.notes || "",
+        multimediaNotes: existingData?.multimediaNotes || "",
+        danceNotes: danceNotes,
+        choreography: danceChoreography,
+        costume: danceCostume,
+        locationType: danceLocationType,
+        locationName: danceLocationType === "external" ? danceLocationName : "",
+        rehearsalDate: existingData?.rehearsalDate || "",
+        rehearsalTime: existingData?.rehearsalTime || "",
+        playlist: existingData?.playlist || [],
+        playlistId: existingData?.playlistId || "",
+        danceProfileId: selectedDanceProfileId || "padrao",
+        updatedAt: serverTimestamp(),
+        updatedBy: user?.uid || "system",
+        ...(existingData
+          ? {
+              createdAt: existingData.createdAt || serverTimestamp(),
+              createdBy: existingData.createdBy || user?.uid || "system",
+            }
+          : {
+              createdAt: serverTimestamp(),
+              createdBy: user?.uid || "system",
+            }
+        ),
+      };
+
+      await setDoc(docRef, scheduleData);
+
+      // Notification
+      try {
+        const churchName = churches.find((c) => c.id === userData?.churchId)?.name || "sua igreja";
+        const formattedDate = new Date(danceDate).toLocaleDateString("pt-BR");
+        const notifTitle = existingData ? "Escala de Dança Atualizada!" : "Nova Escala de Dança!";
+        const notifBody =
+          danceLocationType === "external"
+            ? `Você foi escalado(a) para apresentação de dança em ${danceLocationName} no dia ${formattedDate}.`
+            : `Você foi escalado(a) no Ministério de Dança para o culto no dia ${formattedDate} na ${churchName}.`;
+
+        if (allAssignedUids.length > 0 && user) {
+          await fetch("/api/notifications/send", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${await user.getIdToken()}`,
+            },
+            body: JSON.stringify({
+              title: notifTitle,
+              body: notifBody,
+              userIds: allAssignedUids,
+            }),
+          });
+        }
+      } catch (notifErr) {
+        console.warn("Could not dispatch dance notifications:", notifErr);
+      }
+
+      setIsDanceModalOpen(false);
+      setEditingSchedule(null);
+      fetchSchedules();
+    } catch (err) {
+      console.error("Error saving dance schedule:", err);
+      setDanceDateError("Erro ao salvar escala de dança.");
+    }
+  };
+
+  const getDanceCandidates = () => {
+    return members.filter((m) => {
+      const isInDept = danceDeptMemberUids.includes(m.uid);
+      const hasProfileRole = m.roles?.dance && m.roles.dance.length > 0;
+      const hasStyles = m.danceStyles && m.danceStyles.length > 0;
+      const matchesRoleStr =
+        m.role?.toLowerCase().includes("dança") ||
+        m.role?.toLowerCase().includes("danca") ||
+        m.role?.toLowerCase().includes("bailarin") ||
+        m.role?.toLowerCase().includes("coreógraf") ||
+        m.role?.toLowerCase().includes("coreograf");
+
+      const isDanceUser = isInDept || hasProfileRole || hasStyles || matchesRoleStr;
+
+      if (danceDate && teamAvailability.length > 0) {
+        const anyDanceAvailable = members.some((other) => {
+          const otherInDept = danceDeptMemberUids.includes(other.uid);
+          const otherHasRole = other.roles?.dance && other.roles.dance.length > 0;
+          const otherStyles = other.danceStyles && other.danceStyles.length > 0;
+          const otherMatches =
+            other.role?.toLowerCase().includes("dança") ||
+            other.role?.toLowerCase().includes("danca");
+          const isOtherDance = otherInDept || otherHasRole || otherStyles || otherMatches;
+          return isOtherDance && teamAvailability.includes(other.uid);
+        });
+
+        if (anyDanceAvailable) {
+          return isDanceUser && teamAvailability.includes(m.uid);
+        }
+      }
+      return isDanceUser;
+    });
+  };
+
+  const getDanceCandidatesForRole = (configKey: string) => {
+    const baseCandidates = getDanceCandidates();
+    return baseCandidates.filter((m) => {
+      const userRoles = m.roles?.dance || [];
+      if (configKey === "danceLeader" || configKey === "leader" || configKey === "dance_leader") {
+        return (
+          userRoles.includes("leader") ||
+          userRoles.includes("dance_leader") ||
+          userRoles.includes("danceLeader") ||
+          m.role?.toLowerCase().includes("líder") ||
+          true
+        );
+      }
+      if (configKey === "choreographer") {
+        return (
+          userRoles.includes("choreographer") ||
+          userRoles.includes("coreografo") ||
+          userRoles.includes("leader") ||
+          true
+        );
+      }
+      if (configKey === "costume") {
+        return (
+          userRoles.includes("costume") ||
+          userRoles.includes("figurino") ||
+          true
+        );
+      }
+      if (configKey === "rehearsalDirector") {
+        return (
+          userRoles.includes("rehearsal_director") ||
+          userRoles.includes("rehearsalDirector") ||
+          userRoles.includes("leader") ||
+          true
+        );
+      }
+      return true;
+    });
+  };
+
   const groupedData = groupSchedules();
   const currentWeekRange = getWeekRange(weekOffset);
   const currentMonthDate = new Date(
@@ -1986,19 +2522,47 @@ export default function SchedulesPage() {
 
   const hasWorshipLeader = userData?.roles?.worship?.includes("leader");
   const hasMultimediaLeader = userData?.roles?.multimedia?.includes("leader");
+  const hasDanceLeader = userData?.roles?.dance?.includes("leader") || userData?.roles?.dance?.includes("dance_leader");
 
   const canManageWorship =
     isSuperUser ||
     hasWorshipLeader ||
-    (userData?.role === "líder" && !hasMultimediaLeader);
+    (userData?.role === "líder" && !hasMultimediaLeader && !hasDanceLeader);
 
   const canManageMultimedia =
     isSuperUser ||
     hasMultimediaLeader ||
-    (userData?.role === "líder" && !hasWorshipLeader);
+    (userData?.role === "líder" && !hasWorshipLeader && !hasDanceLeader);
+
+  const canManageDance =
+    isSuperUser ||
+    hasDanceLeader ||
+    (userData?.role === "líder" && !hasWorshipLeader && !hasMultimediaLeader);
 
   const viewSchedule = selectedScheduleForView;
-  const isWorshipScale = viewSchedule ? (activeTab === "worship") : true;
+  const isDanceScale = viewSchedule
+    ? activeTab === "dance" ||
+      viewSchedule.ministry === "dance" ||
+      Boolean(
+        (viewSchedule.roles as any)?.danceLeader ||
+        (viewSchedule.roles as any)?.dancers ||
+        (viewSchedule as any).choreography
+      )
+    : false;
+  const isMultimediaScale = viewSchedule
+    ? activeTab === "multimedia" ||
+      viewSchedule.ministry === "multimedia" ||
+      Boolean(
+        (viewSchedule.roles as any)?.pcOperators ||
+        (viewSchedule.roles as any)?.socialMediaOperators ||
+        (viewSchedule as any)?.cameraOperators ||
+        (viewSchedule as any)?.photographyOperators ||
+        (viewSchedule as any).multimediaNotes
+      )
+    : false;
+  const isWorshipScale = viewSchedule
+    ? (!isDanceScale && !isMultimediaScale) || activeTab === "worship" || viewSchedule.ministry === "worship"
+    : true;
   const viewSafeDate = viewSchedule ? (viewSchedule.date.includes("T") ? viewSchedule.date : `${viewSchedule.date}T12:00:00`) : "";
   const viewServiceName = viewSchedule && viewSchedule.serviceId ? services.find((s) => s.id === viewSchedule.serviceId)?.name : null;
   const viewChurchName = viewSchedule ? (churches.find((c) => c.id === viewSchedule.churchId)?.name || "Igreja") : "";
@@ -2108,6 +2672,217 @@ export default function SchedulesPage() {
     return list;
   };
 
+  // Dance Scale display helpers
+  const matchingDanceSchedule = viewSchedule
+    ? schedules.find(
+        (s) =>
+          s.id !== viewSchedule.id &&
+          s.churchId === viewSchedule.churchId &&
+          s.date.split("T")[0] === viewSchedule.date.split("T")[0] &&
+          (s.serviceId === viewSchedule.serviceId || (!s.serviceId && !viewSchedule.serviceId)) &&
+          Boolean((s.roles as any)?.danceLeader || (s.roles as any)?.dancers || (s as any).choreography)
+      )
+    : null;
+
+  // Busca a escala do Ministério de Louvor do mesmo dia e mesmo culto para que a dança tenha acesso à playlist completa
+  const matchingWorshipSchedule = viewSchedule
+    ? schedules.find((s) => {
+        if (s.id === viewSchedule.id) return false;
+        if (s.churchId !== viewSchedule.churchId) return false;
+        const sDate = s.date ? s.date.split("T")[0] : "";
+        const vDate = viewSchedule.date ? viewSchedule.date.split("T")[0] : "";
+        if (sDate !== vDate) return false;
+
+        // Se ambos têm culto/serviço especificado, deve coincidir o culto do mesmo dia
+        if (viewSchedule.serviceId && s.serviceId && s.serviceId !== viewSchedule.serviceId) {
+          return false;
+        }
+
+        // Deve conter músicas, playlist ou funções do Ministério de Louvor
+        const hasSongs = (s.songs && s.songs.length > 0) || (s.playlist && s.playlist.length > 0);
+        const hasWorshipRoles = Boolean(
+          s.roles?.mainMinister ||
+          s.roles?.keyboardist ||
+          s.roles?.drummer ||
+          s.roles?.acousticGuitarist ||
+          s.roles?.bassist ||
+          s.roles?.soprano ||
+          s.roles?.contralto ||
+          (s.bandId && s.bandId !== "master")
+        );
+        return hasSongs || hasWorshipRoles || s.ministry === "worship" || (!s.ministry && !s.roles?.dancers);
+      }) ||
+      schedules.find((s) => {
+        if (s.id === viewSchedule.id) return false;
+        if (s.churchId !== viewSchedule.churchId) return false;
+        const sDate = s.date ? s.date.split("T")[0] : "";
+        const vDate = viewSchedule.date ? viewSchedule.date.split("T")[0] : "";
+        if (sDate !== vDate) return false;
+        return (s.songs && s.songs.length > 0) || (s.playlist && s.playlist.length > 0);
+      })
+    : null;
+
+  // Fonte de louvor do mesmo dia: escala complementar de louvor ou a própria escala atual se já contiver músicas cadastradas
+  const worshipScheduleForDay =
+    matchingWorshipSchedule ||
+    (viewSchedule &&
+     ((viewSchedule.songs && viewSchedule.songs.length > 0) ||
+      (viewSchedule.playlist && viewSchedule.playlist.length > 0) ||
+      viewSchedule.roles?.mainMinister ||
+      viewSchedule.rehearsalDate)
+      ? viewSchedule
+      : null);
+
+  const danceWorshipPlaylistIds: string[] = Array.from(
+    new Set([
+      ...(worshipScheduleForDay?.playlist || []),
+      ...(viewSchedule?.playlist || []),
+    ])
+  ).filter(Boolean);
+
+  const danceWorshipRepertoireIds: string[] = Array.from(
+    new Set([
+      ...(worshipScheduleForDay?.songs || []),
+      ...(viewSchedule?.songs || []),
+    ])
+  ).filter(Boolean);
+
+  const allWorshipSongIdsForDance: string[] = Array.from(
+    new Set([...danceWorshipPlaylistIds, ...danceWorshipRepertoireIds])
+  ).filter(Boolean);
+
+  const worshipMinisterUid = worshipScheduleForDay?.roles?.mainMinister;
+  const worshipMinisterName = worshipMinisterUid
+    ? members.find((m) => m.uid === worshipMinisterUid)?.name
+    : null;
+
+  const worshipBandName = worshipScheduleForDay?.bandId && worshipScheduleForDay.bandId !== "master"
+    ? bands.find((b) => b.id === worshipScheduleForDay.bandId)?.name
+    : "Ministério de Louvor";
+
+  const filteredDanceWorshipSongIds = allWorshipSongIdsForDance.filter((id) => {
+    if (!dancePlaylistSearchTerm.trim()) return true;
+    const s = songs.find((song) => song.id === id) || personalSongs.find((song) => song.id === id);
+    const term = dancePlaylistSearchTerm.toLowerCase();
+    return (
+      (s?.title && s.title.toLowerCase().includes(term)) ||
+      (s?.artist && s.artist.toLowerCase().includes(term)) ||
+      (s?.key && s.key.toLowerCase().includes(term))
+    );
+  });
+
+  const handleCopyDancePlaylist = () => {
+    if (allWorshipSongIdsForDance.length === 0) return;
+    const lines = allWorshipSongIdsForDance.map((id, idx) => {
+      const s = songs.find((song) => song.id === id) || personalSongs.find((song) => song.id === id);
+      const title = s?.title || `Música ${idx + 1}`;
+      const artist = s?.artist ? ` - ${s.artist}` : "";
+      const key = s?.key ? ` (Tom: ${s.key})` : "";
+      return `${idx + 1}. ${title}${artist}${key}`;
+    });
+    const cultDateFormatted = new Date(viewSafeDate).toLocaleDateString("pt-BR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+    const text = `🩰 *Playlist do Louvor para a Dança*\n📅 *Culto:* ${cultDateFormatted}${viewServiceName ? ` (${viewServiceName})` : ""}\n🏛️ *Igreja:* ${viewChurchName}\n\n*Músicas do Louvor para Estudo e Ensaio da Dança:*\n${lines.join("\n")}\n\n✨ _Todas as integrantes da dança devem ensaiar para ministrar durante o período de louvor._`;
+    navigator.clipboard.writeText(text);
+    setCopiedDancePlaylist(true);
+    setTimeout(() => setCopiedDancePlaylist(false), 2000);
+  };
+
+  const mergedDanceRoles = viewSchedule
+    ? {
+        ...(matchingDanceSchedule?.roles || {}),
+        ...(viewSchedule.roles || {}),
+      }
+    : {};
+
+  const getDanceRolesForDisplay = () => {
+    const standardDanceRoles = [
+      {
+        title: "Líder / Ministrante",
+        keys: ["danceLeader", "leader", "dance_leader"],
+        configKey: "danceLeader",
+        icon: BallerinaIcon,
+        color: "text-rose-500 dark:text-rose-400",
+        bgBadge: "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200/60 dark:border-rose-900/40",
+      },
+      {
+        title: "Dançarinos(as)",
+        keys: ["dancers", "dancer", "bailarinos", "bailarinas"],
+        configKey: "dancers",
+        icon: Users,
+        color: "text-pink-500 dark:text-pink-400",
+        bgBadge: "bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 border-pink-200/60 dark:border-pink-900/40",
+      },
+      {
+        title: "Coreógrafo(a)",
+        keys: ["choreographer", "coreografo"],
+        configKey: "choreographer",
+        icon: Sparkles,
+        color: "text-purple-500 dark:text-purple-400",
+        bgBadge: "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200/60 dark:border-purple-900/40",
+      },
+      {
+        title: "Figurino",
+        keys: ["costume", "figurino"],
+        configKey: "costume",
+        icon: Tag,
+        color: "text-amber-500 dark:text-amber-400",
+        bgBadge: "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200/60 dark:border-amber-900/40",
+      },
+      {
+        title: "Diretor(a) de Ensaio",
+        keys: ["rehearsalDirector", "rehearsal_director"],
+        configKey: "rehearsalDirector",
+        icon: Clock,
+        color: "text-blue-500 dark:text-blue-400",
+        bgBadge: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200/60 dark:border-blue-900/40",
+      },
+    ];
+
+    const customRolesList: typeof standardDanceRoles = [];
+    Object.keys(danceConfig).forEach((configKey) => {
+      const isKnown = [
+        "danceLeader", "dancers", "choreographer", "costume", "rehearsalDirector"
+      ].includes(configKey);
+      if (!isKnown) {
+        const cfg = danceConfig[configKey];
+        if (cfg && cfg.enabled) {
+          const meta = danceCustomRoleMetadata[configKey] || { label: configKey };
+          customRolesList.push({
+            title: meta.label || configKey,
+            keys: [configKey, `${configKey}s`],
+            configKey: configKey,
+            icon: Sliders,
+            color: "text-rose-500 dark:text-rose-400",
+            bgBadge: "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200/60 dark:border-rose-900/40",
+          });
+        }
+      }
+    });
+
+    return [...standardDanceRoles, ...customRolesList];
+  };
+
+  const getDanceUids = (keys: string[]) => {
+    const list: string[] = [];
+    keys.forEach((k) => {
+      const val = (mergedDanceRoles as any)?.[k];
+      if (Array.isArray(val)) {
+        val.forEach((id) => {
+          if (id && typeof id === "string" && !list.includes(id)) {
+            list.push(id);
+          }
+        });
+      } else if (val && typeof val === "string" && val.trim() && !list.includes(val)) {
+        list.push(val.trim());
+      }
+    });
+    return list;
+  };
+
   return (
     <div className="space-y-8 max-w-6xl">
       {/* Tab Selector */}
@@ -2138,17 +2913,37 @@ export default function SchedulesPage() {
           )}
           Ministério de Multimídia
         </button>
+        <button
+          onClick={() => setActiveTab("dance")}
+          className={`pb-4 px-2 font-display font-black text-lg transition-all relative flex items-center gap-2 ${
+            activeTab === "dance"
+              ? "text-rose-600 dark:text-rose-400 font-bold"
+              : "text-slate-400 dark:text-slate-600 hover:text-slate-600"
+          }`}
+        >
+          {activeTab === "dance" && (
+            <span className="absolute bottom-0 left-0 w-full h-1 bg-rose-600 dark:bg-rose-400 rounded-full" />
+          )}
+          <BallerinaIcon className="w-5 h-5 inline-block" />
+          Ministério de Dança
+        </button>
       </div>
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h2 className="text-3xl font-display font-black text-slate-900 dark:text-slate-100 italic tracking-tight">
-            {activeTab === "worship" ? "Escalas de Louvor" : "Escalas de Multimídia"}
+            {activeTab === "worship"
+              ? "Escalas de Louvor"
+              : activeTab === "multimedia"
+              ? "Escalas de Multimídia"
+              : "Escalas de Dança"}
           </h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mt-1">
             {activeTab === "worship"
               ? "Organize e visualize o cronograma do seu ministério de música."
-              : "Organize e visualize as escalas de som, projeção, fotografia e câmeras do seu ministério de multimídia."}
+              : activeTab === "multimedia"
+              ? "Organize e visualize as escalas de som, projeção, fotografia e câmeras do seu ministério de multimídia."
+              : "Organize e visualize as escalas de dança, coreografias, figurinos e ministrantes da sua igreja."}
           </p>
         </div>
 
@@ -2223,6 +3018,28 @@ export default function SchedulesPage() {
             <Plus className="w-5 h-5" />
             Nova Escala de Multimídia
           </button>
+        )}
+
+        {activeTab === "dance" && canManageDance && (
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
+            {userData?.churchId && (
+              <Link
+                href={`/dashboard/churches/${userData.churchId}/ministries/danca/scale-config`}
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 px-5 py-3.5 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-sm active:scale-95 text-xs cursor-pointer"
+                title="Configurar vagas e funções da escala de dança"
+              >
+                <Sliders className="w-4 h-4 text-rose-500" />
+                <span>Configurar Escala</span>
+              </Link>
+            )}
+            <button
+              onClick={() => handleOpenDanceModal(null)}
+              className="bg-rose-600 hover:bg-rose-700 text-white px-8 py-3.5 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-xl shadow-rose-600/20 active:scale-95 cursor-pointer text-xs"
+            >
+              <Plus className="w-5 h-5" />
+              Nova Escala de Dança
+            </button>
+          </div>
         )}
       </div>
 
@@ -2579,6 +3396,177 @@ export default function SchedulesPage() {
                     );
                   }
 
+                  if (activeTab === "dance") {
+                    const danceLeaderUids = (((schedule.roles as any)?.danceLeader || []) as string[]).filter(Boolean);
+                    const dancerUids = (((schedule.roles as any)?.dancers || []) as string[]).filter(Boolean);
+                    const choreographerUids = (((schedule.roles as any)?.choreographer || []) as string[]).filter(Boolean);
+                    const costumeUids = (((schedule.roles as any)?.costume || []) as string[]).filter(Boolean);
+                    const choreography = (schedule as any).choreography;
+                    const costume = (schedule as any).costume;
+
+                    return (
+                      <div
+                        key={schedule.id}
+                        onClick={() => setSelectedScheduleForView(schedule)}
+                        className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:border-rose-300 dark:hover:border-rose-900/50 transition-all flex flex-col md:flex-row md:items-center gap-8 relative group cursor-pointer active:scale-[0.99]"
+                      >
+                        <div className="flex-shrink-0 flex items-center gap-6">
+                          <div className="w-20 h-20 bg-rose-50 dark:bg-rose-900/20 rounded-[2rem] flex flex-col items-center justify-center text-rose-800 dark:text-rose-400 border border-rose-100 dark:border-rose-900/30 shadow-inner">
+                            <span className="text-[10px] uppercase font-black tracking-widest">
+                              {new Date(safeDate)
+                                .toLocaleDateString("pt-BR", { month: "short" })
+                                .replace(".", "")}
+                            </span>
+                            <span className="text-3xl font-black">
+                              {new Date(safeDate).getDate()}
+                            </span>
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 italic">
+                              {churches.find((c) => c.id === schedule.churchId)?.name || "Igreja"}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                              <span className="px-2.5 py-0.5 bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 rounded-md text-[10px] font-black uppercase tracking-wider border border-rose-200 dark:border-rose-800/50 flex items-center gap-1">
+                                <BallerinaIcon className="w-3 h-3 text-rose-500" />
+                                Dança
+                              </span>
+                              {schedule.locationType === "external" ? (
+                                <span className="px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-md text-[10px] font-black uppercase tracking-wider border border-amber-200 dark:border-amber-800/50 flex items-center gap-1">
+                                  <MapPin className="w-3 h-3 text-amber-500" />{" "}
+                                  Externo:{" "}
+                                  {schedule.locationName || "Local Externo"}
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 rounded-md text-[10px] font-black uppercase tracking-wider border border-emerald-200 dark:border-emerald-800/50 flex items-center gap-1">
+                                  <MapPin className="w-3 h-3 text-emerald-500" />{" "}
+                                  Interno (Igreja)
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-4 text-slate-400 dark:text-slate-500 text-xs font-medium mt-2">
+                              {serviceName && (
+                                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-50 dark:bg-slate-800 rounded-md">
+                                  <Clock className="w-3.5 h-3.5" /> {serviceName}
+                                </span>
+                              )}
+                              <span className="flex items-center gap-1.5">
+                                <CalendarIcon className="w-3.5 h-3.5" />{" "}
+                                {new Date(safeDate).toLocaleDateString("pt-BR", {
+                                  weekday: "long",
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Mid Section - Dance Roles assigned */}
+                        <div className="flex-1 border-y md:border-y-0 md:border-x border-slate-100 dark:border-slate-800 py-6 md:py-0 md:px-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                          {/* Líder */}
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                              Líder / Ministrante
+                            </span>
+                            <div>
+                              {danceLeaderUids.length === 0 ? (
+                                <span className="text-[10px] text-slate-400 italic">Vago</span>
+                              ) : (
+                                danceLeaderUids.map((uid, lIdx) => {
+                                  const name = members.find((m) => m.uid === uid)?.name || "Membro";
+                                  return (
+                                    <div
+                                      key={`dance-leader-${uid}-${lIdx}`}
+                                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border text-rose-600 bg-rose-50/50 dark:bg-rose-900/10 dark:text-rose-400 border-rose-100 dark:border-rose-900/30"
+                                    >
+                                      <BallerinaIcon className="w-3 h-3 text-rose-500" />
+                                      <span className="truncate">{name.split(" ")[0]}</span>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Dançarinos */}
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                              Dançarinos(as) ({dancerUids.length})
+                            </span>
+                            <div className="flex flex-wrap gap-1">
+                              {dancerUids.length === 0 ? (
+                                <span className="text-[10px] text-slate-400 italic">Nenhum</span>
+                              ) : (
+                                dancerUids.slice(0, 3).map((uid, dIdx) => {
+                                  const name = members.find((m) => m.uid === uid)?.name || "Membro";
+                                  return (
+                                    <span
+                                      key={`dancer-${uid}-${dIdx}`}
+                                      className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-pink-50 dark:bg-pink-900/20 text-pink-700 dark:text-pink-300 border border-pink-100 dark:border-pink-900/40"
+                                    >
+                                      {name.split(" ")[0]}
+                                    </span>
+                                  );
+                                })
+                              )}
+                              {dancerUids.length > 3 && (
+                                <span className="text-[10px] font-bold text-slate-400 self-center">
+                                  +{dancerUids.length - 3}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Coreografia */}
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                              Coreografia
+                            </span>
+                            <div>
+                              {choreography ? (
+                                <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold border text-purple-600 bg-purple-50/50 dark:bg-purple-900/10 dark:text-purple-400 border-purple-100 dark:border-purple-900/30 truncate">
+                                  <Sparkles className="w-3 h-3 flex-shrink-0" />
+                                  <span className="truncate">{choreography}</span>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 italic">Não definida</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Figurino */}
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                              Figurino
+                            </span>
+                            <div>
+                              {costume ? (
+                                <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold border text-amber-600 bg-amber-50/50 dark:bg-amber-900/10 dark:text-amber-400 border-amber-100 dark:border-amber-900/30 truncate">
+                                  <Tag className="w-3 h-3 flex-shrink-0" />
+                                  <span className="truncate">{costume}</span>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 italic">Não definido</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex-shrink-0 flex items-center gap-4">
+                          {canManageDance && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenDanceModal(schedule);
+                              }}
+                              className="p-4 text-slate-300 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all bg-slate-50 dark:bg-slate-800/50 rounded-2xl cursor-pointer"
+                            >
+                              <Edit2 className="w-5 h-5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div
                       key={schedule.id}
@@ -2776,7 +3764,12 @@ export default function SchedulesPage() {
             <div className="flex justify-between items-start gap-6 border-b border-slate-100 dark:border-slate-800 pb-6 mb-6">
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-2">
-                  {isWorshipScale ? (
+                  {isDanceScale ? (
+                    <span className="px-3 py-1 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 rounded-full text-[10px] font-black uppercase tracking-wider border border-rose-100 dark:border-rose-900/40 flex items-center gap-1.5">
+                      <BallerinaIcon className="w-3.5 h-3.5 text-rose-500" />
+                      Ministério de Dança
+                    </span>
+                  ) : isWorshipScale ? (
                     <span className="px-3 py-1 bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-100 dark:border-blue-900/40">
                       Ministério de Louvor
                     </span>
@@ -2850,6 +3843,45 @@ export default function SchedulesPage() {
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
                     {viewSchedule.multimediaNotes}
                   </p>
+                </div>
+              )}
+
+              {/* Observações da Dança */}
+              {(viewSchedule as any).danceNotes && (viewSchedule as any).danceNotes.trim() && (
+                <div className="p-5 bg-rose-50/70 dark:bg-rose-950/10 border border-rose-100 dark:border-rose-900/30 rounded-3xl space-y-2">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-rose-800 dark:text-rose-400 flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-rose-500" /> Observações (Ministério de Dança)
+                  </h4>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                    {(viewSchedule as any).danceNotes}
+                  </p>
+                </div>
+              )}
+
+              {/* Coreografia & Figurino de Dança */}
+              {((viewSchedule as any).choreography || (viewSchedule as any).costume) && (
+                <div className="p-5 bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/40 rounded-3xl space-y-3">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-rose-800 dark:text-rose-400 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-rose-500" /> Detalhes da Apresentação de Dança
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {(viewSchedule as any).choreography && (
+                      <div className="p-3 bg-white dark:bg-slate-900 rounded-2xl border border-rose-100 dark:border-rose-900/30">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Coreografia / Música</span>
+                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-0.5">
+                          {(viewSchedule as any).choreography}
+                        </p>
+                      </div>
+                    )}
+                    {(viewSchedule as any).costume && (
+                      <div className="p-3 bg-white dark:bg-slate-900 rounded-2xl border border-rose-100 dark:border-rose-900/30">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Figurino / Vestimenta</span>
+                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mt-0.5">
+                          {(viewSchedule as any).costume}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -3398,6 +4430,303 @@ export default function SchedulesPage() {
                     </div>
                   </div>
                 </>
+              ) : isDanceScale ? (
+                /* Dance scale: list of dancers & roles */
+                <div className="space-y-5 pt-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-rose-50/80 via-pink-50/40 to-slate-50/60 dark:from-rose-950/20 dark:via-pink-950/15 dark:to-slate-900/40 p-4 sm:p-5 rounded-3xl border border-rose-100/90 dark:border-rose-900/40 shadow-2xs">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-rose-600 text-white rounded-2xl shadow-md shadow-rose-600/25 shrink-0">
+                        <BallerinaIcon className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-black uppercase tracking-tight text-slate-900 dark:text-slate-100">
+                            Equipe de Dança Escalada
+                          </h4>
+                          <span className="px-2.5 py-0.5 bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 font-black rounded-full text-[10px]">
+                            {getDanceRolesForDisplay().reduce((acc, r) => acc + getDanceUids(r.keys).length, 0)} {getDanceRolesForDisplay().reduce((acc, r) => acc + getDanceUids(r.keys).length, 0) === 1 ? "escalado" : "escalados"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                          Ministrantes, dançarinos(as), coreografia e figurino distribuídos para este culto ou apresentação.
+                        </p>
+                      </div>
+                    </div>
+
+                    {canManageDance && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const matching = matchingDanceSchedule || viewSchedule;
+                          handleOpenDanceModal(matching);
+                        }}
+                        className="self-start sm:self-auto px-4 py-2 bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Gerenciar Dança</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                    {getDanceRolesForDisplay().map((role) => {
+                      const uids = getDanceUids(role.keys);
+                      const RoleIcon = role.icon;
+                      return (
+                        <div
+                          key={role.configKey}
+                          className="p-4 bg-slate-50/70 dark:bg-slate-850/60 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2.5 shadow-2xs"
+                        >
+                          <div className="flex items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-800 pb-2">
+                            <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 truncate">
+                              <RoleIcon className={`w-3.5 h-3.5 ${role.color} shrink-0`} />
+                              <span className="truncate">{role.title}</span>
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold border shrink-0 ${uids.length > 0 ? role.bgBadge : "bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"}`}>
+                              {uids.length > 0 ? `${uids.length} ${uids.length === 1 ? "membro" : "membros"}` : "Vago"}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            {uids.length === 0 ? (
+                              <span className="text-xs text-slate-400 italic font-medium block py-1">
+                                Nenhum integrante alocado
+                              </span>
+                            ) : (
+                              uids.map((uid, idx) => {
+                                const memberObj = members.find((m) => m.uid === uid);
+                                return (
+                                  <div
+                                    key={`${uid}-${idx}`}
+                                    className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/60 shadow-2xs"
+                                  >
+                                    <div className="w-6 h-6 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-black text-[10px] flex items-center justify-center shrink-0">
+                                      {memberObj?.name ? memberObj.name.charAt(0).toUpperCase() : "M"}
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate flex-1">
+                                      {memberObj?.name || "Membro"}
+                                    </span>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Músicas do Ministério de Louvor para a Dança (Mesmo dia e culto) */}
+                  <div className="pt-8 border-t-2 border-dashed border-rose-200/90 dark:border-rose-900/40 space-y-5">
+                    {/* Header da Seção de Músicas do Louvor */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-rose-50/90 via-pink-50/50 to-indigo-50/50 dark:from-rose-950/30 dark:via-pink-950/20 dark:to-indigo-950/30 p-5 rounded-3xl border border-rose-200/80 dark:border-rose-900/50 shadow-2xs">
+                      <div className="flex items-center gap-3.5">
+                        <div className="p-3 bg-gradient-to-br from-rose-600 to-pink-600 text-white rounded-2xl shadow-md shadow-rose-600/25 shrink-0">
+                          <Music className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-sm font-black uppercase tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                              <span>Músicas do Louvor para a Dança</span>
+                            </h4>
+                            <span className="px-2.5 py-0.5 bg-rose-100 dark:bg-rose-900/70 text-rose-700 dark:text-rose-300 font-black rounded-full text-[10px]">
+                              {allWorshipSongIdsForDance.length} {allWorshipSongIdsForDance.length === 1 ? "música escalada" : "músicas escaladas"}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
+                            Repertório e playlist que o Ministério de Louvor tocará neste mesmo culto. Acesso completo para sincronizar passos e coreografias.
+                          </p>
+                        </div>
+                      </div>
+
+                      {allWorshipSongIdsForDance.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleCopyDancePlaylist}
+                          className="self-start sm:self-auto px-4 py-2 bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95"
+                          title="Copiar lista de músicas para WhatsApp do grupo de dança"
+                        >
+                          {copiedDancePlaylist ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-500" />
+                              <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">Copiada!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Copiar Playlist</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Metadados do Louvor: Ministro, Banda, Ensaio */}
+                    {worshipScheduleForDay && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {worshipMinisterName && (
+                          <span className="px-3 py-1 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-900/40 rounded-xl font-bold flex items-center gap-1.5 text-[11px]">
+                            <UserIcon className="w-3 h-3 text-indigo-500" />
+                            <span>Ministro do Louvor: {worshipMinisterName}</span>
+                          </span>
+                        )}
+                        {worshipBandName && (
+                          <span className="px-3 py-1 bg-amber-50/70 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-900/40 rounded-xl font-bold flex items-center gap-1.5 text-[11px]">
+                            <Users className="w-3 h-3 text-amber-500" />
+                            <span>Banda: {worshipBandName}</span>
+                          </span>
+                        )}
+                        {worshipScheduleForDay.rehearsalDate && (
+                          <span className="px-3 py-1 bg-purple-50/70 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border border-purple-200/80 dark:border-purple-900/40 rounded-xl font-bold flex items-center gap-1.5 text-[11px]">
+                            <Clock className="w-3 h-3 text-purple-500" />
+                            <span>Ensaio Geral do Louvor: {new Date(`${worshipScheduleForDay.rehearsalDate}T12:00:00`).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })} às {worshipScheduleForDay.rehearsalTime || "00:00"}</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Barra de Busca de Músicas (quando há 3 ou mais músicas) */}
+                    {allWorshipSongIdsForDance.length >= 3 && (
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={dancePlaylistSearchTerm}
+                          onChange={(e) => setDancePlaylistSearchTerm(e.target.value)}
+                          placeholder="Filtrar por nome da música, cantor ou tom..."
+                          className="w-full bg-white dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700/80 rounded-2xl pl-10 pr-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-rose-500/20 font-medium placeholder:text-slate-400"
+                        />
+                        {dancePlaylistSearchTerm && (
+                          <button
+                            type="button"
+                            onClick={() => setDancePlaylistSearchTerm("")}
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                          >
+                            Limpar
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Lista de Músicas */}
+                    {allWorshipSongIdsForDance.length > 0 ? (
+                      <div className="space-y-2 max-h-80 overflow-y-auto pr-1.5 custom-scrollbar">
+                        {filteredDanceWorshipSongIds.length > 0 ? (
+                          filteredDanceWorshipSongIds.map((songId, idx) => {
+                            const songObj = songs.find((s) => s.id === songId) || personalSongs.find((s) => s.id === songId);
+                            const songKey = songObj?.key?.trim();
+                            const isStudyPlaylist = danceWorshipPlaylistIds.includes(songId);
+                            const isDanceChoreo = (viewSchedule as any)?.choreography &&
+                              songObj?.title &&
+                              (viewSchedule as any).choreography.toLowerCase().includes(songObj.title.toLowerCase().trim()) &&
+                              songObj.title.trim().length > 2;
+
+                            return (
+                              <div
+                                key={`dance-worship-song-${songId}-${idx}`}
+                                onClick={() => handleOpenSongDetails(songId, songObj)}
+                                className={cn(
+                                  "group flex items-center justify-between p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs hover:shadow-md active:scale-[0.99]",
+                                  isDanceChoreo
+                                    ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 hover:border-rose-400"
+                                    : "bg-white dark:bg-slate-800/80 hover:bg-rose-50/40 dark:hover:bg-rose-950/20 border-slate-200/80 dark:border-slate-700/60 hover:border-rose-200 dark:hover:border-rose-800/60"
+                                )}
+                                title="Clique para abrir cifra, letra completa e detalhes da música"
+                              >
+                                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                                  <div className={cn(
+                                    "w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 transition-colors",
+                                    isDanceChoreo
+                                      ? "bg-rose-600 text-white shadow-xs"
+                                      : "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-100 dark:border-rose-900/40 group-hover:bg-rose-600 group-hover:text-white"
+                                  )}>
+                                    {idx + 1}
+                                  </div>
+
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <h5 className="font-extrabold text-sm text-slate-800 dark:text-slate-100 group-hover:text-rose-700 dark:group-hover:text-rose-400 transition-colors truncate">
+                                        {songObj?.title || `Música ID: ${songId.slice(0, 8)}...`}
+                                      </h5>
+                                      {isDanceChoreo && (
+                                        <span className="px-2 py-0.5 bg-rose-200 dark:bg-rose-900 text-rose-900 dark:text-rose-200 rounded-md text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                                          <Sparkles className="w-2.5 h-2.5 text-rose-600 dark:text-rose-300" /> Coreografia do Dia
+                                        </span>
+                                      )}
+                                      {isStudyPlaylist && (
+                                        <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 rounded-md text-[9px] font-black uppercase tracking-wider">
+                                          Playlist de Estudo
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <p className="text-xs text-slate-400 dark:text-slate-400 font-medium truncate mt-0.5">
+                                      {songObj?.artist || "Artista não informado"}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2.5 shrink-0 ml-3">
+                                  {/* Tom da Música */}
+                                  <span className={cn(
+                                    "px-2.5 py-1 rounded-xl text-xs font-black flex items-center gap-1 border transition-colors",
+                                    songKey
+                                      ? "bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                                      : "bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
+                                  )}>
+                                    <span className="text-[9px] font-bold uppercase text-slate-400 dark:text-slate-500">Tom:</span>
+                                    <span>{songKey || "—"}</span>
+                                  </span>
+
+                                  {songObj?.bpm && (
+                                    <span className="hidden sm:inline-block px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-bold rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+                                      {songObj.bpm} BPM
+                                    </span>
+                                  )}
+
+                                  {songObj?.link && (
+                                    <a
+                                      href={songObj.link}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="p-1.5 bg-slate-100 hover:bg-rose-100 dark:bg-slate-800 dark:hover:bg-rose-950/60 text-slate-600 hover:text-rose-600 dark:text-slate-300 rounded-lg transition-colors cursor-pointer"
+                                      title="Abrir Áudio / Vídeo da música"
+                                    >
+                                      <Play className="w-3.5 h-3.5 fill-current" />
+                                    </a>
+                                  )}
+
+                                  <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/60 text-slate-400 group-hover:text-rose-600 dark:group-hover:text-rose-300 flex items-center justify-center transition-all">
+                                    <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="p-6 text-center bg-white dark:bg-slate-850 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                            <p className="text-xs font-semibold text-slate-500">Nenhuma música encontrada com &quot;{dancePlaylistSearchTerm}&quot;</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-8 sm:p-10 text-center bg-slate-50/70 dark:bg-slate-850/50 rounded-3xl border border-dashed border-rose-200/90 dark:border-rose-900/40 space-y-3">
+                        <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-500 dark:text-rose-400 flex items-center justify-center border border-rose-100 dark:border-rose-900/40">
+                          <Music className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h5 className="font-bold text-sm text-slate-800 dark:text-slate-200">
+                            Nenhuma música adicionada na escala de louvor deste dia
+                          </h5>
+                          <p className="text-xs text-slate-400 dark:text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
+                            Assim que o Ministério de Louvor definir as músicas do culto ({new Date(viewSafeDate).toLocaleDateString("pt-BR")}), a playlist completa aparecerá aqui automaticamente para que as integrantes da dança tenham acesso a todas as músicas do período de louvor.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               ) : (
                 /* Multimedia / Media scale: list of operators */
                 <div className="space-y-5 pt-2">
@@ -3799,11 +5128,11 @@ export default function SchedulesPage() {
                                     Nenhum disponível
                                   </div>
                                 ) : (
-                                  availableMembers.map((m) => {
+                                  availableMembers.map((m, mIdx) => {
                                     const isAvailable = teamAvailability.includes(m.uid);
                                     return (
                                       <button
-                                        key={m.uid}
+                                        key={`vocal-${actualKey}-${m.uid}-${mIdx}`}
                                         type="button"
                                         onClick={() =>
                                           handleRoleChange(
@@ -3895,11 +5224,11 @@ export default function SchedulesPage() {
                                     Nenhum disponível
                                   </div>
                                 ) : (
-                                  availableMembers.map((m) => {
+                                  availableMembers.map((m, mIdx) => {
                                     const isAvailable = teamAvailability.includes(m.uid);
                                     return (
                                       <button
-                                        key={m.uid}
+                                        key={`inst-${actualKey}-${m.uid}-${mIdx}`}
                                         type="button"
                                         onClick={() =>
                                           handleRoleChange(
@@ -3966,11 +5295,11 @@ export default function SchedulesPage() {
                                   Nenhum disponível
                                 </div>
                               ) : (
-                                availableMembers.map((m) => {
+                                availableMembers.map((m, mIdx) => {
                                   const isAvailable = teamAvailability.includes(m.uid);
                                   return (
                                     <button
-                                      key={m.uid}
+                                      key={`tech-${role.key}-${m.uid}-${mIdx}`}
                                       type="button"
                                       onClick={() =>
                                         handleRoleChange(
@@ -4256,12 +5585,12 @@ export default function SchedulesPage() {
                                   {candidates.length === 0 ? (
                                     <span className="text-[10px] text-slate-400 italic">Nenhum membro disponível</span>
                                   ) : (
-                                    candidates.map((cand) => {
+                                    candidates.map((cand, cIdx) => {
                                       const isSelected = selectedUid === cand.uid;
                                       const isAvailable = teamAvailability.includes(cand.uid);
                                       return (
                                         <button
-                                          key={cand.uid}
+                                          key={`multimedia-${role.key}-${idx}-${cand.uid}-${cIdx}`}
                                           type="button"
                                           onClick={() => handleSelectMultimediaMember(role.key, idx, cand.uid)}
                                           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border-2 flex items-center gap-1.5 ${
@@ -4304,6 +5633,305 @@ export default function SchedulesPage() {
                 >
                   <Bell className="w-5 h-5" />
                   {editingSchedule ? "Salvar Escala Multimídia" : "Criar Escala Multimídia"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Dance scale modal */}
+      {isDanceModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-950 w-full max-w-4xl rounded-[3rem] shadow-2xl border border-slate-100 dark:border-slate-900 py-10 px-8 md:px-12 my-8 relative max-h-[90vh] overflow-y-auto scrollbar-thin">
+            <button
+              type="button"
+              onClick={() => setIsDanceModalOpen(false)}
+              className="absolute top-8 right-8 p-3 text-slate-400 hover:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-900/50 rounded-2xl transition-all cursor-pointer"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <div className="mb-10">
+              <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-[0.25em] block mb-2 font-mono flex items-center gap-1.5">
+                <BallerinaIcon className="w-3.5 h-3.5 inline-block text-rose-500" />
+                MINISTÉRIO DE DANÇA
+              </span>
+              <h2 className="text-3xl font-display font-black text-slate-900 dark:text-slate-100 italic tracking-tight">
+                {editingSchedule ? "Editar Escala de Dança" : "Nova Escala de Dança"}
+              </h2>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mt-1">
+                Gere uma escala baseada nas funções, coreografia, figurino e integrantes de dança da sua igreja.
+              </p>
+            </div>
+
+            {danceDateError && (
+              <div className="mb-6 p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/50 text-rose-700 dark:text-rose-400 rounded-2xl flex items-center gap-3 text-xs font-bold leading-relaxed shadow-sm">
+                <ShieldAlert className="w-5 h-5 flex-shrink-0" />
+                <span>{danceDateError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveDance} className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  {/* Date Pick */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <CalendarIcon size={12} /> Data da Escala *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      className="w-full bg-transparent border-b-2 border-slate-200 dark:border-slate-800 py-3 outline-none focus:border-rose-600 transition-colors text-slate-800 dark:text-slate-100 font-bold"
+                      value={danceDate}
+                      onChange={(e) => setDanceDate(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Location Toggle */}
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                      Localização *
+                    </label>
+                    <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-inner">
+                      <button
+                        type="button"
+                        onClick={() => setDanceLocationType("internal")}
+                        className={`py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                          danceLocationType === "internal"
+                            ? "bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-md scale-[1.02]"
+                            : "text-slate-400 hover:text-slate-600"
+                        }`}
+                      >
+                        <Building2 className="w-4 h-4" />
+                        Culto Interno
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDanceLocationType("external")}
+                        className={`py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                          danceLocationType === "external"
+                            ? "bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-md scale-[1.02]"
+                            : "text-slate-400 hover:text-slate-600"
+                        }`}
+                      >
+                        <Globe className="w-4 h-4" />
+                        Apresentação Externa
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Conditional Service or External Input */}
+                  {danceLocationType === "internal" && userData?.churchId && (
+                    <div className="space-y-4 animate-fadeIn">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <Clock size={12} /> Selecione o Culto *
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {services
+                          .filter(
+                            (s) =>
+                              s.churchId === userData.churchId &&
+                              (s.status !== "inactive" || s.id === danceServiceId)
+                          )
+                          .map((s) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => setDanceServiceId(s.id)}
+                              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border-2 cursor-pointer ${
+                                danceServiceId === s.id
+                                  ? "bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-600/20"
+                                  : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-rose-200"
+                              }`}
+                            >
+                              {s.name} ({s.dayOfWeek})
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {danceLocationType === "external" && (
+                    <div className="space-y-2 animate-fadeIn">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <MapPin size={12} /> Nome do Local / Evento Externo *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ex: Congresso de Jovens - Igreja Central"
+                        className="w-full bg-transparent border-b-2 border-slate-200 dark:border-slate-800 py-3 outline-none focus:border-rose-600 transition-colors text-slate-800 dark:text-slate-100 font-bold"
+                        value={danceLocationName}
+                        onChange={(e) => setDanceLocationName(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-5">
+                  {/* Profile Selection if available */}
+                  {danceProfiles.length > 1 && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                        Modelo de Escala (Perfil)
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {danceProfiles.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => handleSelectDanceProfile(p.id)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                              selectedDanceProfileId === p.id
+                                ? "bg-rose-600 text-white border-rose-600 shadow-md"
+                                : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
+                            }`}
+                          >
+                            {p.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Coreografia / Música */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 font-mono">
+                      <Sparkles size={12} className="text-rose-500" /> Coreografia / Música da Apresentação
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 outline-none focus:border-rose-600 transition-colors text-slate-800 dark:text-slate-100 font-medium"
+                      placeholder="Ex: Leão da Tribo, Ruja o Leão, Vestes de Louvor..."
+                      value={danceChoreography}
+                      onChange={(e) => setDanceChoreography(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Figurino */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 font-mono">
+                      <Tag size={12} className="text-amber-500" /> Figurino & Vestimenta
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 outline-none focus:border-rose-600 transition-colors text-slate-800 dark:text-slate-100 font-medium"
+                      placeholder="Ex: Túnica Branca com lenço dourado, cabelo preso..."
+                      value={danceCostume}
+                      onChange={(e) => setDanceCostume(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Extra Remarks info */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                      Orientações & Observações para a Equipe
+                    </label>
+                    <textarea
+                      rows={3}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 outline-none focus:border-rose-600 transition-colors text-slate-800 dark:text-slate-100 font-medium resize-none shadow-inner text-xs"
+                      placeholder="Orientações de aquecimento, horário de chegada no camarim/sala de oração, detalhes técnicos..."
+                      value={danceNotes}
+                      onChange={(e) => setDanceNotes(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SLOTS ALLOCATION */}
+              <div
+                className={`transition-opacity space-y-8 border-t border-slate-100 dark:border-slate-800 pt-8 ${
+                  !danceDate ? "opacity-30 pointer-events-none" : "opacity-100"
+                }`}
+              >
+                <div>
+                  <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-2">
+                    <BallerinaIcon className="w-4 h-4 text-rose-600" />
+                    Alocação de Integrantes do Ministério de Dança
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-medium mt-1">
+                    Selecione as pessoas que irão ministrar e dançar nesta escala.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {getDanceRolesToDisplay().map((role) => {
+                    const cfg = danceConfig[role.configKey];
+                    if (!cfg || !cfg.enabled) return null;
+
+                    const slotsCount = cfg.count || 1;
+                    const slotsArr = Array.from({ length: slotsCount });
+                    const candidates = getDanceCandidatesForRole(role.configKey);
+
+                    return (
+                      <div key={role.key} className="space-y-4 p-6 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2 uppercase tracking-wide">
+                          <role.icon className="w-4 h-4 text-rose-600" />
+                          {role.title} ({slotsCount} vaga{slotsCount > 1 ? "s" : ""})
+                        </h4>
+
+                        <div className="space-y-4">
+                          {slotsArr.map((_, idx) => {
+                            const selectedUid = danceRolesForm[role.key]?.[idx] || "";
+                            return (
+                              <div key={`${role.key}-${idx}`} className="space-y-2">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-mono">
+                                  VAGA #{idx + 1}
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {candidates.length === 0 ? (
+                                    <span className="text-[10px] text-slate-400 italic">Nenhum membro disponível</span>
+                                  ) : (
+                                    candidates.map((cand, cIdx) => {
+                                      const isSelected = selectedUid === cand.uid;
+                                      const isAvailable = teamAvailability.includes(cand.uid);
+                                      return (
+                                        <button
+                                          key={`dance-${role.key}-${idx}-${cand.uid}-${cIdx}`}
+                                          type="button"
+                                          onClick={() => handleSelectDanceMember(role.key, idx, cand.uid)}
+                                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border-2 flex items-center gap-1.5 cursor-pointer ${
+                                            isSelected
+                                              ? "bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-600/25 scale-95"
+                                              : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-rose-200 dark:hover:border-rose-900/40"
+                                          }`}
+                                        >
+                                          {cand.name ? cand.name.split(" ")[0] : "Anon"}
+                                          {isAvailable && (
+                                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Disponível"></span>
+                                          )}
+                                        </button>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Footer Save / Cancel buttons */}
+              <div className="flex gap-4 pt-8 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsDanceModalOpen(false)}
+                  className="flex-1 px-8 py-5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold rounded-[2rem] transition-all hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-8 py-5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-[2rem] transition-all shadow-xl shadow-rose-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Bell className="w-5 h-5" />
+                  {editingSchedule ? "Salvar Escala de Dança" : "Criar Escala de Dança"}
                 </button>
               </div>
             </form>
@@ -4516,6 +6144,7 @@ export default function SchedulesPage() {
                 const churchName =
                   churches.find((c) => c.id === schedule.churchId)?.name || "Igreja";
                 const isMultimedia = activeTab === "multimedia";
+                const isDance = activeTab === "dance";
 
                 return (
                   <div
@@ -4524,14 +6153,22 @@ export default function SchedulesPage() {
                       setSelectedScheduleForView(schedule);
                       setDayMultipleSchedulesModal(null);
                     }}
-                    className="p-5 bg-slate-50 hover:bg-blue-50/80 dark:bg-slate-800/60 dark:hover:bg-blue-950/40 border border-slate-200/80 hover:border-blue-200 dark:border-slate-700/80 dark:hover:border-blue-800 rounded-2xl transition-all cursor-pointer group flex items-center justify-between shadow-xs hover:shadow-md"
+                    className="p-5 bg-slate-50 hover:bg-rose-50/80 dark:bg-slate-800/60 dark:hover:bg-rose-950/40 border border-slate-200/80 hover:border-rose-200 dark:border-slate-700/80 dark:hover:border-rose-800 rounded-2xl transition-all cursor-pointer group flex items-center justify-between shadow-xs hover:shadow-md"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300">
-                          {isMultimedia ? "Multimídia" : "Louvor"}
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                            isDance
+                              ? "bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300"
+                              : isMultimedia
+                              ? "bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300"
+                              : "bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300"
+                          }`}
+                        >
+                          {isDance ? "Dança" : isMultimedia ? "Multimídia" : "Louvor"}
                         </span>
-                        <h4 className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        <h4 className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
                           {serviceName || `Culto #${sIdx + 1}`}
                         </h4>
                       </div>
@@ -4540,7 +6177,7 @@ export default function SchedulesPage() {
                       </p>
                     </div>
 
-                    <span className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider group-hover:translate-x-1 transition-transform">
+                    <span className="text-xs font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider group-hover:translate-x-1 transition-transform">
                       Ver Informações →
                     </span>
                   </div>
@@ -4639,6 +6276,22 @@ export default function SchedulesPage() {
                 >
                   <Plus className="w-4 h-4" />
                   Criar Escala de Multimídia
+                </button>
+              )}
+
+              {activeTab === "dance" && canManageDance && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetDate = dayEmptyModal.dateStr;
+                    setDayEmptyModal(null);
+                    handleOpenDanceModal(null);
+                    setDanceDate(targetDate);
+                  }}
+                  className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-rose-600/20 active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Criar Escala de Dança
                 </button>
               )}
 

@@ -14,6 +14,7 @@ import {
   Briefcase,
   ChevronDown,
 } from "lucide-react";
+import { BallerinaIcon } from "@/components/BallerinaIcon";
 
 export default function HomePage() {
   const { user, loading } = useAuth();
@@ -98,6 +99,14 @@ export default function HomePage() {
                   >
                     <Video className="w-4 h-4 text-amber-500" />
                     <span>Multimídia</span>
+                  </Link>
+                  <Link
+                    href="/register?role=danca"
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-250 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    onClick={() => setIsRegisterMenuOpen(false)}
+                  >
+                    <BallerinaIcon className="w-4 h-4 text-rose-500" />
+                    <span>Ministério de Dança</span>
                   </Link>
                   <Link
                     href="/register?role=secretaria"

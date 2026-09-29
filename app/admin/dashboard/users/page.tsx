@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, getDoc, updateDoc, setDoc, serverTimestamp, getDocFromCache } from 'firebase/firestore';
 import { useAuth } from '@/components/AuthProvider';
-import { Users, Loader2, Search, X, CheckCircle2, User as UserIcon, Save, Music, Mic2 } from 'lucide-react';
+import { Users, Loader2, Search, X, CheckCircle2, User as UserIcon, Save, Music, Mic2, Sparkles } from 'lucide-react';
+import { BallerinaIcon } from '@/components/BallerinaIcon';
 import * as Dialog from '@radix-ui/react-dialog';
 import { formatPhone } from '@/lib/utils';
 
@@ -21,7 +22,9 @@ interface PlatformUser {
     worship?: string[];
     multimedia?: string[];
     secretariat?: string[];
+    dance?: string[];
   };
+  danceStyles?: string[];
   instruments?: string[];
   vocalRange?: string;
   voice?: string;
@@ -51,7 +54,8 @@ export default function AdminUsersPage() {
   const [deptRoles, setDeptRoles] = useState<Record<string, string[]>>({
     worship: [],
     multimedia: [],
-    secretariat: []
+    secretariat: [],
+    dance: []
   });
   const [savingLoading, setSavingLoading] = useState(false);
 
@@ -97,12 +101,12 @@ export default function AdminUsersPage() {
   const handleUserClick = async (u: PlatformUser) => {
     setSelectedUser(u);
     setEditChurchId(u.churchId || '');
-    setDeptRoles({ worship: [], multimedia: [], secretariat: [] });
+    setDeptRoles({ worship: [], multimedia: [], secretariat: [], dance: [] });
     
     // Fetch current department roles if the user has a church
     if (u.churchId) {
-      const depts = ['worship', 'multimedia', 'secretariat'];
-      const rolesData: Record<string, string[]> = { worship: [], multimedia: [], secretariat: [] };
+      const depts = ['worship', 'multimedia', 'dance', 'secretariat'];
+      const rolesData: Record<string, string[]> = { worship: [], multimedia: [], secretariat: [], dance: [] };
       
       for (const dept of depts) {
         try {
@@ -114,6 +118,12 @@ export default function AdminUsersPage() {
           console.error(`Error loading roles for ${dept}:`, error);
         }
       }
+
+      // Fallback: if church subcollection is empty for dance, use user doc roles
+      if ((!rolesData.dance || rolesData.dance.length === 0) && u.roles?.dance) {
+        rolesData.dance = u.roles.dance;
+      }
+
       setDeptRoles(rolesData);
     }
     
@@ -127,7 +137,12 @@ export default function AdminUsersPage() {
       // 1. Update user document and its internal roles
       const userRef = doc(db, 'users', selectedUser.id);
       const userSnap = await getDoc(userRef);
-      let userRoles = { worship: [] as string[], multimedia: [] as string[], secretariat: [] as string[] };
+      let userRoles = {
+        worship: [] as string[],
+        multimedia: [] as string[],
+        secretariat: [] as string[],
+        dance: [] as string[],
+      };
       if (userSnap.exists()) {
         const data = userSnap.data();
         if (data.roles) {
@@ -135,6 +150,7 @@ export default function AdminUsersPage() {
             worship: data.roles.worship || [],
             multimedia: data.roles.multimedia || [],
             secretariat: data.roles.secretariat || [],
+            dance: data.roles.dance || [],
           };
         }
       }
@@ -149,7 +165,7 @@ export default function AdminUsersPage() {
         userRoles.worship = userRoles.worship.filter(r => r !== 'leader');
       }
 
-      const isMultimediaLeader = deptRoles['multimedia']?.includes('leader');
+      const isMultimediaLeader = deptRoles['multimedia']?.includes('leader') || deptRoles['multimedia']?.includes('multimedia_leader');
       if (isMultimediaLeader) {
         if (!userRoles.multimedia.includes('leader')) {
           userRoles.multimedia = [...userRoles.multimedia, 'leader'];
@@ -159,6 +175,18 @@ export default function AdminUsersPage() {
         }
       } else {
         userRoles.multimedia = userRoles.multimedia.filter(r => r !== 'leader' && r !== 'multimedia_leader');
+      }
+
+      const isDanceLeader = deptRoles['dance']?.includes('leader') || deptRoles['dance']?.includes('dance_leader');
+      if (isDanceLeader) {
+        if (!userRoles.dance.includes('leader')) {
+          userRoles.dance = [...userRoles.dance, 'leader'];
+        }
+        if (!userRoles.dance.includes('dance_leader')) {
+          userRoles.dance = [...userRoles.dance, 'dance_leader'];
+        }
+      } else {
+        userRoles.dance = userRoles.dance.filter(r => r !== 'leader' && r !== 'dance_leader');
       }
 
       const isSecretariatLeader = deptRoles['secretariat']?.includes('leader');
@@ -179,10 +207,16 @@ export default function AdminUsersPage() {
       
       // 2. Update roles for each department in the subcollection
       if (editChurchId) {
-        const depts = ['worship', 'multimedia', 'secretariat'];
+        const depts = ['worship', 'multimedia', 'dance', 'secretariat'];
         for (const dept of depts) {
           const memberRef = doc(db, 'churches', editChurchId, 'departments', dept, 'members', selectedUser.id);
-          const currentRoles = deptRoles[dept] || [];
+          let currentRoles = deptRoles[dept] || [];
+          if (dept === 'dance' && currentRoles.includes('leader') && !currentRoles.includes('dance_leader')) {
+            currentRoles = [...currentRoles, 'dance_leader'];
+          }
+          if (dept === 'multimedia' && currentRoles.includes('leader') && !currentRoles.includes('multimedia_leader')) {
+            currentRoles = [...currentRoles, 'multimedia_leader'];
+          }
           
           const memberSnap = await getDoc(memberRef);
           if (!memberSnap.exists()) {
@@ -224,12 +258,24 @@ export default function AdminUsersPage() {
   const toggleLeaderRole = (dept: string) => {
     setDeptRoles(prev => {
       const current = prev[dept] || [];
-      const isLeader = current.includes('leader');
+      const isLeader = current.includes('leader') || (dept === 'dance' && current.includes('dance_leader')) || (dept === 'multimedia' && current.includes('multimedia_leader'));
       
       if (isLeader) {
-        return { ...prev, [dept]: current.filter(r => r !== 'leader') };
+        return {
+          ...prev,
+          [dept]: current.filter(r => r !== 'leader' && r !== 'dance_leader' && r !== 'multimedia_leader')
+        };
       } else {
-        return { ...prev, [dept]: [...current, 'leader'] };
+        const extraRoles = dept === 'dance'
+          ? ['leader', 'dance_leader']
+          : dept === 'multimedia'
+            ? ['leader', 'multimedia_leader']
+            : ['leader'];
+        const cleaned = current.filter(r => !extraRoles.includes(r));
+        return {
+          ...prev,
+          [dept]: [...cleaned, ...extraRoles]
+        };
       }
     });
   };
@@ -490,6 +536,34 @@ export default function AdminUsersPage() {
                           )}
                         </div>
 
+                        {/* Dança */}
+                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60">
+                          <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                            <BallerinaIcon className="w-3.5 h-3.5 text-rose-500" />
+                            Ministério de Dança / dance
+                          </p>
+                          {selectedUser.roles?.dance && selectedUser.roles.dance.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {selectedUser.roles.dance.map((r) => (
+                                <span key={r} className="px-2.5 py-1 bg-rose-500/10 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/50 rounded-lg text-xs font-bold capitalize font-mono">
+                                  {r === "leader" || r === "dance_leader" ? "Líder 👑" : r}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 italic">Nenhum papel atribuído neste ministério</p>
+                          )}
+                          {selectedUser.danceStyles && selectedUser.danceStyles.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {selectedUser.danceStyles.map((st) => (
+                                <span key={st} className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded text-[10px] font-medium">
+                                  {st}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
                         {/* Secretaria */}
                         <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60">
                           <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
@@ -526,9 +600,9 @@ export default function AdminUsersPage() {
                         value={editChurchId}
                         onChange={(e) => {
                           setEditChurchId(e.target.value);
-                          // Reset roles when changing church? Not strictly necessary but good.
+                          // Reset roles when changing church
                           if (e.target.value !== selectedUser.churchId) {
-                            setDeptRoles({ worship: [], multimedia: [], secretariat: [] });
+                            setDeptRoles({ worship: [], multimedia: [], secretariat: [], dance: [] });
                           }
                         }}
                         className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm mb-4"
@@ -546,20 +620,38 @@ export default function AdminUsersPage() {
                           Liderança por Departamento
                         </label>
                         
-                        {['worship', 'multimedia', 'secretariat'].map((dept) => {
-                          const isLeader = deptRoles[dept]?.includes('leader');
-                          const labels: Record<string, string> = {
-                            worship: 'Ministério de Louvor',
-                            multimedia: 'Multimídia',
-                            secretariat: 'Secretaria'
+                        {['worship', 'multimedia', 'dance', 'secretariat'].map((dept) => {
+                          const isLeader = deptRoles[dept]?.includes('leader') || (dept === 'dance' && deptRoles[dept]?.includes('dance_leader')) || (dept === 'multimedia' && deptRoles[dept]?.includes('multimedia_leader'));
+                          const labels: Record<string, { label: string; icon: React.ReactNode }> = {
+                            worship: {
+                              label: 'Ministério de Louvor',
+                              icon: <Music className="w-4 h-4 text-blue-500" />
+                            },
+                            multimedia: {
+                              label: 'Multimídia',
+                              icon: <span className="w-2 h-2 rounded-full bg-purple-500" />
+                            },
+                            dance: {
+                              label: 'Ministério de Dança',
+                              icon: <BallerinaIcon className="w-4 h-4 text-rose-500" />
+                            },
+                            secretariat: {
+                              label: 'Secretaria',
+                              icon: <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                            }
                           };
+                          
+                          const deptInfo = labels[dept];
                           
                           return (
                             <label key={dept} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 cursor-pointer hover:border-blue-200 dark:hover:border-blue-900/50 transition-colors">
-                              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                {labels[dept]}
-                              </span>
-                              <div className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2" style={{ backgroundColor: isLeader ? '#3b82f6' : '#cbd5e1' }}>
+                              <div className="flex items-center gap-2.5">
+                                {deptInfo.icon}
+                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                  {deptInfo.label}
+                                </span>
+                              </div>
+                              <div className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2" style={{ backgroundColor: isLeader ? (dept === 'dance' ? '#e11d48' : '#3b82f6') : '#cbd5e1' }}>
                                 <input
                                   type="checkbox"
                                   className="sr-only"

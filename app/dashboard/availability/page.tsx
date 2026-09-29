@@ -23,7 +23,10 @@ import {
   AlertCircle,
   Users,
   Eye,
+  Sparkles,
+  Filter,
 } from "lucide-react";
+import { BallerinaIcon } from "@/components/BallerinaIcon";
 import { useRouter } from "next/navigation";
 
 interface AvailabilityRecord {
@@ -55,6 +58,8 @@ export default function AvailabilityPage() {
     null,
   );
 
+  const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>("all");
+
   const monthNames = [
     "Janeiro",
     "Fevereiro",
@@ -83,8 +88,38 @@ export default function AvailabilityPage() {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDayOfMonth(year, month);
 
-  const isLeader = userData?.roles?.worship?.includes("leader") || userData?.roles?.multimedia?.includes("leader") || userData?.roles?.secretariat?.includes("leader");
+  const isDanceLeader = Boolean(
+    userData?.roles?.dance?.includes("leader") ||
+    userData?.roles?.dance?.includes("dance_leader")
+  );
+  const isWorshipLeader = Boolean(userData?.roles?.worship?.includes("leader"));
+  const isMultimediaLeader = Boolean(userData?.roles?.multimedia?.includes("leader"));
+  const isSecretariatLeader = Boolean(userData?.roles?.secretariat?.includes("leader"));
+
+  const isLeader =
+    isWorshipLeader ||
+    isMultimediaLeader ||
+    isSecretariatLeader ||
+    isDanceLeader;
   const isAdmin = userData?.role === "líder" || isLeader;
+
+  const isDanceOnlyLeader =
+    isDanceLeader &&
+    !isWorshipLeader &&
+    !isMultimediaLeader &&
+    !isSecretariatLeader &&
+    userData?.role !== "líder" &&
+    userData?.role !== "super_admin" &&
+    userData?.super_admin !== true;
+
+  const allowedDepartmentsList = (
+    userData?.role === "super_admin" || userData?.super_admin === true || userData?.role === "líder"
+  )
+    ? ["worship", "dance", "multimedia", "secretariat"]
+    : ["worship", "dance", "multimedia", "secretariat"].filter((deptId) => {
+        if (deptId === "dance") return isDanceLeader;
+        return userData?.roles?.[deptId]?.includes("leader");
+      });
 
   useEffect(() => {
     async function loadAvailability() {
@@ -123,12 +158,20 @@ export default function AvailabilityPage() {
       const isGlobalLeader = userData?.role === "líder";
       const hasFullAccess = isSuperAdmin || isGlobalLeader;
 
-      const myLedDepts = ["worship", "multimedia", "secretariat"].filter(
-        (deptId) => userData?.roles?.[deptId]?.includes("leader")
+      const myLedDepts = ["worship", "multimedia", "secretariat", "dance"].filter(
+        (deptId) => {
+          if (deptId === "dance") {
+            return (
+              userData?.roles?.dance?.includes("leader") ||
+              userData?.roles?.dance?.includes("dance_leader")
+            );
+          }
+          return userData?.roles?.[deptId]?.includes("leader");
+        }
       );
 
       const allowedDepts = hasFullAccess
-        ? ["worship", "multimedia", "secretariat"]
+        ? ["worship", "dance", "multimedia", "secretariat"]
         : myLedDepts;
 
       if (allowedDepts.length === 0) {
@@ -168,9 +211,16 @@ export default function AvailabilityPage() {
       const membersMap = new Map<string, any>();
       membersSnap.docs.forEach((d) => {
         const uData = d.data();
-        const hasDeptRole = allowedDepts.some(
-          (dept) => uData.roles?.[dept] && uData.roles[dept].length > 0
-        );
+        const hasDeptRole = allowedDepts.some((dept) => {
+          if (dept === "dance") {
+            return (
+              (uData.roles?.dance && uData.roles.dance.length > 0) ||
+              (uData.danceStyles && uData.danceStyles.length > 0) ||
+              (uData.danceGroups && uData.danceGroups.length > 0)
+            );
+          }
+          return uData.roles?.[dept] && uData.roles[dept].length > 0;
+        });
         if (hasDeptRole || deptMembersUids.has(d.id)) {
           membersMap.set(d.id, { uid: d.id, ...uData });
         }
@@ -282,24 +332,67 @@ export default function AvailabilityPage() {
     );
   };
 
+  const filteredTeamAvailability = teamAvailability.filter((rec) => {
+    if (selectedDeptFilter === "all") return true;
+    const m = rec.memberInfo as any;
+    if (selectedDeptFilter === "dance") {
+      return (
+        (m?.roles?.dance && m.roles.dance.length > 0) ||
+        (m?.danceStyles && m.danceStyles.length > 0) ||
+        (m?.danceGroups && m.danceGroups.length > 0)
+      );
+    }
+    if (selectedDeptFilter === "worship") {
+      return (
+        (m?.roles?.worship && m.roles.worship.length > 0) ||
+        (m?.instruments && m.instruments.length > 0) ||
+        (m?.vocalRange && m.vocalRange.trim().length > 0)
+      );
+    }
+    if (selectedDeptFilter === "multimedia") {
+      return m?.roles?.multimedia && m.roles.multimedia.length > 0;
+    }
+    if (selectedDeptFilter === "secretariat") {
+      return m?.roles?.secretariat && m.roles.secretariat.length > 0;
+    }
+    return true;
+  });
+
   const getAvailableCount = (day: number) => {
-    return teamAvailability.filter((rec) => rec.days.includes(day)).length;
+    return filteredTeamAvailability.filter((rec) => rec.days.includes(day)).length;
   };
 
   const getAvailableMembersDetails = (day: number) => {
-    return teamAvailability
+    return filteredTeamAvailability
       .filter((rec) => rec.days.includes(day))
       .map((rec) => {
         const member = rec.memberInfo as any;
         const vocal = member?.vocalRange || "";
         const insts = member?.instruments || [];
+        const danceStyles = member?.danceStyles || [];
+        const danceRoles = member?.roles?.dance || [];
 
         const hasVocal = vocal.trim().length > 0;
         const numInst = insts.length;
+        const numDance = danceStyles.length;
+        const isDanceLead =
+          danceRoles.includes("leader") || danceRoles.includes("dance_leader");
 
         let txt = "";
 
-        if (hasVocal && numInst > 0) {
+        if (danceRoles.length > 0 || numDance > 0) {
+          const parts: string[] = [];
+          if (isDanceLead) {
+            parts.push("Líder de Dança");
+          } else if (danceRoles.includes("dancer") || danceRoles.includes("bailarina")) {
+            parts.push("Dançarina");
+          }
+          if (numDance > 0) {
+            parts.push(danceStyles.slice(0, 2).join(", "));
+            if (numDance > 2) parts.push(`(+${numDance - 2})`);
+          }
+          txt = parts.join(" • ") || "Ministério de Dança";
+        } else if (hasVocal && numInst > 0) {
           txt = `${vocal} e ${insts[0]}`;
           if (numInst > 1) {
             txt += ` (+${numInst - 1})`;
@@ -311,11 +404,16 @@ export default function AvailabilityPage() {
           if (numInst > 1) {
             txt += ` (+${numInst - 1})`;
           }
+        } else if (member?.roles?.multimedia?.length > 0) {
+          txt = "Multimídia";
+        } else if (member?.roles?.secretariat?.length > 0) {
+          txt = "Secretaria";
         }
 
         return {
           name: rec.userName || "Integrante",
           skills: txt,
+          isDance: danceRoles.length > 0 || numDance > 0,
         };
       });
   };
@@ -325,14 +423,22 @@ export default function AvailabilityPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h1 className="text-4xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-3">
-            <CalendarIcon className="w-10 h-10 text-blue-800" />
+            {showTeamView && (isDanceOnlyLeader || selectedDeptFilter === "dance") ? (
+              <BallerinaIcon className="w-10 h-10 text-rose-600" />
+            ) : (
+              <CalendarIcon className="w-10 h-10 text-blue-800 dark:text-blue-500" />
+            )}
             {showTeamView
-              ? "Disponibilidade da Equipe"
+              ? isDanceOnlyLeader || selectedDeptFilter === "dance"
+                ? "Disponibilidade da Dança"
+                : "Disponibilidade da Equipe"
               : "Minha Disponibilidade"}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 font-medium mt-2">
             {showTeamView
-              ? "Veja quem está disponível para servir em cada dia do mês."
+              ? isDanceOnlyLeader || selectedDeptFilter === "dance"
+                ? "Veja quais integrantes da Dança estão disponíveis para ministrar em cada dia do mês."
+                : "Veja quem está disponível para servir em cada dia do mês."
               : "Selecione os dias em que você está disponível para servir neste mês."}
           </p>
         </div>
@@ -340,19 +446,24 @@ export default function AvailabilityPage() {
         <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
           {isAdmin && (
             <button
+              id="btn-ver-equipe"
               onClick={() => setShowTeamView(!showTeamView)}
-              className={`flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all border-2 ${
+              className={`flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all border-2 cursor-pointer shadow-sm active:scale-95 ${
                 showTeamView
-                  ? "bg-blue-50 border-blue-200 text-blue-800"
-                  : "bg-white border-slate-200 text-slate-600 hover:border-blue-200"
+                  ? "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300"
+                  : isDanceOnlyLeader
+                    ? "bg-white dark:bg-slate-800 border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 hover:bg-rose-50/50 dark:hover:bg-rose-950/30"
+                    : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-blue-200 hover:bg-slate-50 dark:hover:bg-slate-750"
               }`}
             >
               {showTeamView ? (
                 <Eye className="w-4 h-4" />
+              ) : isDanceOnlyLeader ? (
+                <BallerinaIcon className="w-4 h-4 text-rose-600" />
               ) : (
                 <Users className="w-4 h-4" />
               )}
-              {showTeamView ? "Minha Agenda" : "Ver Equipe"}
+              {showTeamView ? "Minha Agenda" : isDanceOnlyLeader ? "Ver Equipe de Dança" : "Ver Equipe"}
             </button>
           )}
 
@@ -377,6 +488,64 @@ export default function AvailabilityPage() {
           </div>
         </div>
       </div>
+
+      {showTeamView && allowedDepartmentsList.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 -mt-4 p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+          <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1.5 px-2">
+            <Filter className="w-3.5 h-3.5" /> Filtrar Equipe:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedDeptFilter("all")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              selectedDeptFilter === "all"
+                ? "bg-blue-800 text-white shadow-xs"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+            }`}
+          >
+            Todos ({teamAvailability.length})
+          </button>
+          {allowedDepartmentsList.includes("dance") && (
+            <button
+              type="button"
+              onClick={() => setSelectedDeptFilter("dance")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                selectedDeptFilter === "dance"
+                  ? "bg-rose-600 text-white shadow-xs"
+                  : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/40 border border-rose-200/60 dark:border-rose-900/40"
+              }`}
+            >
+              <BallerinaIcon className="w-3.5 h-3.5" /> Dança
+            </button>
+          )}
+          {allowedDepartmentsList.includes("worship") && (
+            <button
+              type="button"
+              onClick={() => setSelectedDeptFilter("worship")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                selectedDeptFilter === "worship"
+                  ? "bg-indigo-600 text-white shadow-xs"
+                  : "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200/60 dark:border-indigo-900/40"
+              }`}
+            >
+              Louvor
+            </button>
+          )}
+          {allowedDepartmentsList.includes("multimedia") && (
+            <button
+              type="button"
+              onClick={() => setSelectedDeptFilter("multimedia")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                selectedDeptFilter === "multimedia"
+                  ? "bg-purple-600 text-white shadow-xs"
+                  : "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 border border-purple-200/60 dark:border-purple-900/40"
+              }`}
+            >
+              Multimídia
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="p-8 md:p-12 bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-100/50 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50/50 dark:bg-blue-900/10 blur-[100px] -mr-32 -mt-32 pointer-events-none"></div>
@@ -475,13 +644,28 @@ export default function AvailabilityPage() {
                       (member, i) => (
                         <div
                           key={i}
-                          className="flex flex-col px-4 py-2 bg-white rounded-xl shadow-sm border border-indigo-100"
+                          className={`flex flex-col px-4 py-2.5 bg-white dark:bg-slate-800 rounded-xl shadow-xs border transition-all ${
+                            member.isDance
+                              ? "border-rose-200 dark:border-rose-900/60"
+                              : "border-indigo-100 dark:border-indigo-900/50"
+                          }`}
                         >
-                          <span className="text-sm font-bold text-slate-700">
-                            {member.name}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {member.isDance && (
+                              <BallerinaIcon className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            )}
+                            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                              {member.name}
+                            </span>
+                          </div>
                           {member.skills && (
-                            <span className="text-xs font-medium text-indigo-500 mt-0.5">
+                            <span
+                              className={`text-xs font-medium mt-0.5 ${
+                                member.isDance
+                                  ? "text-rose-600 dark:text-rose-400"
+                                  : "text-indigo-500 dark:text-indigo-400"
+                              }`}
+                            >
                               {member.skills}
                             </span>
                           )}
@@ -559,18 +743,47 @@ export default function AvailabilityPage() {
       )}
 
       {showTeamView && (
-        <div className="p-8 bg-indigo-50 border border-indigo-100 rounded-[2.5rem] flex gap-6">
-          <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100 shrink-0">
-            <Users size={24} />
+        <div
+          className={`p-8 rounded-[2.5rem] flex gap-6 border ${
+            isDanceOnlyLeader || selectedDeptFilter === "dance"
+              ? "bg-rose-50/70 dark:bg-rose-950/20 border-rose-100 dark:border-rose-900/40"
+              : "bg-indigo-50 dark:bg-indigo-950/30 border-indigo-100 dark:border-indigo-900/50"
+          }`}
+        >
+          <div
+            className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-xs border shrink-0 ${
+              isDanceOnlyLeader || selectedDeptFilter === "dance"
+                ? "bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/60"
+                : "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-900/40"
+            }`}
+          >
+            {isDanceOnlyLeader || selectedDeptFilter === "dance" ? (
+              <BallerinaIcon className="w-6 h-6 text-rose-600" />
+            ) : (
+              <Users size={24} />
+            )}
           </div>
           <div>
-            <h4 className="font-bold text-indigo-900 mb-1 tracking-tight">
-              Visão Geral da Equipe
+            <h4
+              className={`font-bold mb-1 tracking-tight ${
+                isDanceOnlyLeader || selectedDeptFilter === "dance"
+                  ? "text-rose-950 dark:text-rose-200"
+                  : "text-indigo-900 dark:text-indigo-200"
+              }`}
+            >
+              {isDanceOnlyLeader || selectedDeptFilter === "dance"
+                ? "Visão Geral da Equipe de Dança"
+                : "Visão Geral da Equipe"}
             </h4>
-            <p className="text-sm text-indigo-700/80 leading-relaxed">
+            <p
+              className={`text-sm leading-relaxed ${
+                isDanceOnlyLeader || selectedDeptFilter === "dance"
+                  ? "text-rose-800/80 dark:text-rose-300/80"
+                  : "text-indigo-700/80 dark:text-indigo-300/80"
+              }`}
+            >
               Clique em um dia destacado para ver quais integrantes estão
-              disponíveis. Isso facilita a montagem das escalas de cada final de
-              semana.
+              disponíveis. Isso facilita a montagem das escalas de cada culto, ensaio e apresentação.
             </p>
           </div>
         </div>

@@ -783,9 +783,9 @@ export default function ChurchDetailPage() {
                   </div>
 
                   <div className="space-y-4">
-                    {list.map((m) => (
+                    {list.map((m, mIdx) => (
                       <Link
-                        key={m.uid}
+                        key={`${m.uid}-${mIdx}`}
                         href={`/dashboard/members/${m.uid}`}
                         className="group flex items-center gap-4 p-4 rounded-[2rem] hover:bg-slate-50 dark:hover:bg-slate-800 transition-all border border-transparent hover:border-slate-100 dark:hover:border-slate-700"
                       >
@@ -1470,8 +1470,8 @@ export default function ChurchDetailPage() {
                       <p className="text-xs text-slate-400 italic">Sem integrantes cadastrados</p>
                     ) : (
                       <div className="space-y-2">
-                        {worshipMembers.slice(0, 4).map((member) => (
-                          <div key={member.uid} className="flex justify-between items-center text-xs">
+                        {worshipMembers.slice(0, 4).map((member, mIdx) => (
+                          <div key={`${member.uid}-${mIdx}`} className="flex justify-between items-center text-xs">
                             <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
                               {member.name}
                             </span>
@@ -1563,8 +1563,8 @@ export default function ChurchDetailPage() {
                     <p className="text-xs text-slate-400 italic">Sem integrantes cadastrados</p>
                   ) : (
                     <div className="space-y-2">
-                      {multimediaMembers.slice(0, 4).map((member) => (
-                        <div key={member.uid} className="flex justify-between items-center text-xs">
+                      {multimediaMembers.slice(0, 4).map((member, mIdx) => (
+                        <div key={`${member.uid}-${mIdx}`} className="flex justify-between items-center text-xs">
                           <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
                             {member.name}
                           </span>
@@ -1636,8 +1636,8 @@ export default function ChurchDetailPage() {
                     <p className="text-xs text-slate-400 italic">Sem integrantes cadastrados</p>
                   ) : (
                     <div className="space-y-2">
-                      {danceMembers.slice(0, 4).map((member) => (
-                        <div key={member.uid} className="flex justify-between items-center text-xs">
+                      {danceMembers.slice(0, 4).map((member, mIdx) => (
+                        <div key={`${member.uid}-${mIdx}`} className="flex justify-between items-center text-xs">
                           <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
                             {member.name}
                           </span>
@@ -1710,8 +1710,8 @@ export default function ChurchDetailPage() {
                     <p className="text-xs text-slate-400 italic">Sem integrantes cadastrados</p>
                   ) : (
                     <div className="space-y-2">
-                      {secretariatMembers.slice(0, 4).map((member) => (
-                        <div key={member.uid} className="flex justify-between items-center text-xs">
+                      {secretariatMembers.slice(0, 4).map((member, mIdx) => (
+                        <div key={`${member.uid}-${mIdx}`} className="flex justify-between items-center text-xs">
                           <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
                             {member.name}
                           </span>
