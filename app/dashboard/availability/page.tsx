@@ -25,6 +25,11 @@ import {
   Eye,
   Sparkles,
   Filter,
+  ChevronDown,
+  ChevronUp,
+  TrendingUp,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
 import { useRouter } from "next/navigation";
@@ -53,6 +58,8 @@ export default function AvailabilityPage() {
   const [teamAvailability, setTeamAvailability] = useState<
     AvailabilityRecord[]
   >([]);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [showMembersBreakdown, setShowMembersBreakdown] = useState(false);
   const [teamLoading, setTeamLoading] = useState(false);
   const [selectedDayDetail, setSelectedDayDetail] = useState<number | null>(
     null,
@@ -151,6 +158,7 @@ export default function AvailabilityPage() {
   async function loadTeamAvailability() {
     if (!userData?.churchId) return;
     setTeamAvailability([]); // Reset state early when month changes
+    setTeamMembers([]);
     setTeamLoading(true);
     try {
       const isSuperAdmin =
@@ -241,6 +249,7 @@ export default function AvailabilityPage() {
       }
 
       const members = Array.from(membersMap.values());
+      setTeamMembers(members);
 
       const availabilityPromises = members.map(async (member) => {
         const docId = `${member.uid}_${year}_${month}`;
@@ -332,31 +341,115 @@ export default function AvailabilityPage() {
     );
   };
 
-  const filteredTeamAvailability = teamAvailability.filter((rec) => {
-    if (selectedDeptFilter === "all") return true;
-    const m = rec.memberInfo as any;
-    if (selectedDeptFilter === "dance") {
+  const getMemberSkillsText = (member: any) => {
+    const vocal = member?.vocalRange || "";
+    const insts = member?.instruments || [];
+    const danceStyles = member?.danceStyles || [];
+    const danceRoles = member?.roles?.dance || [];
+
+    const hasVocal = vocal.trim().length > 0;
+    const numInst = insts.length;
+    const numDance = danceStyles.length;
+    const isDanceLead =
+      danceRoles.includes("leader") || danceRoles.includes("dance_leader");
+
+    let txt = "";
+
+    if (danceRoles.length > 0 || numDance > 0) {
+      const parts: string[] = [];
+      if (isDanceLead) {
+        parts.push("Líder de Dança");
+      } else if (danceRoles.includes("dancer") || danceRoles.includes("bailarina")) {
+        parts.push("Dançarina");
+      }
+      if (numDance > 0) {
+        parts.push(danceStyles.slice(0, 2).join(", "));
+        if (numDance > 2) parts.push(`(+${numDance - 2})`);
+      }
+      txt = parts.join(" • ") || "Ministério de Dança";
+    } else if (hasVocal && numInst > 0) {
+      txt = `${vocal} e ${insts[0]}`;
+      if (numInst > 1) {
+        txt += ` (+${numInst - 1})`;
+      }
+    } else if (hasVocal) {
+      txt = vocal;
+    } else if (numInst > 0) {
+      txt = insts[0];
+      if (numInst > 1) {
+        txt += ` (+${numInst - 1})`;
+      }
+    } else if (member?.roles?.multimedia?.length > 0) {
+      txt = "Multimídia";
+    } else if (member?.roles?.secretariat?.length > 0) {
+      txt = "Secretaria";
+    }
+
+    return txt;
+  };
+
+  const isMemberInDept = (m: any, dept: string) => {
+    if (dept === "all") return true;
+    if (dept === "dance") {
       return (
         (m?.roles?.dance && m.roles.dance.length > 0) ||
         (m?.danceStyles && m.danceStyles.length > 0) ||
         (m?.danceGroups && m.danceGroups.length > 0)
       );
     }
-    if (selectedDeptFilter === "worship") {
+    if (dept === "worship") {
       return (
         (m?.roles?.worship && m.roles.worship.length > 0) ||
         (m?.instruments && m.instruments.length > 0) ||
         (m?.vocalRange && m.vocalRange.trim().length > 0)
       );
     }
-    if (selectedDeptFilter === "multimedia") {
+    if (dept === "multimedia") {
       return m?.roles?.multimedia && m.roles.multimedia.length > 0;
     }
-    if (selectedDeptFilter === "secretariat") {
+    if (dept === "secretariat") {
       return m?.roles?.secretariat && m.roles.secretariat.length > 0;
     }
     return true;
+  };
+
+  const filteredTeamAvailability = teamAvailability.filter((rec) => {
+    if (selectedDeptFilter === "all") return true;
+    const m = rec.memberInfo as any;
+    return isMemberInDept(m, selectedDeptFilter);
   });
+
+  const filteredTotalMembers = teamMembers.filter((m) =>
+    isMemberInDept(m, selectedDeptFilter)
+  );
+
+  const teamAvailabilityMap = new Map<string, AvailabilityRecord>();
+  teamAvailability.forEach((rec) => {
+    teamAvailabilityMap.set(rec.userId, rec);
+  });
+
+  const respondedMembers = filteredTotalMembers.filter((m) =>
+    teamAvailabilityMap.has(m.uid)
+  );
+  const pendingMembers = filteredTotalMembers.filter(
+    (m) => !teamAvailabilityMap.has(m.uid)
+  );
+
+  const totalMembersCount = filteredTotalMembers.length;
+  const respondedMembersCount = respondedMembers.length;
+  const availabilityPercentage =
+    totalMembersCount > 0
+      ? Math.round((respondedMembersCount / totalMembersCount) * 100)
+      : 0;
+
+  const currentDeptDisplayName = (() => {
+    if (selectedDeptFilter === "dance") return "Dança";
+    if (selectedDeptFilter === "worship") return "Louvor";
+    if (selectedDeptFilter === "multimedia") return "Multimídia";
+    if (selectedDeptFilter === "secretariat") return "Secretaria";
+    if (isDanceOnlyLeader) return "Dança";
+    return "Equipe Geral";
+  })();
 
   const getAvailableCount = (day: number) => {
     return filteredTeamAvailability.filter((rec) => rec.days.includes(day)).length;
@@ -367,53 +460,14 @@ export default function AvailabilityPage() {
       .filter((rec) => rec.days.includes(day))
       .map((rec) => {
         const member = rec.memberInfo as any;
-        const vocal = member?.vocalRange || "";
-        const insts = member?.instruments || [];
+        const txt = getMemberSkillsText(member);
         const danceStyles = member?.danceStyles || [];
         const danceRoles = member?.roles?.dance || [];
-
-        const hasVocal = vocal.trim().length > 0;
-        const numInst = insts.length;
-        const numDance = danceStyles.length;
-        const isDanceLead =
-          danceRoles.includes("leader") || danceRoles.includes("dance_leader");
-
-        let txt = "";
-
-        if (danceRoles.length > 0 || numDance > 0) {
-          const parts: string[] = [];
-          if (isDanceLead) {
-            parts.push("Líder de Dança");
-          } else if (danceRoles.includes("dancer") || danceRoles.includes("bailarina")) {
-            parts.push("Dançarina");
-          }
-          if (numDance > 0) {
-            parts.push(danceStyles.slice(0, 2).join(", "));
-            if (numDance > 2) parts.push(`(+${numDance - 2})`);
-          }
-          txt = parts.join(" • ") || "Ministério de Dança";
-        } else if (hasVocal && numInst > 0) {
-          txt = `${vocal} e ${insts[0]}`;
-          if (numInst > 1) {
-            txt += ` (+${numInst - 1})`;
-          }
-        } else if (hasVocal) {
-          txt = vocal;
-        } else if (numInst > 0) {
-          txt = insts[0];
-          if (numInst > 1) {
-            txt += ` (+${numInst - 1})`;
-          }
-        } else if (member?.roles?.multimedia?.length > 0) {
-          txt = "Multimídia";
-        } else if (member?.roles?.secretariat?.length > 0) {
-          txt = "Secretaria";
-        }
 
         return {
           name: rec.userName || "Integrante",
           skills: txt,
-          isDance: danceRoles.length > 0 || numDance > 0,
+          isDance: danceRoles.length > 0 || danceStyles.length > 0,
         };
       });
   };
@@ -503,7 +557,7 @@ export default function AvailabilityPage() {
                 : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
             }`}
           >
-            Todos ({teamAvailability.length})
+            Todos ({teamMembers.length > 0 ? teamMembers.length : teamAvailability.length})
           </button>
           {allowedDepartmentsList.includes("dance") && (
             <button
@@ -543,6 +597,206 @@ export default function AvailabilityPage() {
             >
               Multimídia
             </button>
+          )}
+          {allowedDepartmentsList.includes("secretariat") && (
+            <button
+              type="button"
+              onClick={() => setSelectedDeptFilter("secretariat")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                selectedDeptFilter === "secretariat"
+                  ? "bg-teal-600 text-white shadow-xs"
+                  : "bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/40 border border-teal-200/60 dark:border-teal-900/40"
+              }`}
+            >
+              Secretaria
+            </button>
+          )}
+        </div>
+      )}
+
+      {showTeamView && (
+        <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border-2 border-slate-200 dark:border-slate-800 p-6 md:p-8 shadow-sm relative overflow-hidden transition-all">
+          <div
+            className={`absolute top-0 right-0 w-64 h-64 blur-3xl rounded-full opacity-20 pointer-events-none -mr-20 -mt-20 ${
+              selectedDeptFilter === "dance" || isDanceOnlyLeader
+                ? "bg-rose-500"
+                : "bg-emerald-500"
+            }`}
+          />
+
+          <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-2 flex-1">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
+                    selectedDeptFilter === "dance" || isDanceOnlyLeader
+                      ? "bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                      : "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                  }`}
+                >
+                  {selectedDeptFilter === "dance" || isDanceOnlyLeader ? (
+                    <BallerinaIcon className="w-3.5 h-3.5 text-rose-600" />
+                  ) : (
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                  )}
+                  {currentDeptDisplayName} • {monthNames[month]} {year}
+                </span>
+
+                <span className="text-xs font-bold text-slate-400 dark:text-slate-500">
+                  Status de Preenchimento do Mês
+                </span>
+              </div>
+
+              <h2 className="text-xl sm:text-2xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tight">
+                {teamLoading
+                  ? "Calculando disponibilidade..."
+                  : `${respondedMembersCount} de ${totalMembersCount} integrantes marcaram presença`}
+              </h2>
+
+              <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+                {teamLoading
+                  ? "Buscando respostas do mês selecionado..."
+                  : totalMembersCount === 0
+                    ? "Nenhum integrante cadastrado neste ministério."
+                    : availabilityPercentage === 100
+                      ? `Excelente! 100% da equipe já respondeu a disponibilidade para ${monthNames[month]} de ${year}.`
+                      : availabilityPercentage >= 50
+                        ? `Mais da metade da equipe (${availabilityPercentage}%) já informou sua disponibilidade em ${monthNames[month]} de ${year}.`
+                        : `${availabilityPercentage}% da equipe marcou disponibilidade em ${monthNames[month]} de ${year}. Faltam ${pendingMembers.length} integrantes.`}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-5 bg-slate-50 dark:bg-slate-800/60 p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-700/80 shrink-0 self-stretch sm:self-auto justify-between sm:justify-end">
+              <div className="text-right">
+                <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  Preenchimento
+                </span>
+                <span className="text-4xl sm:text-5xl font-display font-black tracking-tight text-slate-900 dark:text-slate-100">
+                  {teamLoading ? "..." : `${availabilityPercentage}%`}
+                </span>
+              </div>
+              <div
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-xs border ${
+                  selectedDeptFilter === "dance" || isDanceOnlyLeader
+                    ? "bg-rose-50 dark:bg-rose-900/30 text-rose-600 border-rose-200 dark:border-rose-800"
+                    : availabilityPercentage === 100
+                      ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 border-emerald-200 dark:border-emerald-800"
+                      : "bg-blue-50 dark:bg-blue-900/30 text-blue-600 border-blue-200 dark:border-blue-800"
+                }`}
+              >
+                {teamLoading ? (
+                  <div className="w-6 h-6 border-3 border-current border-t-transparent rounded-full animate-spin" />
+                ) : availabilityPercentage === 100 ? (
+                  <CheckCircle2 className="w-8 h-8" />
+                ) : (
+                  <TrendingUp className="w-8 h-8" />
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 mb-4">
+            <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ${
+                  selectedDeptFilter === "dance" || isDanceOnlyLeader
+                    ? "bg-rose-500 shadow-sm shadow-rose-500/50"
+                    : availabilityPercentage === 100
+                      ? "bg-emerald-500 shadow-sm shadow-emerald-500/50"
+                      : availabilityPercentage >= 50
+                        ? "bg-blue-600 shadow-sm shadow-blue-500/50"
+                        : "bg-amber-500 shadow-sm shadow-amber-500/50"
+                }`}
+                style={{ width: `${teamLoading ? 0 : availabilityPercentage}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-200 dark:border-emerald-800/50">
+                <UserCheck className="w-3.5 h-3.5" />
+                {respondedMembersCount} responderam
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-xs font-bold border border-amber-200 dark:border-amber-800/50">
+                <UserX className="w-3.5 h-3.5" />
+                {pendingMembers.length} pendentes
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold">
+                <Users className="w-3.5 h-3.5" />
+                {totalMembersCount} total
+              </span>
+            </div>
+
+            {totalMembersCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowMembersBreakdown(!showMembersBreakdown)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <span>{showMembersBreakdown ? "Ocultar lista detalhada" : "Ver quem já marcou"}</span>
+                {showMembersBreakdown ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+            )}
+          </div>
+
+          {showMembersBreakdown && totalMembersCount > 0 && (
+            <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {filteredTotalMembers.map((member) => {
+                const rec = teamAvailabilityMap.get(member.uid);
+                const hasResponded = Boolean(rec);
+                const daysCount = rec?.days?.length || 0;
+                const skills = getMemberSkillsText(member);
+                const isDance =
+                  (member?.roles?.dance && member.roles.dance.length > 0) ||
+                  (member?.danceStyles && member.danceStyles.length > 0);
+
+                return (
+                  <div
+                    key={member.uid}
+                    className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-2 ${
+                      hasResponded
+                        ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
+                        : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/60"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          {isDance && <BallerinaIcon className="w-3.5 h-3.5 text-rose-600 shrink-0" />}
+                          <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
+                            {member.name || "Integrante"}
+                          </p>
+                        </div>
+                        {skills && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                            {skills}
+                          </p>
+                        )}
+                      </div>
+
+                      {hasResponded ? (
+                        <span className="shrink-0 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          {daysCount} {daysCount === 1 ? "dia" : "dias"}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                          Pendente
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                      {hasResponded
+                        ? daysCount > 0
+                          ? `Marcou ${daysCount} ${daysCount === 1 ? "dia disponível" : "dias disponíveis"}`
+                          : "Marcou como indisponível no mês"
+                        : `Ainda não preencheu em ${monthNames[month]}`}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
