@@ -2,7 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: false,
-  devIndicators: false,
+  devIndicators: {
+    appIsrStatus: false,
+    buildActivity: false,
+  },
   transpilePackages: ["motion"],
   serverExternalPackages: ["firebase-admin", "@google/genai"],
 };

@@ -20,11 +20,12 @@ import {
   Home,
   Church,
   Sparkles,
+  Cake,
 } from "lucide-react";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
 import { auth, db } from "@/lib/firebase";
 import { doc, updateDoc, getDoc } from "firebase/firestore";
-import { formatPhone } from "@/lib/utils";
+import { formatPhone, parseBirthDateToTimestamp, formatBirthDateInput } from "@/lib/utils";
 
 function RegisterForm() {
   const { user, signUpWithEmail, loading } = useAuth();
@@ -40,6 +41,7 @@ function RegisterForm() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [dataNascimento, setDataNascimento] = useState("");
   const [instrumentsSelected, setInstrumentsSelected] = useState<string[]>([]);
   const [danceStylesSelected, setDanceStylesSelected] = useState<string[]>([]);
   const [vocalRange, setVocalRange] = useState("");
@@ -241,6 +243,7 @@ function RegisterForm() {
 
       await signUpWithEmail(email, password, name, {
         phone,
+        dataNascimento: parseBirthDateToTimestamp(dataNascimento),
         instruments: selectedRole === "musico" ? instrumentsSelected : [],
         vocalRange: selectedRole === "musico" ? vocalRange : "",
         churchId: churchIdFromUrl || "",
@@ -555,6 +558,26 @@ function RegisterForm() {
                       maxLength={15}
                       value={phone}
                       onChange={(e) => setPhone(formatPhone(e.target.value))}
+                      className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 outline-none transition-all font-medium text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-slate-700 ml-1">
+                      Data de Nascimento (DD/MM)
+                    </label>
+                    <span className="text-xs text-slate-400 font-medium">Opcional</span>
+                  </div>
+                  <div className="relative">
+                    <Cake className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="DD/MM (ex: 15/04 - dia e mês)"
+                      maxLength={5}
+                      value={dataNascimento}
+                      onChange={(e) => setDataNascimento(formatBirthDateInput(e.target.value))}
                       className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 outline-none transition-all font-medium text-slate-900"
                     />
                   </div>

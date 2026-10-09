@@ -89,6 +89,7 @@ service cloud.firestore {
              (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
              (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 100)) &&
              (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
+             (!('dataNascimento' in data) || data.dataNascimento == null || data.dataNascimento is timestamp || (data.dataNascimento is string && data.dataNascimento.size() <= 20)) &&
              (!('vocalRange' in data) || (data.vocalRange is string)) &&
              (!('level' in data) || (data.level is string)) &&
              (!('churchId' in data) || (data.churchId is string)) &&
@@ -224,7 +225,7 @@ service cloud.firestore {
           incoming().diff(existing()).affectedKeys().hasOnly(['fcmTokens', 'notificationSettings', 'updatedAt']) ||
           // Action 2: Owner updating standard personal profile attributes (cannot self-elevate role or church)
           incoming().diff(existing()).affectedKeys().hasOnly([
-            'fcmTokens', 'notificationSettings', 'name', 'phone', 'instruments',
+            'fcmTokens', 'notificationSettings', 'name', 'phone', 'dataNascimento', 'instruments',
             'vocalRange', 'danceStyles', 'danceGroups', 'level', 'updatedAt', 'uid'
           ]) ||
           // Action 3: Initial account setup without privileged roles
@@ -376,21 +377,71 @@ service cloud.firestore {
       );
     }
 
+    match /broadcasts/{broadcastId} {
+      function isValidBroadcast(data) {
+        return data.keys().hasAll(['id', 'churchId', 'senderId', 'title', 'body', 'status', 'createdAt']) &&
+               data.id is string &&
+               data.churchId is string &&
+               data.senderId is string &&
+               data.title is string && data.title.size() <= 200 &&
+               data.body is string && data.body.size() <= 2000 &&
+               data.status in ['sent', 'cancelled'];
+      }
+
+      allow read: if isSignedIn() && (
+        isSuperAdmin() ||
+        existing().senderId == request.auth.uid ||
+        leadsChurch(existing().churchId) ||
+        inChurch(existing().churchId)
+      );
+
+      allow create: if isSignedIn() && isValidBroadcast(incoming()) &&
+                    incoming().id == broadcastId &&
+                    incoming().senderId == request.auth.uid &&
+                    (isSuperAdmin() || leadsChurch(incoming().churchId) || inChurch(incoming().churchId));
+
+      allow update: if isSignedIn() && isValidBroadcast(incoming()) &&
+                    incoming().id == existing().id &&
+                    incoming().churchId == existing().churchId &&
+                    incoming().senderId == existing().senderId &&
+                    (isSuperAdmin() || existing().senderId == request.auth.uid || leadsChurch(existing().churchId));
+
+      allow delete: if isSignedIn() && (
+        isSuperAdmin() ||
+        existing().senderId == request.auth.uid ||
+        leadsChurch(existing().churchId)
+      );
+
+      match /readReceipts/{readUserId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && (readUserId == request.auth.uid || isSuperAdmin());
+      }
+    }
+
     match /notifications/{notificationId} {
       allow read: if isSignedIn() && (
-        isSuperAdmin() || existing().userId == request.auth.uid
+        isSuperAdmin() ||
+        existing().userId == request.auth.uid ||
+        existing().get('senderId', '') == request.auth.uid ||
+        leadsChurch(existing().get('churchId', ''))
       );
 
       allow create: if isSignedIn() &&
                     isValidNotification(incoming()) &&
                     incoming().id == notificationId;
 
-      allow update: if isSignedIn() &&
-                    (existing().userId == request.auth.uid || isSuperAdmin()) &&
-                    incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+      allow update: if isSignedIn() && (
+        (existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['read'])) ||
+        (existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['read', 'readAt'])) ||
+        (existing().get('senderId', '') == request.auth.uid) ||
+        isSuperAdmin()
+      );
 
       allow delete: if isSignedIn() && (
-        isSuperAdmin() || existing().userId == request.auth.uid
+        isSuperAdmin() ||
+        existing().userId == request.auth.uid ||
+        existing().get('senderId', '') == request.auth.uid ||
+        leadsChurch(existing().get('churchId', ''))
       );
     }
   }

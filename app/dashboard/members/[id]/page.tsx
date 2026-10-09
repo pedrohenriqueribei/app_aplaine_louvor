@@ -13,11 +13,19 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
 import { motion, AnimatePresence } from "motion/react";
-import { formatPhone } from "@/lib/utils";
+import {
+  formatPhone,
+  formatBirthDate,
+  parseBirthDateToTimestamp,
+  formatBirthDateInput,
+  formatScheduleDate,
+  parseScheduleDateToTime,
+} from "@/lib/utils";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
 import {
   ArrowLeft,
@@ -42,6 +50,7 @@ import {
   UserMinus,
   AlertTriangle,
   Sparkles,
+  Cake,
 } from "lucide-react";
 
 interface Musician {
@@ -49,6 +58,7 @@ interface Musician {
   name: string;
   email: string;
   phone: string;
+  dataNascimento?: Date | Timestamp | string | null;
   instruments: string[];
   vocalRange: string;
   level?: string;
@@ -88,6 +98,7 @@ export default function MusicianProfilePage() {
   const [churches, setChurches] = useState<{ id: string; name: string }[]>([]);
   const [songs, setSongs] = useState<Song[]>([]);
   const [bands, setBands] = useState<Band[]>([]);
+  const [lastScheduleDate, setLastScheduleDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"info" | "songs">("info");
 
@@ -108,6 +119,7 @@ export default function MusicianProfilePage() {
     name: "",
     email: "",
     phone: "",
+    dataNascimento: "",
     instruments: [] as string[],
     vocalRange: "",
     level: "",
@@ -235,6 +247,40 @@ export default function MusicianProfilePage() {
           } catch (err) {
             console.warn("Could not load user bands:", err);
           }
+
+          // Fetch last schedule for this user
+          try {
+            const schedQuery = data.churchId
+              ? query(collection(db, "schedules"), where("churchId", "==", data.churchId))
+              : collection(db, "schedules");
+            const schedSnap = await getDocs(schedQuery);
+            let latestDateStr = "";
+            let latestTime = 0;
+            schedSnap.docs.forEach((docSnap) => {
+              const sData = docSnap.data();
+              const dateStr = sData.date;
+              if (!dateStr) return;
+              const hasUser =
+                (Array.isArray(sData.members) && sData.members.includes(id)) ||
+                (sData.roles &&
+                  typeof sData.roles === "object" &&
+                  Object.values(sData.roles).some(
+                    (v) => v === id || (Array.isArray(v) && v.includes(id))
+                  ));
+              if (hasUser) {
+                const sTime = parseScheduleDateToTime(dateStr);
+                if (sTime > latestTime) {
+                  latestTime = sTime;
+                  latestDateStr = dateStr;
+                }
+              }
+            });
+            if (latestDateStr) {
+              setLastScheduleDate(formatScheduleDate(latestDateStr));
+            }
+          } catch (err) {
+            console.warn("Could not load user schedules:", err);
+          }
         }
 
         // Fetch churches list for dropdown
@@ -264,6 +310,7 @@ export default function MusicianProfilePage() {
       name: musician.name || "",
       email: musician.email || "",
       phone: formatPhone(musician.phone || ""),
+      dataNascimento: formatBirthDate(musician.dataNascimento),
       instruments: musician.instruments || [],
       vocalRange: musician.vocalRange || "",
       level: musician.level || "",
@@ -362,11 +409,14 @@ export default function MusicianProfilePage() {
         dance: danceRoles,
       };
 
+      const birthDateTimestamp = parseBirthDateToTimestamp(formData.dataNascimento);
+
       const payload: any = {
         uid: musician.uid || (id as string),
         name: formData.name.trim(),
         email: formData.email.trim() || null,
         phone: formData.phone.trim(),
+        dataNascimento: birthDateTimestamp,
         instruments: formData.instruments,
         vocalRange: formData.vocalRange,
         level: formData.level,
@@ -722,6 +772,11 @@ export default function MusicianProfilePage() {
                       label="Telefone"
                       value={musician.phone ? formatPhone(musician.phone) : "Não informado"}
                     />
+                    <InfoItem
+                      icon={Cake}
+                      label="Data de Nascimento"
+                      value={musician.dataNascimento ? formatBirthDate(musician.dataNascimento) : "Não informada"}
+                    />
                   </div>
                 </section>
 
@@ -739,6 +794,11 @@ export default function MusicianProfilePage() {
                       icon={Waves}
                       label="Ministério"
                       value={musician.churchId ? churchName : "Sem igreja vinculada"}
+                    />
+                    <InfoItem
+                      icon={Calendar}
+                      label="Última escala"
+                      value={lastScheduleDate || "Nenhuma escala registrada"}
                     />
                     <InfoItem
                       icon={Calendar}
@@ -1102,6 +1162,28 @@ export default function MusicianProfilePage() {
                         placeholder="(00) 00000-0000"
                         id="input-member-phone"
                       />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                          <Cake className="w-3.5 h-3.5 text-pink-500" />
+                          <span>Data de Nascimento (DD/MM)</span>
+                        </label>
+                        <span className="text-[10px] text-slate-400 font-medium">Opcional</span>
+                      </div>
+                      <input
+                        type="text"
+                        maxLength={5}
+                        value={formData.dataNascimento}
+                        onChange={(e) =>
+                          setFormData({ ...formData, dataNascimento: formatBirthDateInput(e.target.value) })
+                        }
+                        className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:border-blue-800 dark:focus:border-blue-500 outline-none transition-all"
+                        placeholder="DD/MM (apenas dia e mês)"
+                        id="input-member-birthdate"
+                      />
+                      <p className="text-[10px] text-slate-400">Ex: 15/04 (não é necessário informar o ano)</p>
                     </div>
 
                     <div className="space-y-1.5">

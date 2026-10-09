@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit, Inter } from "next/font/google";
 import { AuthProvider } from "@/components/AuthProvider";
+import { ChunkErrorHandler } from "@/components/ChunkErrorHandler";
 import "@/app/globals.css";
 
 const inter = Inter({
@@ -41,6 +42,7 @@ export default function RootLayout({
       className={`${inter.variable} ${outfit.variable}`}
     >
       <body suppressHydrationWarning className="antialiased font-sans">
+        <ChunkErrorHandler />
         <AuthProvider>
           <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-300">
             {children}

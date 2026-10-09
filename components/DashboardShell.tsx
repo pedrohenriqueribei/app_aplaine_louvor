@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Bell, Search, User as UserIcon } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import Link from "next/link";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export function DashboardShell({
@@ -20,6 +20,7 @@ export function DashboardShell({
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [unreadCount, setUnreadCount] = React.useState(0);
+  const [detectedDeptTitle, setDetectedDeptTitle] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!user) return;
@@ -42,6 +43,64 @@ export function DashboardShell({
 
     return () => unsubscribe();
   }, [user]);
+
+  React.useEffect(() => {
+    const currentUid = user?.uid;
+    const churchId = userData?.churchId;
+    if (!currentUid || !churchId) return;
+
+    const hasSpecificRoles =
+      (userData.roles?.dance?.length ?? 0) > 0 ||
+      (userData.danceStyles?.length ?? 0) > 0 ||
+      (userData.danceGroups?.length ?? 0) > 0 ||
+      (userData.roles?.worship?.length ?? 0) > 0 ||
+      (userData.instruments?.length ?? 0) > 0 ||
+      Boolean(userData.vocalRange?.trim()) ||
+      (userData.roles?.multimedia?.length ?? 0) > 0 ||
+      (userData.roles?.secretariat?.length ?? 0) > 0;
+
+    if (hasSpecificRoles) return;
+
+    let isMounted = true;
+    async function checkDeptMembership() {
+      const depts = [
+        { id: "dance", label: "Ministério de Dança" },
+        { id: "worship", label: "Ministério de Louvor" },
+        { id: "multimedia", label: "Multimídia" },
+        { id: "secretariat", label: "Secretaria" },
+      ];
+
+      const targetChurchId = String(churchId);
+      const targetUid = String(currentUid);
+
+      for (const d of depts) {
+        try {
+          const memberDoc = await getDoc(
+            doc(db, "churches", targetChurchId, "departments", d.id, "members", targetUid)
+          );
+          if (memberDoc.exists() && isMounted) {
+            setDetectedDeptTitle(d.label);
+            return;
+          }
+        } catch (err) {
+          // ignore error if subcollection is not readable
+        }
+      }
+    }
+
+    checkDeptMembership();
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    user?.uid,
+    userData?.churchId,
+    userData?.roles,
+    userData?.danceStyles,
+    userData?.danceGroups,
+    userData?.instruments,
+    userData?.vocalRange,
+  ]);
 
   React.useEffect(() => {
     if (!loading) {
@@ -133,6 +192,7 @@ export function DashboardShell({
       !isWorshipMemberAuth &&
       !isMultimediaMemberAuth &&
       !isSecretariatMemberAuth &&
+      !isDanceMemberAuth &&
       !hasActiveStatusAuth)
   )
     return null;
@@ -167,37 +227,181 @@ export function DashboardShell({
   };
 
   const getUserRoleTitle = () => {
-    if (!userData) return "Visitante";
-
-    const isLeader =
-      userData.roles?.worship?.includes("leader") ||
-      userData.roles?.multimedia?.includes("leader") ||
-      userData.roles?.secretariat?.includes("leader");
-    if (isLeader) return "Líder";
-
-    const isMultimedia = (userData.roles?.multimedia?.length ?? 0) > 0;
-    if (
-      isMultimedia &&
-      (userData.roles?.worship?.length ?? 0) === 0 &&
-      (userData.roles?.secretariat?.length ?? 0) === 0
-    )
-      return "Multimídia";
-
-    if ((userData.roles?.secretariat?.length ?? 0) > 0) return "Secretaria";
-
-    const vocal = userData.vocalRange || "";
-    const insts = userData.instruments || [];
-
-    const hasVocal = vocal.trim().length > 0;
-    const numInst = insts.length;
-
-    if (hasVocal && numInst > 0) {
-      return `${vocal} e ${insts[0]}${numInst > 1 ? ` (+${numInst - 1})` : ""}`;
-    } else if (hasVocal) {
-      return vocal;
-    } else if (numInst > 0) {
-      return `${insts[0]}${numInst > 1 ? ` (+${numInst - 1})` : ""}`;
+    if (!userData) {
+      return loading ? "Carregando..." : "Visitante";
     }
+
+    // 1. Super Admin & Admin
+    if (userData.role === "super_admin" || userData.super_admin === true || isSuperAdmin) {
+      return "Super Admin";
+    }
+    if (userData.role === "admin") {
+      return "Administrador";
+    }
+
+    // 2. Leadership checks
+    const isWorshipLeader = Boolean(userData.roles?.worship?.includes("leader"));
+    const isDanceLeader = Boolean(
+      userData.roles?.dance?.includes("leader") ||
+      userData.roles?.dance?.includes("dance_leader")
+    );
+    const isMultimediaLeader = Boolean(userData.roles?.multimedia?.includes("leader"));
+    const isSecretariatLeader = Boolean(userData.roles?.secretariat?.includes("leader"));
+    const isGlobalLeader = userData.role === "líder" || userData.role === "lider";
+
+    if (isGlobalLeader) {
+      return "Líder Geral";
+    }
+
+    // Ministry-specific leaders
+    if (isDanceLeader && isWorshipLeader) return "Líder de Louvor e Dança";
+    if (isDanceLeader) return "Líder de Dança";
+    if (isWorshipLeader) return "Líder de Louvor";
+    if (isMultimediaLeader) return "Líder de Multimídia";
+    if (isSecretariatLeader) return "Líder de Secretaria";
+
+    // 3. Dance Ministry
+    const danceRoles = userData.roles?.dance || [];
+    const danceStyles = userData.danceStyles || [];
+    const isDance =
+      danceRoles.length > 0 ||
+      danceStyles.length > 0 ||
+      (userData.danceGroups && userData.danceGroups.length > 0) ||
+      userData.role === "dança" ||
+      userData.role === "danca" ||
+      userData.role === "bailarina" ||
+      userData.role === "dançarina";
+
+    // 4. Worship Ministry
+    const vocal = (userData.vocalRange || "").trim();
+    const insts = userData.instruments || [];
+    const worshipRoles = userData.roles?.worship || [];
+    const hasVocal = vocal.length > 0 || insts.includes("Voz") || worshipRoles.includes("vocal");
+    const numInst = insts.length;
+    const isWorship =
+      worshipRoles.length > 0 ||
+      hasVocal ||
+      numInst > 0 ||
+      userData.role === "instrumentista" ||
+      userData.role === "músico" ||
+      userData.role === "musico";
+
+    // 5. Multimedia Ministry
+    const multimediaRoles = userData.roles?.multimedia || [];
+    const isMultimedia =
+      multimediaRoles.length > 0 ||
+      userData.role === "multimídia" ||
+      userData.role === "multimidia";
+
+    // 6. Secretariat
+    const secretariatRoles = userData.roles?.secretariat || [];
+    const isSecretariat =
+      secretariatRoles.length > 0 ||
+      userData.role === "secretaria" ||
+      userData.role === "secretariado";
+
+    // Resolve titles based on detected ministries:
+
+    // If Dance only or primarily Dance:
+    if (isDance && !isWorship) {
+      if (danceStyles.length > 0) {
+        return `Dança • ${danceStyles[0]}`;
+      }
+      if (danceRoles.includes("dancer") || danceRoles.includes("bailarina")) {
+        return "Bailarina";
+      }
+      return "Ministério de Dança";
+    }
+
+    // If Worship:
+    if (isWorship) {
+      if (hasVocal && numInst > 0) {
+        return `${vocal || "Vocal"} e ${insts[0]}${numInst > 1 ? ` (+${numInst - 1})` : ""}`;
+      }
+      if (hasVocal && !numInst) {
+        return vocal || "Vocal";
+      }
+      if (numInst > 0) {
+        return `${insts[0]}${numInst > 1 ? ` (+${numInst - 1})` : ""}`;
+      }
+      if (worshipRoles.length > 0) {
+        const roleMap: Record<string, string> = {
+          vocal: "Vocal",
+          violao: "Violão",
+          violão: "Violão",
+          guitarra: "Guitarra",
+          baixo: "Baixo",
+          bateria: "Bateria",
+          teclado: "Teclado",
+          piano: "Piano",
+          ministro: "Ministro de Louvor",
+          musician: "Instrumentista",
+        };
+        const firstRole = worshipRoles[0];
+        return roleMap[firstRole] || firstRole.charAt(0).toUpperCase() + firstRole.slice(1);
+      }
+      return "Ministério de Louvor";
+    }
+
+    // If Multimedia:
+    if (isMultimedia) {
+      const mediaMap: Record<string, string> = {
+        audio_operator: "Operador de Áudio",
+        pc_operator: "Operador de PC",
+        social_media_operator: "Redes Sociais",
+        camera_operator: "Câmera",
+        photography_operator: "Fotografia",
+        projection_operator: "Projeção",
+        audio_tech: "Técnico de Áudio",
+        media_creator: "Mídia / Foto",
+        social_media_manager: "Social Media",
+      };
+      const firstMedia = multimediaRoles[0];
+      return mediaMap[firstMedia] || "Multimídia";
+    }
+
+    // If Secretariat:
+    if (isSecretariat) {
+      return "Secretaria";
+    }
+
+    // If both Dance and Worship:
+    if (isDance && isWorship) {
+      return "Louvor e Dança";
+    }
+
+    // Detected from church department subcollection:
+    if (detectedDeptTitle) {
+      return detectedDeptTitle;
+    }
+
+    // If user has department or ministry field directly on profile:
+    if (userData.department) {
+      const deptMap: Record<string, string> = {
+        dance: "Ministério de Dança",
+        worship: "Ministério de Louvor",
+        multimedia: "Multimídia",
+        secretariat: "Secretaria",
+      };
+      if (deptMap[userData.department]) return deptMap[userData.department];
+    }
+    if (userData.ministry) {
+      return userData.ministry;
+    }
+
+    // Explicit role from user profile:
+    if (userData.role && !["visitante", "visitor"].includes(userData.role.toLowerCase())) {
+      if (["member", "membro"].includes(userData.role.toLowerCase())) {
+        return "Integrante";
+      }
+      return userData.role.charAt(0).toUpperCase() + userData.role.slice(1);
+    }
+
+    // If user belongs to a church or has active status, they are an Integrante, never Visitante
+    if (userData.churchId || userData.status === "active") {
+      return "Integrante";
+    }
+
     return "Visitante";
   };
 

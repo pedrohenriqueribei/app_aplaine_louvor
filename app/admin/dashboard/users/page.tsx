@@ -4,16 +4,17 @@ import React, { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, getDoc, updateDoc, setDoc, serverTimestamp, getDocFromCache } from 'firebase/firestore';
 import { useAuth } from '@/components/AuthProvider';
-import { Users, Loader2, Search, X, CheckCircle2, User as UserIcon, Save, Music, Mic2, Sparkles } from 'lucide-react';
+import { Users, Loader2, Search, X, CheckCircle2, User as UserIcon, Save, Music, Mic2, Sparkles, Cake } from 'lucide-react';
 import { BallerinaIcon } from '@/components/BallerinaIcon';
 import * as Dialog from '@radix-ui/react-dialog';
-import { formatPhone } from '@/lib/utils';
+import { formatPhone, formatBirthDate } from '@/lib/utils';
 
 interface PlatformUser {
   id: string;
   name?: string;
   email?: string;
   phone?: string;
+  dataNascimento?: any;
   churchId?: string;
   role?: string;
   status?: string;
@@ -357,6 +358,12 @@ export default function AdminUsersPage() {
                         <div>
                           <p className="font-bold text-slate-800 dark:text-slate-200">{u.name || 'Sem nome'}</p>
                           <p className="text-xs text-slate-500">{u.email}</p>
+                          {u.dataNascimento && (
+                            <p className="text-[11px] font-bold text-pink-600 dark:text-pink-400 flex items-center gap-1 mt-0.5">
+                              <Cake className="w-3 h-3 text-pink-500" />
+                              <span>{formatBirthDate(u.dataNascimento)}</span>
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -431,6 +438,15 @@ export default function AdminUsersPage() {
                         </p>
                       </div>
                       <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                          <Cake className="w-3 h-3 text-pink-500" />
+                          Data de Nascimento
+                        </p>
+                        <p className="text-slate-700 dark:text-slate-300 font-medium text-sm">
+                          {selectedUser.dataNascimento ? formatBirthDate(selectedUser.dataNascimento) : 'Não informada'}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 col-span-2">
                         <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
                           Data de Cadastro
                         </p>

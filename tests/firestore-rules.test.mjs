@@ -91,6 +91,12 @@ await check('membro NÃO vira líder pelo campo legado role', () =>
 await check('membro atualiza o próprio telefone', () =>
   assertSucceeds(updateDoc(doc(memberA, 'users', 'memberA'), { phone: '11999999999' })));
 
+await check('membro atualiza a própria dataNascimento', () =>
+  assertSucceeds(updateDoc(doc(memberA, 'users', 'memberA'), { dataNascimento: new Date(2000, 3, 15) })));
+
+await check('membro remove a própria dataNascimento (null)', () =>
+  assertSucceeds(updateDoc(doc(memberA, 'users', 'memberA'), { dataNascimento: null })));
+
 await check('líder promove membro da própria igreja', () =>
   assertSucceeds(updateDoc(doc(leaderA, 'users', 'memberA2'), {
     roles: { worship: ['leader'], multimedia: [], secretariat: [] },

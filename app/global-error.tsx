@@ -11,7 +11,10 @@ export default function GlobalError({
 }) {
   const isChunkError =
     error?.name === 'ChunkLoadError' ||
+    error?.message?.includes('ChunkLoadError') ||
     error?.message?.includes('Loading chunk') ||
+    error?.stack?.includes('ChunkLoadError') ||
+    String(error).includes('ChunkLoadError') ||
     error?.message?.includes('Failed to fetch dynamically imported module');
 
   useEffect(() => {

@@ -373,6 +373,7 @@ export function NotificationSettings({ className = '', onSaved }: NotificationSe
             title,
             body,
             userIds: [user.uid],
+            tokens: Array.isArray(userData?.fcmTokens) ? userData.fcmTokens : [],
           }),
         });
       } catch (fcmErr) {

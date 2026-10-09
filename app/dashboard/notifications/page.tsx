@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   collection,
   query,
@@ -9,16 +10,21 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  setDoc,
   writeBatch,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
-import { Bell, CheckCircle, Trash2, Clock, Calendar, Sliders } from "lucide-react";
+import { Bell, CheckCircle, Trash2, Clock, Calendar, Sliders, Eye, Send } from "lucide-react";
 import { NotificationSettings } from "@/components/NotificationSettings";
+import { SentBroadcastsManager } from "@/components/SentBroadcastsManager";
 
 interface Notification {
   id: string;
   userId: string;
+  broadcastId?: string;
+  senderId?: string;
   title: string;
   body: string;
   type: string;
@@ -27,10 +33,23 @@ interface Notification {
 }
 
 export default function NotificationsPage() {
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, userData, isSuperAdmin } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"list" | "settings">("list");
+  const [activeTab, setActiveTab] = useState<"list" | "sent" | "settings">("list");
+
+  const isLeader = Boolean(
+    isSuperAdmin ||
+    userData?.role === "líder" ||
+    userData?.role === "admin" ||
+    userData?.roles?.worship?.includes("leader") ||
+    userData?.roles?.multimedia?.includes("leader") ||
+    userData?.roles?.multimedia?.includes("multimedia_leader") ||
+    userData?.roles?.dance?.includes("leader") ||
+    userData?.roles?.dance?.includes("dance_leader") ||
+    userData?.roles?.secretariat?.includes("leader")
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -75,16 +94,53 @@ export default function NotificationsPage() {
   const markAllAsRead = async () => {
     if (!user || notifications.length === 0) return;
     const batch = writeBatch(db);
-    notifications
-      .filter((n) => !n.read)
-      .forEach((n) => {
-        batch.update(doc(db, "notifications", n.id), { read: true });
+    const unread = notifications.filter((n) => !n.read);
+    unread.forEach((n) => {
+      batch.update(doc(db, "notifications", n.id), {
+        read: true,
+        readAt: serverTimestamp(),
       });
+    });
     await batch.commit();
+
+    // Sincroniza recibo de leitura para comunicados coletivos
+    unread.forEach(async (n) => {
+      if (n.broadcastId) {
+        try {
+          await setDoc(doc(db, "broadcasts", n.broadcastId, "readReceipts", user.uid), {
+            userId: user.uid,
+            userName: userData?.name || user.displayName || "Integrante",
+            readAt: serverTimestamp(),
+          });
+        } catch {
+          // ignore error
+        }
+      }
+    });
   };
 
-  const markAsRead = async (id: string) => {
-    await updateDoc(doc(db, "notifications", id), { read: true });
+  const markAsRead = async (id: string, broadcastId?: string) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, "notifications", id), {
+        read: true,
+        readAt: serverTimestamp(),
+      });
+
+      if (broadcastId) {
+        try {
+          await setDoc(doc(db, "broadcasts", broadcastId, "readReceipts", user.uid), {
+            userId: user.uid,
+            userName: userData?.name || user.displayName || "Integrante",
+            readAt: serverTimestamp(),
+          });
+        } catch {
+          // ignore error
+        }
+      }
+    } catch (err) {
+      console.error("Error marking notification read:", err);
+    }
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -103,7 +159,7 @@ export default function NotificationsPage() {
         {activeTab === "list" && unreadCount > 0 && (
           <button
             onClick={markAllAsRead}
-            className="flex items-center gap-2 text-sm font-bold text-blue-800 dark:text-blue-400 hover:underline"
+            className="flex items-center gap-2 text-sm font-bold text-blue-800 dark:text-blue-400 hover:underline cursor-pointer"
           >
             <CheckCircle className="w-4 h-4" />
             Marcar todas como lidas
@@ -112,7 +168,7 @@ export default function NotificationsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-2xl w-fit">
+      <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-2xl w-fit flex-wrap">
         <button
           type="button"
           onClick={() => setActiveTab("list")}
@@ -131,6 +187,21 @@ export default function NotificationsPage() {
           )}
         </button>
 
+        {isLeader && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("sent")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "sent"
+                ? "bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+            }`}
+          >
+            <Eye className="w-4 h-4 text-amber-500" />
+            <span>Comunicados Enviados</span>
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => setActiveTab("settings")}
@@ -145,7 +216,12 @@ export default function NotificationsPage() {
         </button>
       </div>
 
-      {activeTab === "settings" ? (
+      {activeTab === "sent" ? (
+        <SentBroadcastsManager
+          mode="embedded"
+          onComposeNew={() => router.push("/dashboard/members")}
+        />
+      ) : activeTab === "settings" ? (
         <NotificationSettings />
       ) : (
         <div className="space-y-4">
@@ -168,12 +244,12 @@ export default function NotificationsPage() {
             {notifications.map((notif) => (
               <div
                 key={notif.id}
-                className={`p-6 rounded-[2rem] border transition-all ${
+                className={`p-6 rounded-[2rem] border transition-all cursor-pointer ${
                   notif.read
                     ? "bg-white/50 dark:bg-slate-900/50 border-slate-100 dark:border-slate-800 opacity-75"
                     : "bg-white dark:bg-slate-900 border-blue-100 dark:border-blue-900/30 shadow-lg shadow-blue-800/5 ring-1 ring-blue-50 dark:ring-blue-900/20"
                 }`}
-                onClick={() => !notif.read && markAsRead(notif.id)}
+                onClick={() => !notif.read && markAsRead(notif.id, notif.broadcastId)}
               >
                 <div className="flex gap-6 items-start">
                   <div
@@ -217,9 +293,9 @@ export default function NotificationsPage() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            markAsRead(notif.id);
+                            markAsRead(notif.id, notif.broadcastId);
                           }}
-                          className="text-[10px] font-black uppercase tracking-widest text-blue-800 dark:text-blue-400 hover:underline"
+                          className="text-[10px] font-black uppercase tracking-widest text-blue-800 dark:text-blue-400 hover:underline cursor-pointer"
                         >
                           Entendido
                         </button>

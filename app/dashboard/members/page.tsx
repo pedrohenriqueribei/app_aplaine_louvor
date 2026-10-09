@@ -12,6 +12,7 @@ import {
   orderBy,
   where,
   serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
 import {
@@ -26,18 +27,33 @@ import {
   Link2,
   Mic,
   Music,
+  Check,
+  Users,
+  Send,
+  Eye,
+  Cake,
+  Calendar,
 } from "lucide-react";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
+import { SentBroadcastsManager } from "@/components/SentBroadcastsManager";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { motion } from "motion/react";
-import { formatPhone } from "@/lib/utils";
+import {
+  formatPhone,
+  formatBirthDate,
+  parseBirthDateToTimestamp,
+  formatBirthDateInput,
+  formatScheduleDate,
+  parseScheduleDateToTime,
+} from "@/lib/utils";
 
 interface Member {
   uid: string;
   name: string;
   email: string;
   status: "active" | "inactive";
+  dataNascimento?: Date | Timestamp | string | null;
   instruments?: string[];
   phone?: string;
   vocalRange?: string;
@@ -54,9 +70,11 @@ interface Member {
 }
 
 export default function MembersPage() {
-  const { user, isSuperAdmin } = useAuth();
+  const { user, userData, isSuperAdmin } = useAuth();
   const [userProfile, setUserProfile] = useState<Member | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [memberLastSchedules, setMemberLastSchedules] = useState<Record<string, { date: string; formatted: string }>>({});
+  const [schedulesLoading, setSchedulesLoading] = useState(true);
   const [churches, setChurches] = useState<{ id: string; name: string }[]>([]);
   const [selectedChurchForLink, setSelectedChurchForLink] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -65,11 +83,17 @@ export default function MembersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
+  const [isSentBroadcastsModalOpen, setIsSentBroadcastsModalOpen] = useState(false);
   const [broadcastData, setBroadcastData] = useState({
     title: "",
     body: "",
     churchOnly: true,
   });
+  const [broadcastRecipients, setBroadcastRecipients] = useState<string[]>([]);
+  const [selectAllRecipients, setSelectAllRecipients] = useState(true);
+  const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
+  const [showRecipientsList, setShowRecipientsList] = useState(false);
+  const [excludedUserIds, setExcludedUserIds] = useState<string[]>([]);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [searchUnlinkedTerm, setSearchUnlinkedTerm] = useState("");
@@ -80,6 +104,7 @@ export default function MembersPage() {
     name: "",
     email: "",
     phone: "",
+    dataNascimento: "",
     instruments: [] as string[],
     vocalRange: "",
     level: "" as "aprendiz" | "intermediário" | "experiente" | "",
@@ -388,6 +413,69 @@ export default function MembersPage() {
     }
   }
 
+  async function fetchSchedules(churchId?: string) {
+    setSchedulesLoading(true);
+    try {
+      const targetChurchId = churchId || (!isSuperAdmin ? userProfile?.churchId : undefined);
+      let schedQ;
+      if (targetChurchId) {
+        schedQ = query(
+          collection(db, "schedules"),
+          where("churchId", "==", targetChurchId)
+        );
+      } else {
+        schedQ = collection(db, "schedules");
+      }
+
+      const schedSnap = await getDocs(schedQ);
+      const lastScheduleMap: Record<string, { date: string; formatted: string }> = {};
+
+      schedSnap.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        const dateStr = data.date;
+        if (!dateStr) return;
+
+        const schedTime = parseScheduleDateToTime(dateStr);
+        const formatted = formatScheduleDate(dateStr);
+        if (!schedTime) return;
+
+        // Coleta todos os IDs de membros escalados
+        const uidsInSchedule = new Set<string>();
+        if (Array.isArray(data.members)) {
+          data.members.forEach((m: any) => {
+            if (typeof m === "string" && m) uidsInSchedule.add(m);
+          });
+        }
+        if (data.roles && typeof data.roles === "object") {
+          Object.values(data.roles).forEach((val: any) => {
+            if (typeof val === "string" && val) uidsInSchedule.add(val);
+            if (Array.isArray(val)) {
+              val.forEach((m: any) => {
+                if (typeof m === "string" && m) uidsInSchedule.add(m);
+              });
+            }
+          });
+        }
+
+        uidsInSchedule.forEach((uid) => {
+          const existing = lastScheduleMap[uid];
+          if (!existing || schedTime > parseScheduleDateToTime(existing.date)) {
+            lastScheduleMap[uid] = {
+              date: dateStr,
+              formatted,
+            };
+          }
+        });
+      });
+
+      setMemberLastSchedules(lastScheduleMap);
+    } catch (err) {
+      console.warn("Could not load schedules for members:", err);
+    } finally {
+      setSchedulesLoading(false);
+    }
+  }
+
   async function fetchMembers(churchId?: string) {
     setLoading(true);
     try {
@@ -420,6 +508,7 @@ export default function MembersPage() {
         new Map(snap.docs.map((doc) => [doc.id, { ...doc.data(), uid: doc.id } as Member])).values()
       );
       setMembers(uniqueDocs);
+      fetchSchedules(targetChurchId);
     } catch (e) {
       handleFirestoreError(e, OperationType.LIST, "users");
     } finally {
@@ -460,8 +549,11 @@ export default function MembersPage() {
         dance: danceRoles,
       };
 
+      const birthDateTimestamp = parseBirthDateToTimestamp(formData.dataNascimento);
+
       const finalPayload = {
         ...formData,
+        dataNascimento: birthDateTimestamp,
         roles: finalRoles,
       };
 
@@ -488,6 +580,7 @@ export default function MembersPage() {
         name: "",
         email: "",
         phone: "",
+        dataNascimento: "",
         instruments: [],
         vocalRange: "",
         level: "",
@@ -547,29 +640,238 @@ export default function MembersPage() {
   const danceCount = filteredMembers.filter(m => (m.roles?.dance?.length ?? 0) > 0 || (m.danceStyles?.length ?? 0) > 0).length;
   const secretariatCount = filteredMembers.filter(m => (m.roles?.secretariat?.length ?? 0) > 0).length;
 
+  // Definições de Categorias de Destinatários para Comunicados
+  const BASE_RECIPIENT_CATEGORIES = [
+    // Louvor - Instrumentistas
+    { id: "drummer", label: "Bateristas", group: "instruments" },
+    { id: "guitarist", label: "Guitarristas", group: "instruments" },
+    { id: "bassist", label: "Baixistas", group: "instruments" },
+    { id: "keyboardist", label: "Tecladistas", group: "instruments" },
+    { id: "acousticGuitarist", label: "Violonistas", group: "instruments" },
+    { id: "percussionist", label: "Percussionistas", group: "instruments" },
+
+    // Louvor - Vozes & Vocais (Soprano, Contralto, Mezzo, etc.)
+    { id: "soprano", label: "Soprano", group: "vocals" },
+    { id: "contralto", label: "Contralto", group: "vocals" },
+    { id: "mezzo", label: "Mezzo", group: "vocals" },
+    { id: "tenor", label: "Tenor", group: "vocals" },
+    { id: "baritone", label: "Barítono", group: "vocals" },
+    { id: "leadVocal", label: "Voz / Ministros", group: "vocals" },
+
+    // Outros Ministérios
+    { id: "dance", label: "Ministério de Dança", group: "ministries" },
+    { id: "multimedia", label: "Multimídia / Mídia", group: "ministries" },
+    { id: "leaders", label: "Líderes de Ministérios", group: "ministries" },
+  ];
+
+  const isMemberInRecipientCategory = (member: Member, categoryId: string): boolean => {
+    const instruments = (member.instruments || []).map((i) => i.toLowerCase().trim());
+    const vocalRange = (member.vocalRange || "").toLowerCase().trim();
+    const worshipRoles = (member.roles?.worship || []).map((r) => r.toLowerCase().trim());
+    const danceRoles = (member.roles?.dance || []).map((r) => r.toLowerCase().trim());
+    const multimediaRoles = (member.roles?.multimedia || []).map((r) => r.toLowerCase().trim());
+    const secretariatRoles = (member.roles?.secretariat || []).map((r) => r.toLowerCase().trim());
+    const danceStyles = member.danceStyles || [];
+
+    switch (categoryId) {
+      case "drummer":
+        return instruments.some((i) => i.includes("bater") || i.includes("drum"));
+      case "guitarist":
+        return instruments.some((i) => i.includes("guitar"));
+      case "bassist":
+        return instruments.some((i) => i.includes("baix") || i.includes("bass"));
+      case "keyboardist":
+        return instruments.some((i) => i.includes("tecla") || i.includes("keyb") || i.includes("piano"));
+      case "acousticGuitarist":
+        return instruments.some((i) => i.includes("viol") || i.includes("acoust"));
+      case "percussionist":
+        return instruments.some((i) => i.includes("percuss"));
+      case "soprano":
+        return (
+          (vocalRange.includes("soprano") && !vocalRange.includes("mezzo")) ||
+          instruments.some((i) => i.includes("soprano") && !i.includes("mezzo"))
+        );
+      case "contralto":
+        return (
+          vocalRange.includes("contralto") ||
+          instruments.some((i) => i.includes("contralto"))
+        );
+      case "mezzo":
+        return (
+          vocalRange.includes("mezzo") ||
+          instruments.some((i) => i.includes("mezzo"))
+        );
+      case "tenor":
+        return (
+          vocalRange.includes("tenor") ||
+          instruments.some((i) => i.includes("tenor"))
+        );
+      case "baritone":
+        return (
+          vocalRange.includes("barit") ||
+          vocalRange.includes("barít") ||
+          instruments.some((i) => i.includes("barit") || i.includes("barít"))
+        );
+      case "leadVocal":
+        return (
+          instruments.some((i) => i.includes("voz") || i.includes("vocal") || i.includes("minist") || i.includes("cantor")) ||
+          worshipRoles.includes("leader") ||
+          Boolean(vocalRange)
+        );
+      case "dance":
+        return danceRoles.length > 0 || danceStyles.length > 0;
+      case "multimedia":
+        return multimediaRoles.length > 0;
+      case "leaders":
+        return (
+          worshipRoles.includes("leader") ||
+          multimediaRoles.includes("leader") ||
+          multimediaRoles.includes("multimedia_leader") ||
+          danceRoles.includes("leader") ||
+          danceRoles.includes("dance_leader") ||
+          secretariatRoles.includes("leader")
+        );
+      default:
+        if (categoryId.startsWith("custom_")) {
+          const rawName = categoryId.replace("custom_", "").toLowerCase();
+          return instruments.some((i) => i.includes(rawName));
+        }
+        return false;
+    }
+  };
+
+  // Instrumentos dinâmicos extras cadastrados pela igreja
+  const customRecipientCategories = dynamicInstruments
+    .filter((inst) => {
+      const val = (inst.value || inst.id || "").toLowerCase();
+      return !["drummer", "bateria", "guitarra", "electricguitarist", "baixo", "bassist", "teclado", "keyboardist", "violão", "acousticguitarist", "voz", "mainminister", "percussão", "percussao"].includes(val);
+    })
+    .map((inst) => ({
+      id: `custom_${inst.value || inst.id}`,
+      label: inst.label || inst.value,
+      group: "custom" as const,
+    }));
+
+  const eligibleBroadcastMembers = members.filter(
+    (m) => (!broadcastData.churchOnly || m.churchId === userProfile?.churchId) && m.status === "active"
+  );
+
+  const targetBroadcastMembers = (
+    selectAllRecipients
+      ? eligibleBroadcastMembers
+      : eligibleBroadcastMembers.filter((m) =>
+          broadcastRecipients.some((catId) => isMemberInRecipientCategory(m, catId))
+        )
+  ).filter((m) => !excludedUserIds.includes(m.uid));
+
+  const toggleRecipientCategory = (catId: string) => {
+    if (selectAllRecipients) {
+      setSelectAllRecipients(false);
+      setBroadcastRecipients([catId]);
+      setExcludedUserIds([]);
+    } else {
+      setBroadcastRecipients((prev) =>
+        prev.includes(catId) ? prev.filter((id) => id !== catId) : [...prev, catId]
+      );
+      setExcludedUserIds([]);
+    }
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectAllRecipients) {
+      setSelectAllRecipients(false);
+      setBroadcastRecipients([]);
+    } else {
+      setSelectAllRecipients(true);
+      setBroadcastRecipients([]);
+      setExcludedUserIds([]);
+    }
+  };
+
+  const handleSelectGroup = (group: "instruments" | "vocals" | "ministries") => {
+    setSelectAllRecipients(false);
+    const groupCatIds = BASE_RECIPIENT_CATEGORIES.filter((c) => c.group === group).map((c) => c.id);
+    setBroadcastRecipients((prev) => {
+      const allIn = groupCatIds.every((id) => prev.includes(id));
+      if (allIn) {
+        return prev.filter((id) => !groupCatIds.includes(id));
+      } else {
+        return Array.from(new Set([...prev, ...groupCatIds]));
+      }
+    });
+    setExcludedUserIds([]);
+  };
+
+  const toggleExcludeUser = (uid: string) => {
+    setExcludedUserIds((prev) =>
+      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
+    );
+  };
+
   const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const targetMembers = broadcastData.churchOnly
-        ? members.filter(
-            (m) =>
-              m.churchId === userProfile?.churchId && m.status === "active",
-          )
-        : members.filter((m) => m.status === "active");
-
-      if (targetMembers.length === 0) {
-        alert("Nenhum destinatário encontrado.");
+      if (targetBroadcastMembers.length === 0) {
+        alert("Por favor, selecione para quem o comunicado deverá ser enviado (ao menos um destinatário).");
         return;
       }
 
-      // Save internal notifications via client
-      const savePromises = targetMembers.map(async (m) => {
-        const notifId = `broadcast_${Date.now()}_${m.uid}`;
+      setIsSendingBroadcast(true);
+
+      const broadcastId = `bcast_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const targetUserIds = targetBroadcastMembers.map((m) => m.uid);
+
+      // Prepara lista detalhada de destinatários para acompanhamento em tempo real
+      const recipientsStatus = targetBroadcastMembers.map((m) => {
+        const notifId = `broadcast_${broadcastId}_${m.uid}`;
+        return {
+          uid: m.uid,
+          name: m.name,
+          email: m.email || "",
+          phone: m.phone || "",
+          vocalRange: m.vocalRange || "",
+          instruments: m.instruments || [],
+          roles: m.roles || {},
+          notifId,
+          read: false,
+        };
+      });
+
+      // Rótulos legíveis das categorias alvo
+      const targetCategoryLabels = selectAllRecipients
+        ? ["Todos os Integrantes"]
+        : broadcastRecipients.map((catId) => {
+            const found = [...BASE_RECIPIENT_CATEGORIES, ...customRecipientCategories].find((c) => c.id === catId);
+            return found ? found.label : catId;
+          });
+
+      // 1. Salva registro mestre do comunicado na coleção 'broadcasts'
+      await setDoc(doc(db, "broadcasts", broadcastId), {
+        id: broadcastId,
+        churchId: userProfile?.churchId || userData?.churchId || "",
+        senderId: user?.uid || "",
+        senderName: userProfile?.name || userData?.name || user?.displayName || "Líder",
+        title: broadcastData.title.trim(),
+        body: broadcastData.body.trim(),
+        targetCategories: targetCategoryLabels,
+        recipientUids: targetUserIds,
+        recipients: recipientsStatus,
+        status: "sent",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      // 2. Salva notificações individuais no Firestore com broadcastId e senderId
+      const savePromises = targetBroadcastMembers.map(async (m) => {
+        const notifId = `broadcast_${broadcastId}_${m.uid}`;
         return setDoc(doc(db, "notifications", notifId), {
           id: notifId,
+          broadcastId,
+          senderId: user?.uid || "",
+          churchId: userProfile?.churchId || userData?.churchId || "",
           userId: m.uid,
-          title: broadcastData.title,
-          body: broadcastData.body,
+          title: broadcastData.title.trim(),
+          body: broadcastData.body.trim(),
           type: "broadcast",
           read: false,
           createdAt: serverTimestamp(),
@@ -577,28 +879,49 @@ export default function MembersPage() {
       });
       await Promise.all(savePromises);
 
-      const targetUserIds = targetMembers.map((m) => m.uid);
+      const targetTokens: string[] = [];
+      targetBroadcastMembers.forEach((m) => {
+        if (Array.isArray(m.fcmTokens)) {
+          targetTokens.push(
+            ...m.fcmTokens.filter((t) => typeof t === "string" && t.length > 0)
+          );
+        }
+      });
 
       if (targetUserIds.length > 0 && user) {
-        await fetch("/api/notifications/send", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${await user.getIdToken()}`,
-          },
-          body: JSON.stringify({
-            title: broadcastData.title,
-            body: broadcastData.body,
-            userIds: targetUserIds,
-          }),
-        });
+        try {
+          await fetch("/api/notifications/send", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${await user.getIdToken()}`,
+            },
+            body: JSON.stringify({
+              title: broadcastData.title.trim(),
+              body: broadcastData.body.trim(),
+              userIds: targetUserIds,
+              tokens: targetTokens,
+            }),
+          });
+        } catch (pushErr) {
+          console.warn("FCM push notification optional warning:", pushErr);
+        }
       }
+
       setIsBroadcastModalOpen(false);
       setBroadcastData({ title: "", body: "", churchOnly: true });
-      alert("Comunicado enviado com sucesso!");
+      setBroadcastRecipients([]);
+      setSelectAllRecipients(true);
+      setExcludedUserIds([]);
+      setShowRecipientsList(false);
+
+      // Abre automaticamente o gerenciador de comunicados para visualização do status
+      setIsSentBroadcastsModalOpen(true);
     } catch (err) {
       console.error("Error sending broadcast:", err);
-      alert("Erro ao enviar comunicado.");
+      alert("Erro ao enviar comunicado. Verifique a conexão e tente novamente.");
+    } finally {
+      setIsSendingBroadcast(false);
     }
   };
 
@@ -657,35 +980,59 @@ export default function MembersPage() {
 
   return (
     <div className="space-y-8 max-w-6xl">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="relative w-full md:w-96 group">
+      <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 sm:gap-6">
+        <div className="relative w-full lg:w-96 group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 group-focus-within:text-blue-800 transition-colors" />
           <input
             type="text"
             placeholder="Buscar integrante..."
-            className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/20 focus:border-blue-800 transition-all text-slate-700 dark:text-slate-200 outline-none shadow-sm"
+            className="w-full pl-12 pr-4 py-3 sm:py-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/20 focus:border-blue-800 transition-all text-slate-700 dark:text-slate-200 outline-none shadow-sm text-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <div className="flex gap-4 w-full md:w-auto relative">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
           {(userProfile?.roles?.worship?.includes("leader") || userProfile?.roles?.multimedia?.includes("leader") || userProfile?.roles?.secretariat?.includes("leader") || userProfile?.roles?.dance?.includes("leader") || userProfile?.roles?.dance?.includes("dance_leader") || isSuperAdmin) && (
             <>
-              <button
-                onClick={() => setIsBroadcastModalOpen(true)}
-                className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3.5 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-xl shadow-amber-500/20 active:scale-95 flex-1 md:flex-none justify-center"
-              >
-                <Bell className="w-5 h-5" />
-                Comunicado
-              </button>
-
-              <div className="relative flex-1 md:flex-none">
+              {/* Botões de Comunicado agrupados e responsivos */}
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5 flex-1 sm:flex-initial">
                 <button
-                  onClick={() => setIsAddMenuOpen(!isAddMenuOpen)}
-                  className="bg-blue-800 hover:bg-blue-900 text-white px-8 py-3.5 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-xl shadow-blue-800/20 active:scale-95 w-full justify-center"
+                  type="button"
+                  onClick={() => {
+                    setBroadcastData({ title: "", body: "", churchOnly: true });
+                    setBroadcastRecipients([]);
+                    setSelectAllRecipients(true);
+                    setExcludedUserIds([]);
+                    setShowRecipientsList(false);
+                    setIsBroadcastModalOpen(true);
+                  }}
+                  className="bg-amber-500 hover:bg-amber-600 text-white px-3 sm:px-5 py-3 sm:py-3.5 rounded-2xl font-bold flex items-center justify-center gap-1.5 sm:gap-2 transition-all shadow-md sm:shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer text-xs sm:text-sm whitespace-nowrap min-w-0"
+                  title="Novo Comunicado"
                 >
-                  <UserPlus className="w-5 h-5" />
-                  Novo Integrante
+                  <Bell className="w-4 h-4 shrink-0" />
+                  <span className="truncate">Comunicado</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSentBroadcastsModalOpen(true)}
+                  className="bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800 px-3 sm:px-4 py-3 sm:py-3.5 rounded-2xl font-bold flex items-center justify-center gap-1.5 sm:gap-2 transition-all shadow-xs active:scale-95 cursor-pointer text-xs sm:text-sm whitespace-nowrap min-w-0"
+                  title="Visualizar comunicados enviados, ver quem leu e cancelar envios"
+                >
+                  <Eye className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="truncate">Ver Enviados</span>
+                </button>
+              </div>
+
+              {/* Botão Novo Integrante com dropdown */}
+              <div className="relative w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsAddMenuOpen(!isAddMenuOpen)}
+                  className="bg-blue-800 hover:bg-blue-900 text-white px-5 sm:px-6 py-3 sm:py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-md sm:shadow-xl shadow-blue-800/20 active:scale-95 w-full sm:w-auto text-xs sm:text-sm cursor-pointer whitespace-nowrap"
+                >
+                  <UserPlus className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                  <span>Novo Integrante</span>
                 </button>
 
                 {isAddMenuOpen && (
@@ -694,7 +1041,7 @@ export default function MembersPage() {
                       className="fixed inset-0 z-10"
                       onClick={() => setIsAddMenuOpen(false)}
                     />
-                    <div className="absolute right-0 mt-3 w-64 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-2 z-20 overflow-hidden">
+                    <div className="absolute right-0 mt-2 sm:mt-3 w-full sm:w-64 max-w-[calc(100vw-2rem)] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-2 z-20 overflow-hidden">
                       <button
                         onClick={() => {
                           setEditingMember(null);
@@ -702,6 +1049,7 @@ export default function MembersPage() {
                             name: "",
                             email: "",
                             phone: "",
+                            dataNascimento: "",
                             instruments: [],
                             vocalRange: "",
                             level: "",
@@ -738,6 +1086,7 @@ export default function MembersPage() {
                             name: "",
                             email: "",
                             phone: "",
+                            dataNascimento: "",
                             instruments: [],
                             vocalRange: "",
                             level: "",
@@ -905,6 +1254,32 @@ export default function MembersPage() {
                       <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">
                         {member.email}
                       </p>
+                      <p
+                        className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5 font-medium"
+                        title="Data da última escala"
+                      >
+                        <Calendar className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 shrink-0" />
+                        <span>
+                          Última escala:{" "}
+                          {schedulesLoading ? (
+                            <span className="text-slate-400 dark:text-slate-500 animate-pulse">...</span>
+                          ) : memberLastSchedules[member.uid]?.formatted ? (
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">
+                              {memberLastSchedules[member.uid].formatted}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-500">
+                              Nenhuma
+                            </span>
+                          )}
+                        </span>
+                      </p>
+                      {member.dataNascimento && (
+                        <p className="text-[11px] font-bold text-pink-600 dark:text-pink-400 flex items-center gap-1.5 mt-0.5" title="Data de Nascimento (Dia e Mês)">
+                          <Cake className="w-3.5 h-3.5 text-pink-500 shrink-0" />
+                          <span>{formatBirthDate(member.dataNascimento)}</span>
+                        </p>
+                      )}
                     </div>
                   </Link>
                 </td>
@@ -1105,6 +1480,7 @@ export default function MembersPage() {
                           name: member.name,
                           email: member.email,
                           phone: formatPhone(member.phone || ""),
+                          dataNascimento: formatBirthDate(member.dataNascimento),
                           instruments: member.instruments || [],
                           vocalRange: member.vocalRange || "",
                           level: member.level || "",
@@ -1210,31 +1586,52 @@ export default function MembersPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
-                    Vocal
-                  </label>
-                  <div className="flex flex-wrap gap-1">
-                    {vocalRanges.map((range) => (
-                      <button
-                        key={range}
-                        type="button"
-                        onClick={() =>
-                          setFormData({
-                            ...formData,
-                            vocalRange:
-                              formData.vocalRange === range ? "" : range,
-                          })
-                        }
-                        className={`py-2 px-3 rounded-xl text-[10px] font-bold transition-all border ${
-                          formData.vocalRange === range
-                            ? "bg-indigo-700 text-white border-indigo-700"
-                            : "bg-slate-50 text-slate-600 border-transparent hover:border-indigo-300"
-                        }`}
-                      >
-                        {range}
-                      </button>
-                    ))}
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1 flex items-center gap-1.5">
+                      <Cake className="w-3.5 h-3.5 text-pink-500" />
+                      <span>Data de Nascimento (DD/MM)</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400 font-medium">Opcional</span>
                   </div>
+                  <input
+                    type="text"
+                    maxLength={5}
+                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 focus:bg-white dark:focus:bg-slate-700 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 font-medium text-slate-800 dark:text-slate-100"
+                    value={formData.dataNascimento}
+                    onChange={(e) =>
+                      setFormData({ ...formData, dataNascimento: formatBirthDateInput(e.target.value) })
+                    }
+                    placeholder="DD/MM (apenas dia e mês)"
+                  />
+                  <p className="text-[10px] text-slate-400 pl-1">Ex: 15/04 (não é necessário informar o ano)</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">
+                  Vocal
+                </label>
+                <div className="flex flex-wrap gap-1">
+                  {vocalRanges.map((range) => (
+                    <button
+                      key={range}
+                      type="button"
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          vocalRange:
+                            formData.vocalRange === range ? "" : range,
+                        })
+                      }
+                      className={`py-2 px-3 rounded-xl text-[10px] font-bold transition-all border ${
+                        formData.vocalRange === range
+                          ? "bg-indigo-700 text-white border-indigo-700"
+                          : "bg-slate-50 text-slate-600 border-transparent hover:border-indigo-300"
+                      }`}
+                    >
+                      {range}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -1574,87 +1971,461 @@ export default function MembersPage() {
       )}
 
       {isBroadcastModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
           <div
-            onClick={() => setIsBroadcastModalOpen(false)}
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+            onClick={() => !isSendingBroadcast && setIsBroadcastModalOpen(false)}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md"
           />
-          <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl p-12 overflow-hidden">
-            <h2 className="text-3xl font-display font-bold text-slate-800 dark:text-slate-100 mb-8">
-              Enviar Comunicado
-            </h2>
-            <form onSubmit={handleBroadcast} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
-                  Título da Notificação
-                </label>
-                <input
-                  required
-                  type="text"
-                  className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-amber-500 outline-none transition-all font-medium text-slate-800"
-                  value={broadcastData.title}
-                  onChange={(e) =>
-                    setBroadcastData({
-                      ...broadcastData,
-                      title: e.target.value,
-                    })
-                  }
-                  placeholder="Ex: Ensaio Extra Cancelado"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
-                  Mensagem
-                </label>
-                <textarea
-                  required
-                  rows={4}
-                  className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-amber-500 outline-none transition-all font-medium resize-none text-slate-800"
-                  value={broadcastData.body}
-                  onChange={(e) =>
-                    setBroadcastData({ ...broadcastData, body: e.target.value })
-                  }
-                  placeholder="Escreva sua mensagem aqui..."
-                />
-              </div>
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <div className="relative flex items-center">
-                  <input
-                    type="checkbox"
-                    className="w-5 h-5 rounded border-2 border-slate-200 text-amber-500 focus:ring-amber-500"
-                    checked={broadcastData.churchOnly}
-                    onChange={(e) =>
-                      setBroadcastData({
-                        ...broadcastData,
-                        churchOnly: e.target.checked,
-                      })
-                    }
-                  />
+          <div className="relative w-full max-w-xl max-h-[92vh] flex flex-col bg-white dark:bg-slate-900 rounded-[2.5rem] sm:rounded-[3rem] shadow-2xl p-6 sm:p-9 md:p-10 overflow-hidden my-auto border border-slate-100 dark:border-slate-800">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                  <Bell className="w-5 h-5" />
                 </div>
-                <span className="text-sm font-bold text-slate-600 dark:text-slate-400">
-                  Enviar apenas para{" "}
-                  {userProfile?.churchId ? "minha congregação" : "todos"}
-                </span>
-              </label>
-              <div className="flex gap-4 pt-4">
+                <div>
+                  <h2 className="text-2xl sm:text-3xl font-display font-bold text-slate-800 dark:text-slate-100">
+                    Enviar Comunicado
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Aviso instantâneo via app e push notification (FCM)
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBroadcastModalOpen(false);
+                    setIsSentBroadcastsModalOpen(true);
+                  }}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-xs font-bold transition-all border border-amber-200 dark:border-amber-800 cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Ver Enviados</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setIsBroadcastModalOpen(false)}
-                  className="flex-1 px-8 py-5 bg-slate-100 text-slate-600 font-bold rounded-[2rem] transition-all"
+                  className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center justify-center transition-colors text-sm font-bold cursor-pointer"
+                  title="Fechar"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-8 py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-[2rem] transition-all shadow-xl shadow-amber-500/20"
-                >
-                  Enviar Agora
+                  ✕
                 </button>
               </div>
-            </form>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <div className="overflow-y-auto flex-1 pr-1.5 -mr-1.5 my-4 space-y-6">
+              <form id="broadcast-form" onSubmit={handleBroadcast} className="space-y-6">
+                {/* Título */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
+                    Título da Notificação
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    className="w-full px-5 py-3.5 sm:py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-amber-500 outline-none transition-all font-medium text-slate-800 dark:text-slate-100"
+                    value={broadcastData.title}
+                    onChange={(e) =>
+                      setBroadcastData({
+                        ...broadcastData,
+                        title: e.target.value,
+                      })
+                    }
+                    placeholder="Ex: Ensaio Extra Cancelado"
+                  />
+                </div>
+
+                {/* Mensagem */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
+                    Mensagem
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    className="w-full px-5 py-3.5 sm:py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-amber-500 outline-none transition-all font-medium resize-none text-slate-800 dark:text-slate-100"
+                    value={broadcastData.body}
+                    onChange={(e) =>
+                      setBroadcastData({ ...broadcastData, body: e.target.value })
+                    }
+                    placeholder="Escreva sua mensagem aqui..."
+                  />
+                </div>
+
+                {/* DESTINATÁRIOS - OPÇÕES SOLICITADAS: BATERISTAS, GUITARRISTAS, BAIXISTAS, SOPRANO, CONTRALTO, MEZZO, ETC., E SELECIONAR TODOS */}
+                <div className="space-y-3.5 bg-slate-50/80 dark:bg-slate-850/60 p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                      <Users className="w-4 h-4 text-amber-500" />
+                      <span>Para quem deverá ser enviado?</span>
+                    </label>
+
+                    {/* Botão de Atalho Selecionar Todos */}
+                    <button
+                      type="button"
+                      onClick={handleToggleSelectAll}
+                      className={`text-xs font-black px-3 py-1 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                        selectAllRecipients
+                          ? "bg-amber-500 text-white shadow-xs"
+                          : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-amber-400"
+                      }`}
+                    >
+                      {selectAllRecipients && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                      <span>{selectAllRecipients ? "Todos Selecionados" : "Selecionar Todos"}</span>
+                    </button>
+                  </div>
+
+                  {/* Card Principal: Selecionar Todos */}
+                  <div
+                    onClick={handleToggleSelectAll}
+                    className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                      selectAllRecipients
+                        ? "bg-amber-500/10 border-amber-500 text-amber-950 dark:text-amber-100 shadow-sm"
+                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-amber-300 text-slate-700 dark:text-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors shrink-0 ${
+                          selectAllRecipients
+                            ? "bg-amber-500 border-amber-500 text-white"
+                            : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700"
+                        }`}
+                      >
+                        {selectAllRecipients && <Check className="w-4 h-4 stroke-[3]" />}
+                      </div>
+                      <div>
+                        <p className="text-xs font-black">
+                          Selecionar Todos ({eligibleBroadcastMembers.length} pessoas)
+                        </p>
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          Dispara para todos os voluntários ativos sem filtro
+                        </p>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
+                        selectAllRecipients
+                          ? "bg-amber-500 text-white"
+                          : "bg-slate-100 dark:bg-slate-700 text-slate-500"
+                      }`}
+                    >
+                      {eligibleBroadcastMembers.length} voluntários
+                    </span>
+                  </div>
+
+                  {/* Divisor & Filtros Rápidos por Grupo */}
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider px-1 pt-1 flex-wrap gap-1">
+                    <span>Ou filtre por função / instrumento:</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectGroup("instruments")}
+                        className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:text-amber-600 text-[10px] cursor-pointer"
+                        title="Alternar todos os instrumentistas"
+                      >
+                        + Instrumentos
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectGroup("vocals")}
+                        className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:text-amber-600 text-[10px] cursor-pointer"
+                        title="Alternar todas as vozes (soprano, contralto, mezzo, etc.)"
+                      >
+                        + Vozes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectGroup("ministries")}
+                        className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:text-amber-600 text-[10px] cursor-pointer"
+                        title="Alternar dança, multimídia e líderes"
+                      >
+                        + Mídia/Dança
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 1. Louvor - Instrumentistas (Bateristas, Guitarristas, Baixistas, etc.) */}
+                  <div className="space-y-1.5 pt-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">
+                      Instrumentistas
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {BASE_RECIPIENT_CATEGORIES.filter((c) => c.group === "instruments").map((cat) => {
+                        const isSelected = !selectAllRecipients && broadcastRecipients.includes(cat.id);
+                        const count = eligibleBroadcastMembers.filter((m) =>
+                          isMemberInRecipientCategory(m, cat.id)
+                        ).length;
+
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => toggleRecipientCategory(cat.id)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              isSelected
+                                ? "bg-amber-500 text-white shadow-xs font-black scale-102"
+                                : selectAllRecipients
+                                  ? "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 opacity-90 hover:border-amber-400"
+                                  : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-amber-400"
+                            }`}
+                          >
+                            <span>{cat.label}</span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.2 rounded-md ${
+                                isSelected
+                                  ? "bg-white/20 text-white font-extrabold"
+                                  : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-semibold"
+                              }`}
+                            >
+                              {count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 2. Louvor - Vozes & Vocais (Soprano, Contralto, Mezzo, Tenor, Barítono, etc.) */}
+                  <div className="space-y-1.5 pt-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">
+                      Vozes & Vocais
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {BASE_RECIPIENT_CATEGORIES.filter((c) => c.group === "vocals").map((cat) => {
+                        const isSelected = !selectAllRecipients && broadcastRecipients.includes(cat.id);
+                        const count = eligibleBroadcastMembers.filter((m) =>
+                          isMemberInRecipientCategory(m, cat.id)
+                        ).length;
+
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => toggleRecipientCategory(cat.id)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              isSelected
+                                ? "bg-amber-500 text-white shadow-xs font-black scale-102"
+                                : selectAllRecipients
+                                  ? "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 opacity-90 hover:border-amber-400"
+                                  : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-amber-400"
+                            }`}
+                          >
+                            <span>{cat.label}</span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.2 rounded-md ${
+                                isSelected
+                                  ? "bg-white/20 text-white font-extrabold"
+                                  : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-semibold"
+                              }`}
+                            >
+                              {count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 3. Dança, Multimídia, Líderes & Outros */}
+                  <div className="space-y-1.5 pt-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">
+                      Outros Ministérios & Líderes
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {BASE_RECIPIENT_CATEGORIES.filter((c) => c.group === "ministries").map((cat) => {
+                        const isSelected = !selectAllRecipients && broadcastRecipients.includes(cat.id);
+                        const count = eligibleBroadcastMembers.filter((m) =>
+                          isMemberInRecipientCategory(m, cat.id)
+                        ).length;
+
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => toggleRecipientCategory(cat.id)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              isSelected
+                                ? "bg-amber-500 text-white shadow-xs font-black scale-102"
+                                : selectAllRecipients
+                                  ? "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 opacity-90 hover:border-amber-400"
+                                  : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-amber-400"
+                            }`}
+                          >
+                            <span>{cat.label}</span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.2 rounded-md ${
+                                isSelected
+                                  ? "bg-white/20 text-white font-extrabold"
+                                  : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-semibold"
+                              }`}
+                            >
+                              {count}
+                            </span>
+                          </button>
+                        );
+                      })}
+
+                      {/* Instrumentos dinâmicos extras da congregação */}
+                      {customRecipientCategories.map((cat) => {
+                        const isSelected = !selectAllRecipients && broadcastRecipients.includes(cat.id);
+                        const count = eligibleBroadcastMembers.filter((m) =>
+                          isMemberInRecipientCategory(m, cat.id)
+                        ).length;
+
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => toggleRecipientCategory(cat.id)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              isSelected
+                                ? "bg-amber-500 text-white shadow-xs font-black"
+                                : "bg-white dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700"
+                            }`}
+                          >
+                            <span>{cat.label}</span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-100 dark:bg-slate-700">
+                              {count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Barra de Resumo com Contador em Tempo Real */}
+                  <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${targetBroadcastMembers.length > 0 ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                      <span className="font-bold text-slate-700 dark:text-slate-300">
+                        {targetBroadcastMembers.length === 0 ? (
+                          <span className="text-rose-500 font-extrabold">
+                            Nenhum destinatário selecionado
+                          </span>
+                        ) : (
+                          <span>
+                            Destinatários selecionados:{" "}
+                            <strong className="text-amber-600 dark:text-amber-400 font-black">
+                              {targetBroadcastMembers.length}{" "}
+                              {targetBroadcastMembers.length === 1 ? "voluntário" : "voluntários"}
+                            </strong>
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    {targetBroadcastMembers.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowRecipientsList(!showRecipientsList)}
+                        className="text-amber-600 dark:text-amber-400 font-extrabold hover:underline text-[11px] cursor-pointer"
+                      >
+                        {showRecipientsList ? "Ocultar nomes" : "Ver quem receberá"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Lista de Nomes Expansível */}
+                  {showRecipientsList && targetBroadcastMembers.length > 0 && (
+                    <div className="max-h-32 overflow-y-auto p-2.5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-wrap gap-1.5 text-xs animate-in fade-in">
+                      {targetBroadcastMembers.map((m) => (
+                        <span
+                          key={m.uid}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium text-[11px] border border-slate-200 dark:border-slate-600"
+                        >
+                          <span>{m.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => toggleExcludeUser(m.uid)}
+                            title="Desmarcar este voluntário"
+                            className="text-slate-400 hover:text-rose-500 font-bold ml-0.5 cursor-pointer"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Checkbox: Enviar apenas para minha congregação */}
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative flex items-center">
+                    <input
+                      type="checkbox"
+                      className="w-5 h-5 rounded border-2 border-slate-200 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                      checked={broadcastData.churchOnly}
+                      onChange={(e) =>
+                        setBroadcastData({
+                          ...broadcastData,
+                          churchOnly: e.target.checked,
+                        })
+                      }
+                    />
+                  </div>
+                  <span className="text-sm font-bold text-slate-600 dark:text-slate-400">
+                    Enviar apenas para{" "}
+                    {userProfile?.churchId ? "minha congregação" : "todos"}
+                  </span>
+                </label>
+              </form>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex gap-4 pt-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsBroadcastModalOpen(false)}
+                disabled={isSendingBroadcast}
+                className="flex-1 px-6 sm:px-8 py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold rounded-2xl sm:rounded-[2rem] transition-all hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                form="broadcast-form"
+                disabled={targetBroadcastMembers.length === 0 || isSendingBroadcast}
+                className="flex-1 px-6 sm:px-8 py-4 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-2xl sm:rounded-[2rem] transition-all shadow-xl shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2 text-sm"
+              >
+                {isSendingBroadcast ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Enviando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    <span>
+                      Enviar Agora ({targetBroadcastMembers.length})
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
+
+      {/* MODAL: GERENCIADOR DE COMUNICADOS ENVIADOS (VISUALIZAR QUEM LEU E CANCELAR) */}
+      <SentBroadcastsManager
+        mode="modal"
+        isOpen={isSentBroadcastsModalOpen}
+        onClose={() => setIsSentBroadcastsModalOpen(false)}
+        onComposeNew={() => {
+          setIsSentBroadcastsModalOpen(false);
+          setBroadcastData({ title: "", body: "", churchOnly: true });
+          setBroadcastRecipients([]);
+          setSelectAllRecipients(true);
+          setExcludedUserIds([]);
+          setShowRecipientsList(false);
+          setIsBroadcastModalOpen(true);
+        }}
+      />
     </div>
   );
 }
