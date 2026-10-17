@@ -15,6 +15,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
+import { auditCreate, auditUpdate } from "@/lib/audit";
 import {
   UserPlus,
   Search,
@@ -36,6 +37,7 @@ import {
 } from "lucide-react";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
 import { SentBroadcastsManager } from "@/components/SentBroadcastsManager";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { motion } from "motion/react";
@@ -120,8 +122,11 @@ export default function MembersPage() {
   });
 
   const worshipRolesList = [
-    { id: "leader", label: "Líder de Louvor" },
-    { id: "instrumentist", label: "Instrumentista/Vocal" },
+    { id: "main_minister", label: "Ministro Principal" },
+    { id: "vocalist", label: "Vocalista" },
+    { id: "musician", label: "Músico / Instrumentista" },
+    { id: "leader", label: "Líder de Louvor (Legado)" },
+    { id: "instrumentist", label: "Instrumentista / Vocal (Legado)" },
   ];
   const multimediaRolesList = [
     { id: "multimedia_leader", label: "Líder de Multimídia" },
@@ -563,16 +568,36 @@ export default function MembersPage() {
           updatedAt: serverTimestamp(),
           updatedBy: user?.uid,
         });
+
+        // Record Audit Update (only altered fields are stored)
+        auditUpdate(
+          "Member",
+          editingMember.uid,
+          formData.name || editingMember.name,
+          editingMember,
+          finalPayload,
+          { churchId: userProfile?.churchId || "" }
+        ).catch((err) => console.warn("Audit member update error:", err));
       } else {
         const newUid = `user_${Date.now()}`;
-        await setDoc(doc(db, "users", newUid), {
+        const newRecord = {
           uid: newUid,
           ...finalPayload,
           createdAt: serverTimestamp(),
           createdBy: user?.uid,
           updatedAt: serverTimestamp(),
           updatedBy: user?.uid,
-        });
+        };
+        await setDoc(doc(db, "users", newUid), newRecord);
+
+        // Record Audit Create
+        auditCreate(
+          "Member",
+          newUid,
+          formData.name,
+          newRecord,
+          { churchId: userProfile?.churchId || "" }
+        ).catch((err) => console.warn("Audit member create error:", err));
       }
       setIsModalOpen(false);
       setEditingMember(null);
@@ -1243,8 +1268,12 @@ export default function MembersPage() {
                       {member.name.charAt(0)}
                     </div>
                     <div>
-                      <p className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 group-hover/link:text-blue-800 dark:group-hover/link:text-blue-400 transition-colors">
-                        {member.name}
+                      <p className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 group-hover/link:text-blue-800 dark:group-hover/link:text-blue-400 transition-colors">
+                        <span>{member.name}</span>
+                        <VerifiedBadge
+                          verified={Boolean((member as any).emailVerified || (member as any).email_verified)}
+                          size="xs"
+                        />
                         {member.status === "active" ? (
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                         ) : (
@@ -1358,6 +1387,25 @@ export default function MembersPage() {
                           );
                         }
 
+                        if (activeTab === "worship") {
+                          const wRoles = member.roles?.worship || [];
+                          if (wRoles.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-1.5 items-center">
+                                {wRoles.map((roleId) => {
+                                  const found = worshipRolesList.find((r) => r.id === roleId);
+                                  const label = found ? found.label.replace(" (Legado)", "") : roleId;
+                                  return (
+                                    <span key={roleId} className="font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-200/50 dark:border-blue-800/50 px-3 py-1 rounded-lg text-[11px]">
+                                      {label}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            );
+                          }
+                        }
+
                         const vocal = member.vocalRange || "";
                         const insts = member.instruments || [];
 
@@ -1397,6 +1445,16 @@ export default function MembersPage() {
                   <div className="flex flex-col gap-1.5">
                     <div className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 font-sans">
                       {(() => {
+                        const isMinister = member.roles?.worship?.includes("main_minister") || member.roles?.worship?.includes("mainMinister");
+                        if (isMinister) {
+                          return (
+                            <>
+                              <Shield className="w-4 h-4 text-amber-500" />
+                              <span>Ministro Principal</span>
+                            </>
+                          );
+                        }
+
                         const isLeader = member.roles?.worship?.includes("leader") || member.roles?.multimedia?.includes("leader") || member.roles?.secretariat?.includes("leader") || member.roles?.dance?.includes("leader") || member.roles?.dance?.includes("dance_leader");
                         if (isLeader) {
                           return (
@@ -1437,20 +1495,27 @@ export default function MembersPage() {
                         }
 
                         // Vocal check
-                        if (member.vocalRange && member.vocalRange.trim().length > 0) {
+                        if (
+                          member.roles?.worship?.includes("vocalist") ||
+                          (member.vocalRange && member.vocalRange.trim().length > 0) ||
+                          member.instruments?.includes("Voz")
+                        ) {
+                          const vLabel = member.vocalRange && member.vocalRange.trim().length > 0
+                            ? member.vocalRange
+                            : "Vocalista";
                           return (
                             <>
                               <Mic className="w-4 h-4 text-pink-500" />
-                              <span>{member.vocalRange}</span>
+                              <span>{vLabel}</span>
                             </>
                           );
                         }
 
-                        if (member.instruments?.includes("Voz")) {
+                        if (member.roles?.worship?.includes("musician")) {
                           return (
                             <>
-                              <Mic className="w-4 h-4 text-pink-500" />
-                              <span>Vocal</span>
+                              <Music className="w-4 h-4 text-blue-400" />
+                              <span>Músico</span>
                             </>
                           );
                         }

@@ -18,6 +18,7 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
+import { auditCreate, auditUpdate, auditDelete } from "@/lib/audit";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft,
@@ -52,6 +53,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/AuthProvider";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
+import { ChurchScalesCalendarWidget } from "@/components/ChurchScalesCalendarWidget";
 
 interface Musician {
   uid: string;
@@ -370,6 +372,17 @@ export default function ChurchDetailPage() {
           updatedAt: serverTimestamp(),
           updatedBy: user.uid,
         });
+
+        // Record Audit Update
+        auditUpdate(
+          "WorshipService",
+          editingService.id,
+          serviceFormData.name || editingService.name,
+          editingService,
+          serviceFormData,
+          { churchId: id as string }
+        ).catch((err) => console.warn("Audit service update error:", err));
+
         setServices((prev) =>
           prev.map((s) =>
             s.id === editingService.id ? { ...s, ...serviceFormData } : s,
@@ -384,6 +397,16 @@ export default function ChurchDetailPage() {
           updatedAt: serverTimestamp(),
           updatedBy: user.uid,
         });
+
+        // Record Audit Create
+        auditCreate(
+          "WorshipService",
+          docRef.id,
+          serviceFormData.name,
+          { ...serviceFormData, churchId: id },
+          { churchId: id as string }
+        ).catch((err) => console.warn("Audit service create error:", err));
+
         setServices((prev) => [
           ...prev,
           { id: docRef.id, churchId: id as string, ...serviceFormData },
@@ -447,6 +470,16 @@ export default function ChurchDetailPage() {
     setDeletingService(true);
     try {
       await deleteDoc(doc(db, "services", serviceToDelete.id));
+
+      // Record Audit Delete
+      auditDelete(
+        "WorshipService",
+        serviceToDelete.id,
+        serviceToDelete.name,
+        serviceToDelete,
+        { churchId: (serviceToDelete.churchId || id) as string }
+      ).catch((err) => console.warn("Audit service delete error:", err));
+
       setServices((prev) => prev.filter((s) => s.id !== serviceToDelete.id));
       setIsDeleteServiceModalOpen(false);
       setServiceToDelete(null);
@@ -694,7 +727,7 @@ export default function ChurchDetailPage() {
   );
 
   return (
-    <div className="max-w-6xl space-y-12 pb-20 text-slate-800 dark:text-slate-100">
+    <div className="admin-church-details-container max-w-6xl space-y-12 pb-20 text-slate-800 dark:text-slate-100">
       <header className="flex items-center justify-between">
         <button
           onClick={() => router.back()}
@@ -742,6 +775,15 @@ export default function ChurchDetailPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* WIDGET DEDICADO: CALENDÁRIO DE ESCALAS DA IGREJA */}
+      <section>
+        <ChurchScalesCalendarWidget
+          churchId={id as string}
+          churchName={church.name}
+          allUsersList={members.map((m) => ({ id: m.uid, name: m.name, email: m.email }))}
+        />
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">

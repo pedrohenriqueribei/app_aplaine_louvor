@@ -14,6 +14,7 @@ import {
   documentId,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
+import { auditCreate, auditUpdate } from "@/lib/audit";
 import {
   Plus,
   Search,
@@ -90,16 +91,36 @@ export default function ChurchesPage() {
           updatedAt: serverTimestamp(),
           updatedBy: user.uid,
         });
+
+        // Record Audit Update
+        auditUpdate(
+          "Church",
+          editingChurch.id,
+          formData.name || editingChurch.name,
+          editingChurch,
+          formData,
+          { churchId: editingChurch.id }
+        ).catch((err) => console.warn("Audit church update error:", err));
       } else {
         const newId = `church_${Date.now()}`;
-        await setDoc(doc(db, "churches", newId), {
+        const newRecord = {
           id: newId,
           ...formData,
           createdAt: serverTimestamp(),
           createdBy: user.uid,
           updatedAt: serverTimestamp(),
           updatedBy: user.uid,
-        });
+        };
+        await setDoc(doc(db, "churches", newId), newRecord);
+
+        // Record Audit Create
+        auditCreate(
+          "Church",
+          newId,
+          formData.name,
+          newRecord,
+          { churchId: newId }
+        ).catch((err) => console.warn("Audit church create error:", err));
       }
       setIsModalOpen(false);
       setEditingChurch(null);

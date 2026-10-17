@@ -9,7 +9,10 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0
 const dbInstance = (() => {
   try {
     return initializeFirestore(app, {
-      experimentalAutoDetectLongPolling: true,
+      experimentalForceLongPolling: true,
+      experimentalLongPollingOptions: {
+        timeoutSeconds: 20,
+      },
     }, (firebaseConfig as any).firestoreDatabaseId);
   } catch {
     return getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);

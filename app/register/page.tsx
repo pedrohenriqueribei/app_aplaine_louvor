@@ -251,7 +251,10 @@ function RegisterForm() {
         danceStyles: selectedRole === "danca" ? danceStylesSelected : [],
       });
 
-      router.push(redirectPath);
+      const createdUserId = auth.currentUser?.uid || "";
+      router.push(
+        `/verify-email?email=${encodeURIComponent(email)}&userId=${encodeURIComponent(createdUserId)}&redirect=${encodeURIComponent(redirectPath)}`
+      );
     } catch (err: any) {
       setError(err.message || "Erro ao criar conta. Verifique seus dados.");
     } finally {
@@ -303,6 +306,7 @@ function RegisterForm() {
           >
             <Link
               href="/"
+              prefetch={false}
               className="bg-white px-8 py-5 rounded-[2rem] shadow-2xl shadow-blue-900/50 relative group border border-white/20 flex items-center cursor-pointer"
             >
               <div className="absolute inset-0 bg-blue-400/30 rounded-[2rem] blur-2xl group-hover:blur-3xl transition-all duration-500 -z-10"></div>
@@ -347,7 +351,7 @@ function RegisterForm() {
             <div className="space-y-8">
               <div className="text-center lg:text-left">
                 <div className="lg:hidden flex justify-center mb-6">
-                  <Link href="/" className="flex items-center">
+                  <Link href="/" prefetch={false} className="flex items-center">
                     <img
                       src="/logo_aplane.png"
                       alt="Applane Logo"
@@ -461,7 +465,7 @@ function RegisterForm() {
 
               <div className="mb-10 text-center lg:text-left">
                 <div className="lg:hidden flex justify-center mb-6">
-                  <Link href="/" className="flex items-center">
+                  <Link href="/" prefetch={false} className="flex items-center">
                     <img
                       src="/logo_aplane.png"
                       alt="Applane Logo"

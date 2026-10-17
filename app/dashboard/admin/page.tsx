@@ -5,6 +5,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import { ShieldAlert, AlertTriangle, CheckCircle2, Loader2, Mail } from "lucide-react";
+import { AuditSecuritySettingsPanel } from "@/components/AuditSecuritySettingsPanel";
 
 export default function AdminPage() {
   const { isSuperAdmin, loading } = useAuth();
@@ -197,6 +198,10 @@ export default function AdminPage() {
             "Verificar e Corrigir Custom Claims"
           )}
         </button>
+      </div>
+
+      <div id="security-audit" className="mt-8">
+        <AuditSecuritySettingsPanel />
       </div>
     </div>
   );

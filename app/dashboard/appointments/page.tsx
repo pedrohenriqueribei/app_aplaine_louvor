@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
+import { auditCreate, auditUpdate } from "@/lib/audit";
 import {
   Search,
   Calendar as CalendarIcon,
@@ -91,9 +92,19 @@ export default function AppointmentsPage() {
           doc(db, "appointments", editingAppointment.id),
           { ...formData, updatedAt: serverTimestamp(), updatedBy: user.uid }
         );
+
+        // Record Audit Update
+        auditUpdate(
+          "Appointment",
+          editingAppointment.id,
+          `Atendimento - ${formData.personName || editingAppointment.personName}`,
+          editingAppointment,
+          formData,
+          { churchId: userData.churchId }
+        ).catch((err) => console.warn("Audit appointment update error:", err));
       } else {
         const newId = `appt_${Date.now()}`;
-        await setDoc(doc(db, "appointments", newId), {
+        const newRecord = {
           id: newId,
           churchId: userData.churchId,
           pastorId: user.uid,
@@ -102,7 +113,17 @@ export default function AppointmentsPage() {
           createdBy: user.uid,
           updatedAt: serverTimestamp(),
           updatedBy: user.uid,
-        });
+        };
+        await setDoc(doc(db, "appointments", newId), newRecord);
+
+        // Record Audit Create
+        auditCreate(
+          "Appointment",
+          newId,
+          `Atendimento - ${formData.personName}`,
+          newRecord,
+          { churchId: userData.churchId }
+        ).catch((err) => console.warn("Audit appointment create error:", err));
       }
       setIsModalOpen(false);
       setEditingAppointment(null);

@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     appIsrStatus: false,
     buildActivity: false,
   },
-  transpilePackages: ["motion"],
+  transpilePackages: ["motion", "lucide-react"],
   serverExternalPackages: ["firebase-admin", "@google/genai"],
 };
 

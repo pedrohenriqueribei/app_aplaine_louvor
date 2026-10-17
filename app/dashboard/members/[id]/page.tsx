@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   doc,
   getDoc,
@@ -27,6 +28,7 @@ import {
   parseScheduleDateToTime,
 } from "@/lib/utils";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import {
   ArrowLeft,
   Mail,
@@ -165,8 +167,11 @@ export default function MusicianProfilePage() {
   ];
 
   const worshipRolesList = [
-    { id: "leader", label: "Líder de Louvor" },
-    { id: "instrumentist", label: "Instrumentista / Vocal" },
+    { id: "main_minister", label: "Ministro Principal" },
+    { id: "vocalist", label: "Vocalista" },
+    { id: "musician", label: "Músico / Instrumentista" },
+    { id: "leader", label: "Líder de Louvor (Legado)" },
+    { id: "instrumentist", label: "Instrumentista / Vocal (Legado)" },
   ];
 
   const multimediaRolesList = [
@@ -551,6 +556,8 @@ export default function MusicianProfilePage() {
   }
 
   const isLeader =
+    musician.roles?.worship?.includes("main_minister") ||
+    musician.roles?.worship?.includes("mainMinister") ||
     musician.roles?.worship?.includes("leader") ||
     musician.roles?.multimedia?.includes("leader") ||
     musician.roles?.secretariat?.includes("leader") ||
@@ -633,18 +640,48 @@ export default function MusicianProfilePage() {
               </div>
             </div>
             <div className="pb-4">
-              <h1 className="text-4xl font-display font-black text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-3">
-                {musician.name}
-                {musician.status === "active" ? (
-                  <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-                ) : (
-                  <XCircle className="w-6 h-6 text-slate-300 dark:text-slate-700" />
-                )}
-              </h1>
-              <p className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2">
-                <Shield className={`w-4 h-4 ${shieldColor}`} />
-                {displayRole}
-              </p>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-3xl sm:text-4xl font-display font-black text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-2.5">
+                  <span>{musician.name}</span>
+                  <VerifiedBadge
+                    verified={Boolean(
+                      (musician as any).emailVerified ||
+                      (musician as any).email_verified ||
+                      (user?.uid === id && (userData?.emailVerified || userData?.email_verified || user?.emailVerified))
+                    )}
+                    size="md"
+                  />
+                  {musician.status === "active" ? (
+                    <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                  ) : (
+                    <XCircle className="w-6 h-6 text-slate-300 dark:text-slate-700" />
+                  )}
+                </h1>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap mt-1">
+                <p className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2">
+                  <Shield className={`w-4 h-4 ${shieldColor}`} />
+                  {displayRole}
+                </p>
+
+                {user?.uid === id &&
+                  !Boolean(
+                    (musician as any).emailVerified ||
+                    (musician as any).email_verified ||
+                    userData?.emailVerified ||
+                    userData?.email_verified ||
+                    user?.emailVerified
+                  ) && (
+                    <Link
+                      href={`/verify-email?email=${encodeURIComponent(musician.email || user?.email || "")}&userId=${user?.uid || id}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 transition-colors"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                      <span>E-mail não verificado • Validar agora</span>
+                    </Link>
+                  )}
+              </div>
             </div>
             <div className="md:ml-auto pb-4 flex flex-wrap items-center gap-3">
               <button

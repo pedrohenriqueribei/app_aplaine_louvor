@@ -19,8 +19,15 @@ import { SundayReadinessBar } from "./SundayReadinessBar";
 import { CompactCalendarHeatmap, ScheduledDayHeatmap } from "./CompactCalendarHeatmap";
 import { BirthdayCarousel } from "./BirthdayCarousel";
 import { MonthlyAvailabilityWidget } from "./MonthlyAvailabilityWidget";
+import {
+  CriticalAvailabilityWidget,
+  type CriticalDayItem,
+  type DayAvailabilityMapItem,
+} from "./CriticalAvailabilityWidget";
 import { TopPlayedSongsWidget } from "./TopPlayedSongsWidget";
 import { ChurchAnnouncementsFeed } from "./ChurchAnnouncementsFeed";
+import { ScheduleConflictBadge } from "./ScheduleConflictBadge";
+import type { ScheduleConflictSummary } from "@/lib/scheduleConflicts";
 
 export interface PredictiveAlertItem {
   id: string;
@@ -46,6 +53,7 @@ export interface UpcomingScheduleItem {
   songsCount: number;
   missingRoles: string[];
   hasRehearsal?: boolean;
+  conflictSummary?: ScheduleConflictSummary | null;
 }
 
 interface DashboardMainGridProps {
@@ -67,10 +75,19 @@ interface DashboardMainGridProps {
     deptDisplayName?: string;
     loading?: boolean;
   };
+  criticalDays?: CriticalDayItem[];
+  allDaysAvailability?: DayAvailabilityMapItem[];
+  loadingCriticalAvailability?: boolean;
   onAlertAction: (alert: PredictiveAlertItem) => void;
   onNudgeAvailability: () => void;
+  onNudgeCriticalWhatsApp?: (selectedDays?: number[]) => void;
   onOpenForgottenSongs: () => void;
   onCopyBirthdayToast: (name: string) => void;
+  currentUserId?: string;
+  rawSchedules?: any[];
+  onQuickConfirmPresence?: (scheduleId: string) => void;
+  churchId?: string;
+  canAccessManagement?: boolean;
 }
 
 export function DashboardMainGrid({
@@ -84,10 +101,19 @@ export function DashboardMainGrid({
   currentMonthName,
   churchName,
   deptAvailabilityStats,
+  criticalDays = [],
+  allDaysAvailability = [],
+  loadingCriticalAvailability = false,
   onAlertAction,
   onNudgeAvailability,
+  onNudgeCriticalWhatsApp,
   onOpenForgottenSongs,
   onCopyBirthdayToast,
+  currentUserId,
+  rawSchedules = [],
+  onQuickConfirmPresence,
+  churchId,
+  canAccessManagement = true,
 }: DashboardMainGridProps) {
   const router = useRouter();
   const [alertsFilter, setAlertsFilter] = useState<"all" | "urgency" | "attention" | "goal">("all");
@@ -135,14 +161,46 @@ export function DashboardMainGrid({
       {/* • Próximas Atividades / Ensaios */}
       {/* ===================================================================== */}
       <div className="lg:col-span-8 space-y-8 min-w-0">
-        
-        {/* 1. CENTRAL DE ALERTAS E INSIGHTS */}
-        <section className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-rose-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20">
-                <Zap className="w-5 h-5 fill-current" />
+        {/* 1. CENTRAL DE ALERTAS (LÍDERES) OU PAINEL DE ATUAÇÃO (VOLUNTÁRIOS) */}
+        {!canAccessManagement ? (
+          <section className="bg-gradient-to-br from-blue-50/60 via-white to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/80 rounded-[2.5rem] border border-blue-100 dark:border-slate-800 p-6 sm:p-7 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-2xl bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 flex items-center justify-center shrink-0 shadow-xs">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h2 className="text-lg font-display font-black text-slate-800 dark:text-slate-100 tracking-tight">
+                      Painel Operacional do Integrante
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                      Modo Voluntário
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium max-w-xl leading-relaxed">
+                    Acompanhe suas convocações, confirme sua presença com 1 clique e consulte o mapa de calor do mês. Métricas gerenciais, riscos de fadiga e alertas preditivos de equipe são reservados à liderança ministerial.
+                  </p>
+                </div>
               </div>
+              <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                <button
+                  onClick={() => router.push("/dashboard/availability")}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Minha Disponibilidade</span>
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-rose-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20">
+                  <Zap className="w-5 h-5 fill-current" />
+                </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tight">
@@ -340,27 +398,55 @@ export function DashboardMainGrid({
             </div>
           )}
         </section>
+        )}
 
         {/* 2. STATUS DO PRÓXIMO CULTO (LINHA DO TEMPO DAS EQUIPES + SETLIST) */}
         <section className="space-y-4">
-          <SundayReadinessBar
-            serviceTitle={
-              upcomingSchedules[0]
-                ? `Culto de ${formatScheduleDate(upcomingSchedules[0].date)}`
-                : "Culto de Domingo 19h (Celebração)"
-            }
-            serviceDateFormatted={
-              upcomingSchedules[0]
-                ? formatScheduleDate(upcomingSchedules[0].date)
-                : "Próximo Domingo • 19:00"
-            }
-            overallScore={kpiMetrics.healthScore}
-            scheduleId={upcomingSchedules[0]?.id}
-            onRemindPendingWhatsApp={(deptName) => {
-              const text = `Olá equipe de ${deptName}! Graça e paz! Lembrando de confirmar sua presença na escala deste domingo no app da igreja. Que Deus abençoe! 🙏`;
-              window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
-            }}
-          />
+          {(() => {
+            const nextSched = upcomingSchedules[0];
+            const rawNext = nextSched && rawSchedules ? rawSchedules.find((s) => s.id === nextSched.id) : null;
+            const isScheduled = Boolean(
+              currentUserId &&
+                rawNext &&
+                (rawNext.members?.includes(currentUserId) ||
+                  (rawNext.roles && Object.values(rawNext.roles).some((v: any) => v === currentUserId || (Array.isArray(v) && v.includes(currentUserId)))))
+            );
+            const isConfirmed = Boolean(
+              currentUserId &&
+                rawNext &&
+                (rawNext.confirmedMembers?.includes(currentUserId) ||
+                  rawNext.confirmations?.[currentUserId]?.status === "confirmed")
+            );
+
+            return (
+              <SundayReadinessBar
+                serviceTitle={
+                  nextSched
+                    ? `Culto de ${formatScheduleDate(nextSched.date)}`
+                    : "Culto de Domingo 19h (Celebração)"
+                }
+                serviceDateFormatted={
+                  nextSched
+                    ? formatScheduleDate(nextSched.date)
+                    : "Próximo Domingo • 19:00"
+                }
+                overallScore={kpiMetrics.healthScore}
+                scheduleId={nextSched?.id}
+                isUserScheduled={isScheduled}
+                isUserConfirmed={isConfirmed}
+                canAccessManagement={canAccessManagement}
+                onQuickConfirm={
+                  onQuickConfirmPresence && nextSched
+                    ? () => onQuickConfirmPresence(nextSched.id)
+                    : undefined
+                }
+                onRemindPendingWhatsApp={(deptName) => {
+                  const text = `Olá equipe de ${deptName}! Graça e paz! Lembrando de confirmar sua presença na escala deste domingo no app da igreja. Que Deus abençoe! 🙏`;
+                  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+                }}
+              />
+            );
+          })()}
         </section>
 
         {/* 3. PRÓXIMAS ATIVIDADES / ENSAIOS & MAPA DE CALOR */}
@@ -438,8 +524,15 @@ export function DashboardMainGrid({
                               Ensaio marcado
                             </span>
                           )}
+                          {schedule.conflictSummary?.hasConflict && (
+                            <ScheduleConflictBadge
+                              summary={schedule.conflictSummary}
+                              size="sm"
+                              variant="badge"
+                            />
+                          )}
                         </div>
-                        <div className="flex items-center gap-3.5 text-xs text-slate-400 dark:text-slate-500">
+                        <div className="flex items-center gap-3.5 text-xs text-slate-400 dark:text-slate-500 flex-wrap">
                           <span className="flex items-center gap-1">
                             <Users className="w-3.5 h-3.5" />
                             {schedule.membersCount} integrantes
@@ -453,6 +546,15 @@ export function DashboardMainGrid({
                           {schedule.missingRoles.length > 0 && (
                             <span className="text-rose-500 font-bold">
                               Falta: {schedule.missingRoles.slice(0, 2).join(", ")}
+                            </span>
+                          )}
+                          {schedule.conflictSummary?.hasConflict && (
+                            <span
+                              className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/50"
+                              title={schedule.conflictSummary.tooltipText}
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                              <span>Conflito: {schedule.conflictSummary.conflictingMemberNames.join(", ")}</span>
                             </span>
                           )}
                         </div>
@@ -518,8 +620,24 @@ export function DashboardMainGrid({
           currentMonthName={currentMonthName}
           deptDisplayName={deptAvailabilityStats.deptDisplayName}
           loading={deptAvailabilityStats.loading}
-          onNudgeWhatsApp={onNudgeAvailability}
+          onNudgeWhatsApp={canAccessManagement ? onNudgeAvailability : undefined}
+          canAccessManagement={canAccessManagement}
         />
+
+        {/* 2.1 WIDGET DE DISPONIBILIDADE CRÍTICA (< 50%) - APENAS LÍDERES COM ACESSO GERENCIAL */}
+        {canAccessManagement && (
+          <section id="disponibilidade-critica-widget">
+            <CriticalAvailabilityWidget
+              criticalDays={criticalDays}
+              allDaysAvailability={allDaysAvailability}
+              currentMonthName={currentMonthName}
+              deptDisplayName={deptAvailabilityStats.deptDisplayName || "Equipe"}
+              totalTeamCount={deptAvailabilityStats.totalCount}
+              loading={loadingCriticalAvailability}
+              onNudgeWhatsApp={onNudgeCriticalWhatsApp}
+            />
+          </section>
+        )}
 
         {/* 3. MÚSICAS MAIS TOCADAS NO MÊS */}
         <TopPlayedSongsWidget
@@ -527,8 +645,8 @@ export function DashboardMainGrid({
           onOpenForgottenSongs={onOpenForgottenSongs}
         />
 
-        {/* 4. FEED DE ÚLTIMOS AVISOS DA IGREJA */}
-        <ChurchAnnouncementsFeed />
+        {/* 4. MURAL DE AVISOS GERAIS DA IGREJA (Liderança & Membros) */}
+        <ChurchAnnouncementsFeed churchId={churchId} />
 
       </aside>
     </div>

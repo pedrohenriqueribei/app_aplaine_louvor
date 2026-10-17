@@ -53,6 +53,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <Link
             href="/"
+            prefetch={false}
             className="flex items-center cursor-pointer hover:opacity-90 transition-opacity"
             id="nav-logo-link"
           >
@@ -65,6 +66,7 @@ export default function HomePage() {
           <div className="flex items-center gap-4">
             <Link
               href="/login"
+              prefetch={false}
               className="text-slate-600 font-bold hover:text-blue-800 transition-colors px-4 py-2 rounded-lg hover:bg-slate-50 transition-all active:scale-95"
               id="nav-login-btn"
             >
@@ -86,6 +88,7 @@ export default function HomePage() {
                 <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 py-1.5 z-55 animate-in fade-in slide-in-from-top-2 duration-150">
                   <Link
                     href="/register?role=musico"
+                    prefetch={false}
                     className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-250 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     onClick={() => setIsRegisterMenuOpen(false)}
                   >
@@ -94,6 +97,7 @@ export default function HomePage() {
                   </Link>
                   <Link
                     href="/register?role=multimidia"
+                    prefetch={false}
                     className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-250 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     onClick={() => setIsRegisterMenuOpen(false)}
                   >
@@ -102,6 +106,7 @@ export default function HomePage() {
                   </Link>
                   <Link
                     href="/register?role=danca"
+                    prefetch={false}
                     className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-250 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     onClick={() => setIsRegisterMenuOpen(false)}
                   >
@@ -110,6 +115,7 @@ export default function HomePage() {
                   </Link>
                   <Link
                     href="/register?role=secretaria"
+                    prefetch={false}
                     className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-250 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     onClick={() => setIsRegisterMenuOpen(false)}
                   >
@@ -154,6 +160,7 @@ export default function HomePage() {
               </button>
               <Link
                 href="/login"
+                prefetch={false}
                 className="bg-white text-slate-700 border border-slate-200 px-8 py-4 rounded-2xl font-bold text-lg hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center"
                 id="hero-secondary-btn"
               >
@@ -311,7 +318,7 @@ export default function HomePage() {
       {/* Footer with Applane logo */}
       <footer className="bg-white border-t border-slate-200 py-10 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <Link href="/" className="flex items-center hover:opacity-90 transition-opacity">
+          <Link href="/" prefetch={false} className="flex items-center hover:opacity-90 transition-opacity">
             <img
               src="/logo_aplane.png"
               alt="Applane Logo"

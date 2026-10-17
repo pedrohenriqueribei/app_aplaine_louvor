@@ -3,16 +3,24 @@
 import React from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useRouter, usePathname } from "next/navigation";
-import { LogOut, LayoutDashboard, Users } from "lucide-react";
+import { LogOut, LayoutDashboard, Users, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
+import { FloatingTopBar } from "@/components/FloatingTopBar";
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const { user, isSuperAdmin, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const mainRef = React.useRef<HTMLElement | null>(null);
+
+  const getAdminPageTitle = () => {
+    if (pathname.includes("/users")) return "Gestão de Usuários";
+    if (pathname.includes("/security")) return "Segurança & Auditoria";
+    return "Painel Administrativo";
+  };
 
   React.useEffect(() => {
     if (!loading) {
@@ -42,10 +50,24 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       icon: <Users className="w-5 h-5" />,
       href: "/admin/dashboard/users",
     },
+    {
+      label: "Segurança & Auditoria",
+      icon: <ShieldCheck className="w-5 h-5" />,
+      href: "/admin/dashboard/security",
+    },
   ];
 
   return (
     <div className="flex bg-slate-50 dark:bg-slate-950 min-h-screen transition-colors duration-300">
+      <FloatingTopBar
+        title={getAdminPageTitle()}
+        subtitle="Painel de Controle Applane"
+        user={user}
+        userData={{ name: "Administrador" }}
+        userRoleTitle="Super Admin"
+        containerRef={mainRef}
+        isAdmin={true}
+      />
       {/* Sidebar Admin */}
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col hidden md:flex h-screen sticky top-0">
         <div className="p-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 mb-2">
@@ -99,7 +121,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="flex-1 p-6 md:p-12 overflow-y-auto">
+      <main ref={mainRef} className="flex-1 p-6 md:p-12 overflow-y-auto">
         <header className="flex justify-end mb-8 md:mb-12">
           <ThemeToggle />
         </header>

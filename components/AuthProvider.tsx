@@ -13,6 +13,8 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string, roles?: { worship?: string[], multimedia?: string[], secretariat?: string[], dance?: string[] }, danceStyles?: string[], danceGroups?: string[], [key: string]: any }) => Promise<void>;
+  markEmailVerified: () => void;
+  refreshUserData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,6 +25,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const signingUpRef = React.useRef(false);
+
+  const refreshUserData = async () => {
+    if (!auth.currentUser) return;
+    try {
+      const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      if (snap.exists()) {
+        setUserData(snap.data());
+      }
+    } catch (e) {
+      console.warn('Could not refresh userData:', e);
+    }
+  };
+
+  const markEmailVerified = () => {
+    setUserData((prev: any) =>
+      prev ? { ...prev, emailVerified: true, email_verified: true } : prev
+    );
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -253,7 +273,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, userData, loading, isSuperAdmin, signInWithGoogle, signInWithEmail, signUpWithEmail }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        userData,
+        loading,
+        isSuperAdmin,
+        signInWithGoogle,
+        signInWithEmail,
+        signUpWithEmail,
+        markEmailVerified,
+        refreshUserData,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -5,7 +5,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { Mail, Lock, User as UserIcon, ArrowRight, AlertCircle, X, HelpCircle } from "lucide-react";
+import { Mail, Lock, User as UserIcon, ArrowRight, AlertCircle, X, HelpCircle, CheckCircle2 } from "lucide-react";
 
 interface AuthErrorInfo {
   title: string;
@@ -157,12 +157,15 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectPath = searchParams.get("redirect") || "/dashboard";
+  const emailParam = searchParams.get("email") || "";
+  const resetSuccess = searchParams.get("resetSuccess") === "true";
 
   const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(emailParam);
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [errorInfo, setErrorInfo] = useState<AuthErrorInfo | null>(null);
+  const [showSuccessBanner, setShowSuccessBanner] = useState<boolean>(resetSuccess);
 
   React.useEffect(() => {
     if (!loading && user) {
@@ -244,6 +247,7 @@ function LoginForm() {
           >
             <Link
               href="/"
+              prefetch={false}
               className="bg-white px-8 py-5 rounded-[2rem] shadow-2xl shadow-blue-900/50 relative group border border-white/20 flex items-center cursor-pointer"
             >
               <div className="absolute inset-0 bg-blue-400/30 rounded-[2rem] blur-2xl group-hover:blur-3xl transition-all duration-500 -z-10"></div>
@@ -286,7 +290,7 @@ function LoginForm() {
         >
           <div className="mb-10 text-center lg:text-left">
             <div className="lg:hidden flex justify-center mb-6">
-              <Link href="/" className="flex items-center">
+              <Link href="/" prefetch={false} className="flex items-center">
                 <img
                   src="/logo_aplane.png"
                   alt="Applane Logo"
@@ -303,6 +307,38 @@ function LoginForm() {
                 : "Comece a gerir seu ministério hoje"}
             </p>
           </div>
+
+          {showSuccessBanner && (
+            <motion.div
+              initial={{ opacity: 0, y: -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.98 }}
+              className="mb-6 p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 rounded-2xl flex items-start gap-3 shadow-xs"
+              role="alert"
+            >
+              <div className="p-2 bg-emerald-100 dark:bg-emerald-900/50 rounded-xl text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-200 tracking-tight">
+                    Senha alterada com sucesso!
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setShowSuccessBanner(false)}
+                    className="text-emerald-400 hover:text-emerald-700 p-1 -mr-1 -mt-1 rounded-lg transition-colors"
+                    title="Fechar mensagem de sucesso"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-300 mt-1 leading-relaxed">
+                  Faça login com sua nova senha cadastrada.
+                </p>
+              </div>
+            </motion.div>
+          )}
 
           {errorInfo && (
             <motion.div
@@ -395,9 +431,20 @@ function LoginForm() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 ml-1">
-                Senha
-              </label>
+              <div className="flex items-center justify-between ml-1">
+                <label className="text-sm font-bold text-slate-700">
+                  Senha
+                </label>
+                {isLogin && (
+                  <Link
+                    href={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`}
+                    prefetch={false}
+                    className="text-xs font-bold text-blue-800 hover:text-blue-950 hover:underline cursor-pointer"
+                  >
+                    Esqueceu a senha?
+                  </Link>
+                )}
+              </div>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input

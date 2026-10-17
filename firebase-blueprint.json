@@ -51,6 +51,9 @@
             "quietHoursEnd": { "type": "string" }
           }
         },
+        "emailVerified": { "type": "boolean", "description": "Status de validação de e-mail do usuário" },
+        "email_verified": { "type": "boolean", "description": "Status de validação de e-mail do usuário" },
+        "emailVerifiedAt": { "type": "string", "format": "date-time", "description": "Data de verificação do e-mail" },
         "updatedAt": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
@@ -205,6 +208,9 @@
         "songs": { "type": "array" },
         "members": { "type": "array" },
         "roles": { "type": "object" },
+        "confirmations": { "type": "object", "description": "Confirmações e status de presença dos voluntários escalados" },
+        "confirmedMembers": { "type": "array", "items": { "type": "string" }, "description": "Lista de UIDs dos voluntários confirmados" },
+        "declinedMembers": { "type": "array", "items": { "type": "string" }, "description": "Lista de UIDs dos voluntários com ausência informada" },
         "rehearsalDate": { "type": "string", "description": "Data do ensaio" },
         "rehearsalTime": { "type": "string", "description": "Hora do ensaio" },
         "playlist": { "type": "array", "items": { "type": "string" }, "description": "Lista de IDs de músicas da playlist pessoal do ministro" },
@@ -255,6 +261,8 @@
         "title": { "type": "string" },
         "body": { "type": "string" },
         "type": { "type": "string" },
+        "scheduleId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "declined"] },
         "read": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
@@ -319,6 +327,78 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "churchId", "senderId", "title", "body", "status", "createdAt"]
+    },
+    "PasswordReset": {
+      "title": "Recuperação de Senha",
+      "description": "Registro de código de 6 dígitos para redefinição de senha",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "code": { "type": "string" },
+        "expiresAt": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "attempts": { "type": "number" },
+        "used": { "type": "boolean" },
+        "verified": { "type": "boolean" },
+        "resetToken": { "type": "string" },
+        "resetTokenExpiresAt": { "type": "number" }
+      },
+      "required": ["userId", "email", "code", "expiresAt", "createdAt"]
+    },
+    "VerificationCode": {
+      "title": "Código de Validação de E-mail",
+      "description": "Registro de código de 6 dígitos para verificação de e-mail de usuários",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "code": { "type": "string" },
+        "expiresAt": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "attempts": { "type": "number" },
+        "used": { "type": "boolean" },
+        "verifiedAt": { "type": "number" }
+      },
+      "required": ["userId", "email", "code", "expiresAt", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "Log de Auditoria",
+      "description": "Registro imutável de operações de criação, alteração e exclusão realizadas na plataforma",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "actor_user_id": { "type": "string", "description": "UID do usuário que realizou a operação" },
+        "actor_name": { "type": "string", "description": "Nome do usuário executor" },
+        "actor_email": { "type": "string", "description": "E-mail do usuário executor" },
+        "actor_role": { "type": "string", "description": "Papel do usuário no momento da ação" },
+        "action": { "type": "string", "enum": ["CREATE", "UPDATE", "DELETE"], "description": "Tipo de operação" },
+        "entity_type": { "type": "string", "description": "Tipo de entidade afetada (Member, Schedule, Service, Song, etc.)" },
+        "entity_id": { "type": "string", "description": "Identificador do registro afetado" },
+        "entity_label": { "type": "string", "description": "Nome ou rótulo legível do registro" },
+        "old_values": { "type": "object", "description": "Valores anteriores dos campos modificados ou registro pré-exclusão" },
+        "new_values": { "type": "object", "description": "Valores novos dos campos modificados ou registro pós-criação" },
+        "changed_fields": { "type": "array", "items": { "type": "string" }, "description": "Lista de campos alterados na operação UPDATE" },
+        "church_id": { "type": "string", "description": "ID da igreja à qual a operação pertence" },
+        "department_id": { "type": "string", "description": "ID ou slug do departamento ministerial, se aplicável" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Timestamp ISO do evento de auditoria" },
+        "source": { "type": "string", "enum": ["web_app", "api", "system"], "description": "Canal de origem da operação" },
+        "correlation_id": { "type": "string", "description": "ID de correlação para rastreabilidade de transação" },
+        "user_agent": { "type": "string", "description": "User-Agent do cliente" },
+        "ip_address": { "type": "string", "description": "Endereço IP ou origem da requisição" }
+      },
+      "required": ["id", "actor_user_id", "action", "entity_type", "entity_id", "church_id", "created_at"]
+    },
+    "SystemSetting": {
+      "title": "Configuração do Sistema",
+      "description": "Configurações e políticas de segurança globais do sistema",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "rules": { "type": "array" }
+      }
     }
   },
   "firestore": {
@@ -338,6 +418,10 @@
     "dance_groups/{groupId}": { "schema": "DanceGroup", "description": "Grupos e elencos do Ministério de Dança" },
     "choreographies/{choreographyId}": { "schema": "Choreography", "description": "Coreografias e repertório do Ministério de Dança" },
     "dance_rehearsals/{rehearsalId}": { "schema": "DanceRehearsal", "description": "Ensaios do Ministério de Dança" },
-    "playlists/{playlistId}": { "schema": "Playlist", "description": "Playlists independentes vinculadas às respectivas escalas de louvor" }
+    "playlists/{playlistId}": { "schema": "Playlist", "description": "Playlists independentes vinculadas às respectivas escalas de louvor" },
+    "password_resets/{userId}": { "schema": "PasswordReset", "description": "Códigos numéricos para recuperação de senha (acesso seguro restrito)" },
+    "verification_codes/{userId}": { "schema": "VerificationCode", "description": "Códigos numéricos para verificação de e-mail de usuários" },
+    "audit_logs/{auditId}": { "schema": "AuditLog", "description": "Logs de auditoria centralizados para operações CREATE, UPDATE e DELETE" },
+    "system_settings/{settingId}": { "schema": "SystemSetting", "description": "Configurações de segurança e políticas do sistema" }
   }
 }

@@ -16,6 +16,7 @@ import {
   UserCheck,
   BookHeart,
   ShieldAlert,
+  ShieldCheck,
   LayoutGrid,
   ChevronDown,
   Mic2,
@@ -37,6 +38,7 @@ const standardMenuItems = [
   { icon: Music, label: 'Repertório', href: '/dashboard/songs' },
   { icon: Clock, label: 'Disponibilidade', href: '/dashboard/availability' },
   { icon: Church, label: 'Igrejas', href: '/dashboard/churches' },
+  { icon: ShieldCheck, label: 'Auditoria', href: '/dashboard/audit' },
   { icon: Bell, label: 'Notificações', href: '/dashboard/notifications' },
 ];
 

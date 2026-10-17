@@ -9,6 +9,8 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import Link from "next/link";
 import { collection, query, where, onSnapshot, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { FloatingTopBar } from "@/components/FloatingTopBar";
 
 export function DashboardShell({
   children,
@@ -18,6 +20,7 @@ export function DashboardShell({
   const { user, userData, loading, isSuperAdmin } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const mainRef = React.useRef<HTMLElement | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [detectedDeptTitle, setDetectedDeptTitle] = React.useState<string | null>(null);
@@ -407,12 +410,23 @@ export function DashboardShell({
 
   return (
     <div key="dashboard-root" className="flex bg-slate-50 dark:bg-slate-950 min-h-screen transition-colors duration-300">
+      <FloatingTopBar
+        title={getPageTitle()}
+        subtitle={getPageSubtitle()}
+        unreadCount={unreadCount}
+        user={user}
+        userData={userData}
+        userRoleTitle={getUserRoleTitle()}
+        onOpenSearch={() => setIsMobileMenuOpen(true)}
+        onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+        containerRef={mainRef}
+      />
       <Sidebar
         key="dashboard-sidebar"
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
       />
-      <main key="dashboard-main" className="flex-1 p-6 md:p-12 overflow-y-auto">
+      <main key="dashboard-main" ref={mainRef} className="flex-1 p-6 md:p-12 overflow-y-auto">
         <header key="dashboard-header" className="flex flex-col md:flex-row md:justify-between md:items-center gap-6 mb-10 md:mb-16">
           <div key="dashboard-header-left" className="flex items-center justify-between">
             <div key="dashboard-header-title-wrapper">
@@ -481,9 +495,15 @@ export function DashboardShell({
                 )}
               </div>
               <div key="dashboard-user-info-text" className="hidden md:block">
-                <p key="dashboard-user-name" className="text-sm font-black text-slate-800 dark:text-slate-200 leading-tight">
-                  {userData?.name || user.displayName || "Usuário"}
-                </p>
+                <div key="dashboard-user-name-wrapper" className="flex items-center gap-1.5">
+                  <p key="dashboard-user-name" className="text-sm font-black text-slate-800 dark:text-slate-200 leading-tight">
+                    {userData?.name || user.displayName || "Usuário"}
+                  </p>
+                  <VerifiedBadge
+                    verified={Boolean(userData?.emailVerified || userData?.email_verified || user?.emailVerified)}
+                    size="xs"
+                  />
+                </div>
                 <p key="dashboard-user-role-badge" className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mt-1">
                   {getUserRoleTitle()}
                 </p>

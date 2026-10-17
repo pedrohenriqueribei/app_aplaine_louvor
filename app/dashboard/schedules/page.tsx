@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import {
   collection,
@@ -14,9 +14,12 @@ import {
   where,
   serverTimestamp,
   onSnapshot,
+  arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
+import { auditCreate, auditUpdate } from "@/lib/audit";
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -35,6 +38,7 @@ import {
   Camera,
   Video,
   ShieldAlert,
+  AlertTriangle,
   Mic2,
   Trash2,
   ChevronLeft,
@@ -58,6 +62,9 @@ import {
 import { BallerinaIcon } from "@/components/BallerinaIcon";
 import { cn } from "@/lib/utils";
 import { useNotifications } from "@/hooks/useNotifications";
+import { detectAllScheduleConflicts } from "@/lib/scheduleConflicts";
+import { ScheduleConflictBadge } from "@/components/ScheduleConflictBadge";
+import { WorshipRoleBadges } from "@/components/WorshipRoleBadge";
 
 function getYoutubeId(url?: string): string | null {
   if (!url) return null;
@@ -165,6 +172,8 @@ interface Band {
 interface Member {
   uid: string;
   name: string;
+  photoURL?: string;
+  avatarUrl?: string;
   role?: string;
   churchId?: string;
   instruments?: string[];
@@ -325,6 +334,14 @@ export default function SchedulesPage() {
   const [multimediaProfiles, setMultimediaProfiles] = useState<any[]>([]);
   const [selectedMultimediaProfileId, setSelectedMultimediaProfileId] = useState<string>("padrao");
   const [multimediaCustomRoleMetadata, setMultimediaCustomRoleMetadata] = useState<any>({});
+  const [isBulkConfirmingAttendance, setIsBulkConfirmingAttendance] = useState(false);
+  const [bulkPresenceFeedback, setBulkPresenceFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [updatingAttendanceUid, setUpdatingAttendanceUid] = useState<string | null>(null);
+  const [attendanceSearchTerm, setAttendanceSearchTerm] = useState("");
 
   const [multimediaRolesForm, setMultimediaRolesForm] = useState<Record<string, string[]>>({
     audioOperators: [],
@@ -1371,6 +1388,26 @@ export default function SchedulesPage() {
 
       await setDoc(docRef, scheduleData);
 
+      // Record Audit Log
+      if (editingSchedule) {
+        auditUpdate(
+          "Schedule",
+          docRef.id,
+          `Escala de Louvor - ${formData.date}`,
+          editingSchedule,
+          scheduleData,
+          { churchId: formData.churchId, departmentId: "louvor" }
+        ).catch((err) => console.warn("Audit schedule update error:", err));
+      } else {
+        auditCreate(
+          "Schedule",
+          docRef.id,
+          `Escala de Louvor - ${formData.date}`,
+          scheduleData,
+          { churchId: formData.churchId, departmentId: "louvor" }
+        ).catch((err) => console.warn("Audit schedule create error:", err));
+      }
+
       // Save internal notifications for each member via client SDK (runs under user's permissions)
       try {
         const churchName =
@@ -2071,6 +2108,26 @@ export default function SchedulesPage() {
 
       await setDoc(docRef, scheduleData);
 
+      // Record Audit Log
+      if (existingData) {
+        auditUpdate(
+          "Schedule",
+          docRef.id,
+          `Escala de Multimídia - ${multimediaDate}`,
+          existingData,
+          scheduleData,
+          { churchId: userData?.churchId || "", departmentId: "multimidia" }
+        ).catch((err) => console.warn("Audit multimedia schedule update error:", err));
+      } else {
+        auditCreate(
+          "Schedule",
+          docRef.id,
+          `Escala de Multimídia - ${multimediaDate}`,
+          scheduleData,
+          { churchId: userData?.churchId || "", departmentId: "multimidia" }
+        ).catch((err) => console.warn("Audit multimedia schedule create error:", err));
+      }
+
       // Notifications
       try {
         const churchName = churches.find((c) => c.id === userData?.churchId)?.name || "sua igreja";
@@ -2365,6 +2422,26 @@ export default function SchedulesPage() {
 
       await setDoc(docRef, scheduleData);
 
+      // Record Audit Log
+      if (existingData) {
+        auditUpdate(
+          "Schedule",
+          docRef.id,
+          `Escala de Dança - ${danceDate}`,
+          existingData,
+          scheduleData,
+          { churchId: userData?.churchId || "", departmentId: "danca" }
+        ).catch((err) => console.warn("Audit dance schedule update error:", err));
+      } else {
+        auditCreate(
+          "Schedule",
+          docRef.id,
+          `Escala de Dança - ${danceDate}`,
+          scheduleData,
+          { churchId: userData?.churchId || "", departmentId: "danca" }
+        ).catch((err) => console.warn("Audit dance schedule create error:", err));
+      }
+
       // Notification
       try {
         const churchName = churches.find((c) => c.id === userData?.churchId)?.name || "sua igreja";
@@ -2517,6 +2594,11 @@ export default function SchedulesPage() {
     (acc, curr) => acc + curr[1].length,
     0
   );
+
+  // Mapa em tempo real de detecção de conflitos entre ministérios para o mesmo dia e período
+  const scheduleConflictsMap = useMemo(() => {
+    return detectAllScheduleConflicts(schedules, services, members);
+  }, [schedules, services, members]);
 
   const isSuperUser = userData?.super_admin === true;
 
@@ -2883,6 +2965,342 @@ export default function SchedulesPage() {
     return list;
   };
 
+  // Verificação de permissão para Lançar Presença de todos os integrantes:
+  // Disponível EXCLUSIVAMENTE para o Líder do Ministério e para o Ministro de Louvor da respectiva escala.
+  const isScheduleMinistryLeader = Boolean(
+    isSuperUser ||
+    userData?.role === "admin" ||
+    userData?.role === "líder" ||
+    (isDanceScale
+      ? canManageDance || hasDanceLeader
+      : isMultimediaScale
+      ? canManageMultimedia || hasMultimediaLeader
+      : canManageWorship || hasWorshipLeader)
+  );
+
+  const isScaleWorshipMinister = Boolean(
+    (viewSchedule?.roles?.mainMinister && viewSchedule.roles.mainMinister === user?.uid) ||
+    (worshipScheduleForDay?.roles?.mainMinister && worshipScheduleForDay.roles.mainMinister === user?.uid)
+  );
+
+  const canLaunchScheduleAttendance = isScheduleMinistryLeader || isScaleWorshipMinister;
+
+  // Lista consolidada de UIDs de todos os integrantes da escala visualizada
+  const viewScheduleMemberUids = useMemo(() => {
+    if (!viewSchedule) return [];
+    const uids = new Set<string>();
+
+    if (Array.isArray(viewSchedule.members)) {
+      viewSchedule.members.forEach((m) => {
+        if (typeof m === "string" && m.trim()) uids.add(m.trim());
+      });
+    }
+
+    if (viewSchedule.roles && typeof viewSchedule.roles === "object") {
+      Object.values(viewSchedule.roles).forEach((val) => {
+        if (Array.isArray(val)) {
+          val.forEach((id) => {
+            if (typeof id === "string" && id.trim()) uids.add(id.trim());
+          });
+        } else if (typeof val === "string" && val.trim()) {
+          uids.add(val.trim());
+        }
+      });
+    }
+
+    return Array.from(uids);
+  }, [viewSchedule]);
+
+  const isMemberConfirmed = (s: Schedule | null, uid: string) => {
+    if (!s || !uid) return false;
+    return Boolean(
+      (s as any).confirmedMembers?.includes(uid) ||
+      (s as any).confirmations?.[uid]?.status === "confirmed"
+    );
+  };
+
+  const isMemberDeclined = (s: Schedule | null, uid: string) => {
+    if (!s || !uid) return false;
+    return Boolean(
+      (s as any).declinedMembers?.includes(uid) ||
+      (s as any).confirmations?.[uid]?.status === "declined"
+    );
+  };
+
+  const handleLaunchAllAttendance = async () => {
+    if (!viewSchedule || !user || !canLaunchScheduleAttendance) return;
+    const targetUids = viewScheduleMemberUids;
+    if (targetUids.length === 0) {
+      setBulkPresenceFeedback({
+        type: "error",
+        message: "Nenhum integrante cadastrado nesta escala para confirmar presença.",
+      });
+      setTimeout(() => setBulkPresenceFeedback(null), 4000);
+      return;
+    }
+
+    setIsBulkConfirmingAttendance(true);
+    try {
+      const nowStr = new Date().toISOString();
+      const roleTitle = isScaleWorshipMinister ? "Ministro de Louvor" : "Líder do Ministério";
+      const actorName = userData?.name || user.displayName || roleTitle;
+
+      const newConfirmations = { ...((viewSchedule as any).confirmations || {}) };
+      const updatePayload: Record<string, any> = {
+        confirmedMembers: targetUids,
+        declinedMembers: [],
+      };
+
+      targetUids.forEach((uid) => {
+        const mObj = members.find((m) => m.uid === uid);
+        const mName = mObj?.name || "Integrante";
+        const confData = {
+          status: "confirmed",
+          confirmedAt: nowStr,
+          userName: mName,
+          confirmedBy: actorName,
+          confirmedByUid: user.uid,
+          confirmedByRole: roleTitle,
+          note: `Presença lançada pelo ${roleTitle} (${actorName})`,
+        };
+        newConfirmations[uid] = confData;
+        updatePayload[`confirmations.${uid}`] = confData;
+      });
+
+      await updateDoc(doc(db, "schedules", viewSchedule.id), updatePayload);
+
+      setSelectedScheduleForView((prev) => {
+        if (!prev || prev.id !== viewSchedule.id) return prev;
+        return {
+          ...prev,
+          confirmations: newConfirmations,
+          confirmedMembers: targetUids,
+          declinedMembers: [],
+        } as any;
+      });
+
+      auditUpdate(
+        "Schedule",
+        viewSchedule.id,
+        `Lançamento Geral de Presença (${targetUids.length} integrantes) - ${viewSchedule.date}`,
+        { confirmedMembers: (viewSchedule as any).confirmedMembers || [] },
+        { confirmedMembers: targetUids, confirmedBy: actorName, role: roleTitle },
+        { churchId: viewSchedule.churchId, departmentId: viewSchedule.ministry || null }
+      ).catch((err) => console.warn("Audit bulk attendance log error:", err));
+
+      setBulkPresenceFeedback({
+        type: "success",
+        message: `Presença lançada com sucesso para todos os ${targetUids.length} integrantes!`,
+      });
+      setTimeout(() => setBulkPresenceFeedback(null), 4500);
+    } catch (error) {
+      console.error("Erro ao lançar presença geral:", error);
+      setBulkPresenceFeedback({
+        type: "error",
+        message: "Erro ao atualizar presenças no banco de dados. Tente novamente.",
+      });
+      setTimeout(() => setBulkPresenceFeedback(null), 4500);
+    } finally {
+      setIsBulkConfirmingAttendance(false);
+    }
+  };
+
+  const getScheduleMemberRoles = (schedule: Schedule | null, uid: string): string[] => {
+    if (!schedule || !uid) return [];
+    const assignedRoles: string[] = [];
+
+    const roleLabelsMap: Record<string, string> = {
+      mainMinister: "Ministro de Louvor",
+      soprano: "Soprano",
+      contralto: "Contralto",
+      mezzoSoprano: "Mezzo",
+      baritone: "Tenor/Barítono",
+      keyboardist: "Teclado",
+      acousticGuitarist: "Violão",
+      electricGuitarist: "Guitarra",
+      bassist: "Baixo",
+      drummer: "Bateria",
+      audioTech: "Som / Áudio",
+      projectionOperator: "Projeção",
+      mediaCreator: "Mídia / Câmeras",
+      socialMediaManager: "Social Media",
+      pcOperators: "Operador de PC",
+      cameraOperators: "Câmera",
+      photographyOperators: "Fotografia",
+      socialMediaOperators: "Social Media",
+    };
+
+    if (schedule.roles && typeof schedule.roles === "object") {
+      Object.entries(schedule.roles).forEach(([key, val]) => {
+        let baseKey = key;
+        let suffix = "";
+        const match = key.match(/_(\d+)$/);
+        if (match) {
+          suffix = ` ${match[1]}`;
+          baseKey = key.replace(/_\d+$/, "");
+        }
+
+        const label =
+          roleLabelsMap[baseKey] ||
+          customRoleMetadata[baseKey]?.label ||
+          multimediaCustomRoleMetadata[baseKey]?.label ||
+          baseKey;
+
+        if (Array.isArray(val)) {
+          if (val.includes(uid)) {
+            assignedRoles.push(`${label}${suffix}`);
+          }
+        } else if (val === uid) {
+          assignedRoles.push(`${label}${suffix}`);
+        }
+      });
+    }
+
+    if (assignedRoles.length === 0) {
+      if (schedule.ministry === "dance") {
+        assignedRoles.push("Dança");
+      } else if (schedule.ministry === "multimedia") {
+        assignedRoles.push("Multimídia");
+      } else {
+        assignedRoles.push("Integrante");
+      }
+    }
+
+    return assignedRoles;
+  };
+
+  const handleSetMemberAttendance = async (
+    uid: string,
+    newStatus: "confirmed" | "declined" | "pending"
+  ) => {
+    if (!viewSchedule || !user || !canLaunchScheduleAttendance) return;
+    setUpdatingAttendanceUid(uid);
+    try {
+      const nowStr = new Date().toISOString();
+      const roleTitle = isScaleWorshipMinister ? "Ministro de Louvor" : "Líder do Ministério";
+      const actorName = userData?.name || user.displayName || roleTitle;
+      const mObj = members.find((m) => m.uid === uid);
+      const mName = mObj?.name || (uid === user.uid ? (userData?.name || user.displayName) : "Integrante");
+
+      const currentConfirmations = { ...((viewSchedule as any).confirmations || {}) };
+      let currentConfirmed = [...((viewSchedule as any).confirmedMembers || [])];
+      let currentDeclined = [...((viewSchedule as any).declinedMembers || [])];
+
+      let newConfData: any = null;
+      if (newStatus === "confirmed") {
+        newConfData = {
+          status: "confirmed",
+          confirmedAt: nowStr,
+          userName: mName,
+          confirmedBy: actorName,
+          confirmedByUid: user.uid,
+          confirmedByRole: roleTitle,
+          note: `Presença lançada por ${roleTitle} (${actorName})`,
+        };
+        currentConfirmations[uid] = newConfData;
+        if (!currentConfirmed.includes(uid)) currentConfirmed.push(uid);
+        currentDeclined = currentDeclined.filter((id) => id !== uid);
+      } else if (newStatus === "declined") {
+        newConfData = {
+          status: "declined",
+          declinedAt: nowStr,
+          userName: mName,
+          confirmedBy: actorName,
+          confirmedByUid: user.uid,
+          confirmedByRole: roleTitle,
+          reason: `Ausência informada por ${roleTitle} (${actorName})`,
+        };
+        currentConfirmations[uid] = newConfData;
+        if (!currentDeclined.includes(uid)) currentDeclined.push(uid);
+        currentConfirmed = currentConfirmed.filter((id) => id !== uid);
+      } else {
+        delete currentConfirmations[uid];
+        currentConfirmed = currentConfirmed.filter((id) => id !== uid);
+        currentDeclined = currentDeclined.filter((id) => id !== uid);
+      }
+
+      const updatePayload: Record<string, any> = {
+        confirmedMembers: currentConfirmed,
+        declinedMembers: currentDeclined,
+        confirmations: currentConfirmations,
+      };
+
+      await updateDoc(doc(db, "schedules", viewSchedule.id), updatePayload);
+
+      setSelectedScheduleForView((prev) => {
+        if (!prev || prev.id !== viewSchedule.id) return prev;
+        return {
+          ...prev,
+          ...updatePayload,
+        } as any;
+      });
+
+      setSchedules((prev) =>
+        prev.map((s) => (s.id === viewSchedule.id ? ({ ...s, ...updatePayload } as any) : s))
+      );
+
+      auditUpdate(
+        "Schedule",
+        viewSchedule.id,
+        `Presença Individual (${mName} - ${newStatus === "confirmed" ? "Presente" : newStatus === "declined" ? "Ausente" : "Pendente"}) - ${viewSchedule.date}`,
+        { status: (viewSchedule as any).confirmations?.[uid]?.status || "pending" },
+        { status: newStatus, memberUid: uid, memberName: mName, updatedBy: actorName, role: roleTitle },
+        { churchId: viewSchedule.churchId, departmentId: viewSchedule.ministry || null }
+      ).catch((err) => console.warn("Audit attendance update notice:", err));
+
+      setBulkPresenceFeedback({
+        type: "success",
+        message: `${mName}: presença ${newStatus === "confirmed" ? "confirmada" : newStatus === "declined" ? "marcada como ausente" : "redefinida para pendente"}.`,
+      });
+      setTimeout(() => setBulkPresenceFeedback(null), 3500);
+    } catch (error) {
+      console.error("Erro ao atualizar presença individual:", error);
+      setBulkPresenceFeedback({
+        type: "error",
+        message: "Erro ao salvar alteração. Tente novamente.",
+      });
+      setTimeout(() => setBulkPresenceFeedback(null), 3500);
+    } finally {
+      setUpdatingAttendanceUid(null);
+    }
+  };
+
+  const handleResetAllAttendance = async () => {
+    if (!viewSchedule || !user || !canLaunchScheduleAttendance) return;
+    setIsBulkConfirmingAttendance(true);
+    try {
+      const updatePayload: Record<string, any> = {
+        confirmedMembers: [],
+        declinedMembers: [],
+        confirmations: {},
+      };
+
+      await updateDoc(doc(db, "schedules", viewSchedule.id), updatePayload);
+
+      setSelectedScheduleForView((prev) => {
+        if (!prev || prev.id !== viewSchedule.id) return prev;
+        return {
+          ...prev,
+          ...updatePayload,
+        } as any;
+      });
+
+      setSchedules((prev) =>
+        prev.map((s) => (s.id === viewSchedule.id ? ({ ...s, ...updatePayload } as any) : s))
+      );
+
+      setBulkPresenceFeedback({
+        type: "success",
+        message: "Todas as presenças foram redefinidas para pendente.",
+      });
+      setTimeout(() => setBulkPresenceFeedback(null), 3500);
+    } catch (error) {
+      console.error("Erro ao redefinir presenças:", error);
+    } finally {
+      setIsBulkConfirmingAttendance(false);
+    }
+  };
+
   return (
     <div className="space-y-8 max-w-6xl">
       {/* Tab Selector */}
@@ -3203,6 +3621,9 @@ export default function SchedulesPage() {
                   (s) => s.date.split("T")[0] === dateString
                 );
                 const hasSchedule = daySchedules.length > 0;
+                const dayHasConflict = daySchedules.some(
+                  (s) => scheduleConflictsMap.get(s.id)?.hasConflict
+                );
                 const isToday =
                   new Date().toISOString().split("T")[0] === dateString;
 
@@ -3220,11 +3641,23 @@ export default function SchedulesPage() {
                       isToday && "ring-2 ring-blue-500/50 ring-offset-2 dark:ring-offset-slate-900"
                     )}
                     title={
-                      hasSchedule
+                      dayHasConflict
+                        ? `${dayNumber} de ${currentMonthLabel} - ⚠️ Conflito de integrantes escalados em ministérios diferentes neste dia!`
+                        : hasSchedule
                         ? `${dayNumber} de ${currentMonthLabel} - ${daySchedules.length} ${daySchedules.length === 1 ? "escala" : "escalas"}`
                         : `${dayNumber} de ${currentMonthLabel} - Nenhuma escala`
                     }
                   >
+                    {/* Indicador de Alerta de Conflito de Ministérios no Dia */}
+                    {dayHasConflict && (
+                      <span
+                        className="absolute top-1.5 right-1.5 p-1 rounded-full bg-amber-500 text-white shadow-xs animate-bounce"
+                        title="Atenção: Integrante escalado em dois ministérios diferentes neste dia e período!"
+                      >
+                        <AlertTriangle className="w-2.5 h-2.5 text-white" />
+                      </span>
+                    )}
+
                     {/* Apenas o número do dia */}
                     <span className="text-base sm:text-2xl font-black tracking-tight">
                       {dayNumber}
@@ -3312,6 +3745,8 @@ export default function SchedulesPage() {
                               <span className="px-2.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-md text-[10px] font-black uppercase tracking-wider border border-purple-200 dark:border-purple-800/50">
                                 Multimídia
                               </span>
+                              {/* INDICADOR DE ALERTA DE CONFLITO ENTRE MINISTÉRIOS */}
+                              <ScheduleConflictBadge summary={scheduleConflictsMap.get(schedule.id)} />
                               {schedule.locationType === "external" ? (
                                 <span className="px-2.5 py-0.5 bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 rounded-md text-[10px] font-black uppercase tracking-wider border border-rose-200 dark:border-rose-800/50 flex items-center gap-1">
                                   <MapPin className="w-3 h-3 text-rose-500" />{" "}
@@ -3362,13 +3797,20 @@ export default function SchedulesPage() {
                                   ) : (
                                     uids.filter(Boolean).map((uid: string, uIdx: number) => {
                                       const uName = members.find((m) => m.uid === uid)?.name || "Membro";
+                                      const hasMemberConflict = scheduleConflictsMap.get(schedule.id)?.conflictingMemberIds?.has(uid);
                                       return (
                                         <div
                                           key={`${uid}-${uIdx}`}
-                                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border ${role.color}`}
+                                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border ${role.color} ${
+                                            hasMemberConflict ? "ring-2 ring-amber-500/70 border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30" : ""
+                                          }`}
+                                          title={hasMemberConflict ? `Atenção: ${uName} está escalado(a) em outro ministério neste mesmo dia/período!` : undefined}
                                         >
                                           <IconComp className="w-3 h-3" />
                                           <span className="truncate">{uName.split(" ")[0]}</span>
+                                          {hasMemberConflict && (
+                                            <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 animate-pulse" />
+                                          )}
                                         </div>
                                       );
                                     })
@@ -3430,6 +3872,8 @@ export default function SchedulesPage() {
                                 <BallerinaIcon className="w-3 h-3 text-rose-500" />
                                 Dança
                               </span>
+                              {/* INDICADOR DE ALERTA DE CONFLITO ENTRE MINISTÉRIOS */}
+                              <ScheduleConflictBadge summary={scheduleConflictsMap.get(schedule.id)} />
                               {schedule.locationType === "external" ? (
                                 <span className="px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-md text-[10px] font-black uppercase tracking-wider border border-amber-200 dark:border-amber-800/50 flex items-center gap-1">
                                   <MapPin className="w-3 h-3 text-amber-500" />{" "}
@@ -3472,13 +3916,20 @@ export default function SchedulesPage() {
                               ) : (
                                 danceLeaderUids.map((uid, lIdx) => {
                                   const name = members.find((m) => m.uid === uid)?.name || "Membro";
+                                  const hasMemberConflict = scheduleConflictsMap.get(schedule.id)?.conflictingMemberIds?.has(uid);
                                   return (
                                     <div
                                       key={`dance-leader-${uid}-${lIdx}`}
-                                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border text-rose-600 bg-rose-50/50 dark:bg-rose-900/10 dark:text-rose-400 border-rose-100 dark:border-rose-900/30"
+                                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border text-rose-600 bg-rose-50/50 dark:bg-rose-900/10 dark:text-rose-400 border-rose-100 dark:border-rose-900/30 ${
+                                        hasMemberConflict ? "ring-2 ring-amber-500/70 border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30" : ""
+                                      }`}
+                                      title={hasMemberConflict ? `Atenção: ${name} está escalado(a) em outro ministério neste mesmo dia/período!` : undefined}
                                     >
                                       <BallerinaIcon className="w-3 h-3 text-rose-500" />
                                       <span className="truncate">{name.split(" ")[0]}</span>
+                                      {hasMemberConflict && (
+                                        <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 animate-pulse" />
+                                      )}
                                     </div>
                                   );
                                 })
@@ -3497,12 +3948,19 @@ export default function SchedulesPage() {
                               ) : (
                                 dancerUids.slice(0, 3).map((uid, dIdx) => {
                                   const name = members.find((m) => m.uid === uid)?.name || "Membro";
+                                  const hasMemberConflict = scheduleConflictsMap.get(schedule.id)?.conflictingMemberIds?.has(uid);
                                   return (
                                     <span
                                       key={`dancer-${uid}-${dIdx}`}
-                                      className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-pink-50 dark:bg-pink-900/20 text-pink-700 dark:text-pink-300 border border-pink-100 dark:border-pink-900/40"
+                                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold bg-pink-50 dark:bg-pink-900/20 text-pink-700 dark:text-pink-300 border border-pink-100 dark:border-pink-900/40 inline-flex items-center gap-1 ${
+                                        hasMemberConflict ? "ring-2 ring-amber-500/70 border-amber-300 text-amber-800 bg-amber-50" : ""
+                                      }`}
+                                      title={hasMemberConflict ? `Atenção: ${name} está escalado(a) em outro ministério neste mesmo dia/período!` : undefined}
                                     >
-                                      {name.split(" ")[0]}
+                                      <span>{name.split(" ")[0]}</span>
+                                      {hasMemberConflict && (
+                                        <AlertTriangle className="w-2.5 h-2.5 text-amber-500 shrink-0 animate-pulse" />
+                                      )}
                                     </span>
                                   );
                                 })
@@ -3596,6 +4054,8 @@ export default function SchedulesPage() {
                                 : bands.find((b) => b.id === schedule.bandId)
                                     ?.name || "Banda Extra"}
                             </span>
+                            {/* INDICADOR DE ALERTA DE CONFLITO ENTRE MINISTÉRIOS */}
+                            <ScheduleConflictBadge summary={scheduleConflictsMap.get(schedule.id)} />
                             {schedule.locationType === "external" ? (
                               <span className="px-2.5 py-0.5 bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 rounded-md text-[10px] font-black uppercase tracking-wider border border-rose-200 dark:border-rose-800/50 flex items-center gap-1">
                                 <MapPin className="w-3 h-3 text-rose-500" />{" "}
@@ -3671,19 +4131,29 @@ export default function SchedulesPage() {
                                 });
                                 return worshipUids.has(mid);
                               })
-                              .map(
-                                (mid) => (
+                              .map((mid) => {
+                                const hasMemberConflict = scheduleConflictsMap.get(schedule.id)?.conflictingMemberIds?.has(mid);
+                                const mObj = members.find((m) => m.uid === mid);
+                                const mName = mObj?.name.split(" ")[0] || "...";
+                                return (
                                   <div
                                     key={mid}
-                                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/50 dark:bg-blue-900/10 text-blue-800 dark:text-blue-400 rounded-xl text-xs font-bold border border-blue-100 dark:border-blue-900/30"
+                                    className={`flex items-center gap-2 px-3 py-1.5 bg-blue-50/50 dark:bg-blue-900/10 text-blue-800 dark:text-blue-400 rounded-xl text-xs font-bold border border-blue-100 dark:border-blue-900/30 ${
+                                      hasMemberConflict
+                                        ? "ring-2 ring-amber-500/70 border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300"
+                                        : ""
+                                    }`}
+                                    title={hasMemberConflict ? `Atenção: ${mObj?.name || "Integrante"} está escalado(a) em outro ministério neste mesmo dia/período!` : undefined}
                                   >
-                                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
-                                    {members
-                                      .find((m) => m.uid === mid)
-                                      ?.name.split(" ")[0] || "..."}
+                                    <span className={`w-1.5 h-1.5 rounded-full ${hasMemberConflict ? "bg-amber-500" : "bg-blue-500"}`}></span>
+                                    <span>{mName}</span>
+                                    <WorshipRoleBadges member={mObj} scheduleRoles={schedule.roles} memberUid={mid} size="xs" />
+                                    {hasMemberConflict && (
+                                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
+                                    )}
                                   </div>
-                                ),
-                              )}
+                                );
+                              })}
                           </div>
                         </div>
                       </div>
@@ -3783,6 +4253,8 @@ export default function SchedulesPage() {
                       {bands.find((b) => b.id === viewSchedule.bandId)?.name || "Banda Extra"}
                     </span>
                   )}
+                  {/* Badge de Alerta de Conflito de Ministérios */}
+                  <ScheduleConflictBadge summary={scheduleConflictsMap.get(viewSchedule.id)} />
                 </div>
                 <h3 className="text-2xl sm:text-3xl font-display font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none italic">
                   {viewChurchName}
@@ -3819,6 +4291,133 @@ export default function SchedulesPage() {
                 <X className="w-6 h-6" />
               </button>
             </div>
+
+            {/* Banner de Alerta se este Culto tiver Integrante Escalado em 2 Ministérios */}
+            {scheduleConflictsMap.get(viewSchedule.id)?.hasConflict && (
+              <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 dark:bg-amber-950/40 border border-amber-500/30 flex items-start gap-3.5 shadow-2xs">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                    Atenção: Conflito de Integrante entre Ministérios
+                  </h4>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    {scheduleConflictsMap.get(viewSchedule.id)?.tooltipText}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Controle de Presença da Escala & Lançamento por Líder/Ministro */}
+            {(() => {
+              if (!user) return null;
+              const isUserInSchedule = Boolean(
+                viewSchedule.members?.includes(user.uid) ||
+                  (viewSchedule.roles && Object.values(viewSchedule.roles).some((v: any) => v === user.uid || (Array.isArray(v) && v.includes(user.uid))))
+              );
+
+              // Exibe se o usuário for o Líder do Ministério ou Ministro de Louvor, ou se for integrante da escala acompanhando
+              if (!isUserInSchedule && !canLaunchScheduleAttendance) return null;
+
+              const totalMembersCount = viewScheduleMemberUids.length;
+              const confirmedCount = viewScheduleMemberUids.filter((uid) => isMemberConfirmed(viewSchedule, uid)).length;
+              const declinedCount = viewScheduleMemberUids.filter((uid) => isMemberDeclined(viewSchedule, uid)).length;
+              const allConfirmed = totalMembersCount > 0 && confirmedCount === totalMembersCount;
+
+              return (
+                <div className={`mb-6 p-4 sm:p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm transition-all ${
+                  allConfirmed
+                    ? "bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800"
+                    : declinedCount > 0
+                    ? "bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
+                    : "bg-blue-50/90 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 ring-2 ring-blue-500/10"
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs ${
+                      allConfirmed
+                        ? "bg-emerald-600"
+                        : declinedCount > 0
+                        ? "bg-amber-600"
+                        : "bg-blue-600"
+                    }`}>
+                      <Users className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-black text-slate-800 dark:text-slate-100">
+                          Controle de Presença da Escala
+                        </h4>
+
+                        {/* Indicador Geral de Presenças */}
+                        {totalMembersCount > 0 && (
+                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
+                            allConfirmed
+                              ? "bg-emerald-200 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+                              : "bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200"
+                          }`}>
+                            {allConfirmed
+                              ? `Todos presentes (${confirmedCount}/${totalMembersCount})`
+                              : `${confirmedCount} de ${totalMembersCount} presentes`}
+                          </span>
+                        )}
+                        {declinedCount > 0 && (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                            {declinedCount} {declinedCount === 1 ? "ausência" : "ausências"}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {canLaunchScheduleAttendance
+                          ? `Como ${isScaleWorshipMinister ? "Ministro de Louvor desta escala" : "Líder do Ministério"}, você tem permissão para lançar a presença dos integrantes individualmente.`
+                          : "Acompanhamento da confirmação de presença da equipe escalada."}
+                      </p>
+
+                      {/* Notificação de Feedback ao Lançar */}
+                      {bulkPresenceFeedback && (
+                        <div className={`mt-2 p-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ${
+                          bulkPresenceFeedback.type === "success"
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300"
+                            : "bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300"
+                        }`}>
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                          <span>{bulkPresenceFeedback.message}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {/* BOTÃO EXCLUSIVO PARA O LÍDER DO MINISTÉRIO E PARA O MINISTRO DE LOUVOR DA RESPECTIVA ESCALA */}
+                    {canLaunchScheduleAttendance && totalMembersCount > 0 && (
+                      <button
+                        id="btn-lancar-presenca-todos-integrantes"
+                        type="button"
+                        onClick={() => setIsAttendanceModalOpen(true)}
+                        className={cn(
+                          "px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-md active:scale-95 cursor-pointer",
+                          allConfirmed
+                            ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
+                            : "bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 hover:from-blue-800 hover:to-indigo-800 text-white shadow-blue-700/25"
+                        )}
+                        title="Abrir janela para lançar presença de todos os integrantes individualmente"
+                      >
+                        {allConfirmed ? (
+                          <Check className="w-4 h-4 text-emerald-200" />
+                        ) : (
+                          <Users className="w-4 h-4 text-blue-200" />
+                        )}
+                        <span>
+                          {allConfirmed
+                            ? `Presenças Lançadas (${confirmedCount}/${totalMembersCount}) ✓`
+                            : `Lançar Presença de Todos (${confirmedCount}/${totalMembersCount})`}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto pr-2 sm:pr-4 custom-scrollbar space-y-8">
@@ -4178,11 +4777,40 @@ export default function SchedulesPage() {
                               return defaultVocals.some(d => d.key === role.key); 
                             }).map((role) => {
                               const uid = viewSchedule.roles?.[role.key];
-                              const nameStr = uid ? (members.find((m) => m.uid === uid)?.name || "Membro") : "Vago";
+                              const memberObj = uid ? members.find((m) => m.uid === uid) : null;
+                              const nameStr = memberObj?.name || (uid ? "Membro" : "Vago");
                               return (
                                 <div key={role.key} className="flex flex-col">
                                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">{role.label}</span>
-                                  <span className={`text-xs font-bold mt-1 ${uid ? 'text-slate-800 dark:text-slate-200' : 'text-slate-400 italic'}`}>{nameStr}</span>
+                                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                    <span className={`text-xs font-bold ${uid ? 'text-slate-800 dark:text-slate-200' : 'text-slate-400 italic'}`}>{nameStr}</span>
+                                    {memberObj && (
+                                      <WorshipRoleBadges member={memberObj} scheduleRoles={viewSchedule.roles} memberUid={uid} size="xs" />
+                                    )}
+                                    {uid && (
+                                      <span
+                                        className={cn(
+                                          "px-1.5 py-0.5 rounded-md text-[9px] font-black inline-flex items-center gap-0.5",
+                                          isMemberConfirmed(viewSchedule, uid)
+                                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50"
+                                            : isMemberDeclined(viewSchedule, uid)
+                                            ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/50"
+                                            : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50"
+                                        )}
+                                      >
+                                        {isMemberConfirmed(viewSchedule, uid) ? (
+                                          <>
+                                            <Check className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
+                                            <span>Presente</span>
+                                          </>
+                                        ) : isMemberDeclined(viewSchedule, uid) ? (
+                                          <span>Ausente</span>
+                                        ) : (
+                                          <span>Pendente</span>
+                                        )}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               );
                             });
@@ -4264,11 +4892,40 @@ export default function SchedulesPage() {
                               return defaultInstruments.some((d) => d.key === role.key);
                             }).map((role) => {
                               const uid = viewSchedule.roles?.[role.key];
-                              const nameStr = uid ? (members.find((m) => m.uid === uid)?.name || "Membro") : "Vago";
+                              const memberObj = uid ? members.find((m) => m.uid === uid) : null;
+                              const nameStr = memberObj?.name || (uid ? "Membro" : "Vago");
                               return (
                                 <div key={role.key} className="flex flex-col">
                                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">{role.label}</span>
-                                  <span className={`text-xs font-bold mt-1 ${uid ? 'text-slate-800 dark:text-slate-200' : 'text-slate-400 italic'}`}>{nameStr}</span>
+                                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                    <span className={`text-xs font-bold ${uid ? 'text-slate-800 dark:text-slate-200' : 'text-slate-400 italic'}`}>{nameStr}</span>
+                                    {memberObj && (
+                                      <WorshipRoleBadges member={memberObj} scheduleRoles={viewSchedule.roles} memberUid={uid} size="xs" />
+                                    )}
+                                    {uid && (
+                                      <span
+                                        className={cn(
+                                          "px-1.5 py-0.5 rounded-md text-[9px] font-black inline-flex items-center gap-0.5",
+                                          isMemberConfirmed(viewSchedule, uid)
+                                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50"
+                                            : isMemberDeclined(viewSchedule, uid)
+                                            ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/50"
+                                            : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50"
+                                        )}
+                                      >
+                                        {isMemberConfirmed(viewSchedule, uid) ? (
+                                          <>
+                                            <Check className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
+                                            <span>Presente</span>
+                                          </>
+                                        ) : isMemberDeclined(viewSchedule, uid) ? (
+                                          <span>Ausente</span>
+                                        ) : (
+                                          <span>Pendente</span>
+                                        )}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               );
                             });
@@ -4419,6 +5076,27 @@ export default function SchedulesPage() {
                                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate flex-1">
                                         {memberObj?.name || "Membro"}
                                       </span>
+                                      <span
+                                        className={cn(
+                                          "px-1.5 py-0.5 rounded-md text-[9px] font-black inline-flex items-center gap-0.5",
+                                          isMemberConfirmed(viewSchedule, uid)
+                                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50"
+                                            : isMemberDeclined(viewSchedule, uid)
+                                            ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/50"
+                                            : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50"
+                                        )}
+                                      >
+                                        {isMemberConfirmed(viewSchedule, uid) ? (
+                                          <>
+                                            <Check className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
+                                            <span>Presente</span>
+                                          </>
+                                        ) : isMemberDeclined(viewSchedule, uid) ? (
+                                          <span>Ausente</span>
+                                        ) : (
+                                          <span>Pendente</span>
+                                        )}
+                                      </span>
                                     </div>
                                   );
                                 })
@@ -4505,6 +5183,27 @@ export default function SchedulesPage() {
                                     </div>
                                     <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate flex-1">
                                       {memberObj?.name || "Membro"}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "px-1.5 py-0.5 rounded-md text-[9px] font-black inline-flex items-center gap-0.5",
+                                        isMemberConfirmed(viewSchedule, uid)
+                                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50"
+                                          : isMemberDeclined(viewSchedule, uid)
+                                          ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/50"
+                                          : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50"
+                                      )}
+                                    >
+                                      {isMemberConfirmed(viewSchedule, uid) ? (
+                                        <>
+                                          <Check className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
+                                          <span>Presente</span>
+                                        </>
+                                      ) : isMemberDeclined(viewSchedule, uid) ? (
+                                        <span>Ausente</span>
+                                      ) : (
+                                        <span>Pendente</span>
+                                      )}
                                     </span>
                                   </div>
                                 );
@@ -4842,6 +5541,362 @@ export default function SchedulesPage() {
         </div>
       )}
 
+      {/* Pop-up de Lançamento de Presença Individual dos Integrantes */}
+      {isAttendanceModalOpen && viewSchedule && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-6 transition-all animate-fadeIn">
+          {/* Backdrop */}
+          <div
+            onClick={() => setIsAttendanceModalOpen(false)}
+            className="absolute inset-0 bg-slate-950/70 dark:bg-slate-950/85 backdrop-blur-md transition-opacity"
+          />
+
+          {/* Modal Container */}
+          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl p-6 sm:p-8 overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 pb-5 border-b border-slate-100 dark:border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-blue-700 text-white flex items-center justify-center shadow-lg shadow-blue-500/25 shrink-0">
+                  <Users className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-900/60">
+                      {isScaleWorshipMinister ? "Ministro de Louvor" : "Líder do Ministério"}
+                    </span>
+                    <span className="text-xs text-slate-400 dark:text-slate-500 font-bold">
+                      {viewSchedule.ministry === "dance"
+                        ? "Ministério de Dança"
+                        : viewSchedule.ministry === "multimedia"
+                        ? "Equipe de Multimídia"
+                        : "Ministério de Louvor"}
+                    </span>
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-display font-black text-slate-900 dark:text-slate-100 mt-1">
+                    Lançar Presença dos Integrantes
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    {new Date(`${viewSchedule.date}T12:00:00`).toLocaleDateString("pt-BR", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAttendanceModalOpen(false)}
+                className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Status Bar */}
+            {(() => {
+              const total = viewScheduleMemberUids.length;
+              const confirmed = viewScheduleMemberUids.filter((uid) => isMemberConfirmed(viewSchedule, uid)).length;
+              const declined = viewScheduleMemberUids.filter((uid) => isMemberDeclined(viewSchedule, uid)).length;
+              const pending = Math.max(0, total - confirmed - declined);
+
+              return (
+                <div className="pt-4 pb-2 shrink-0 space-y-3">
+                  <div className="grid grid-cols-4 gap-2 sm:gap-3 text-center">
+                    <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-100 dark:border-slate-800">
+                      <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider block">Total</span>
+                      <span className="text-base sm:text-lg font-black text-slate-800 dark:text-slate-200">{total}</span>
+                    </div>
+                    <div className="p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40">
+                      <span className="text-[10px] uppercase font-black text-emerald-600 dark:text-emerald-400 tracking-wider block">Presentes</span>
+                      <span className="text-base sm:text-lg font-black text-emerald-700 dark:text-emerald-300">{confirmed}</span>
+                    </div>
+                    <div className="p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/40">
+                      <span className="text-[10px] uppercase font-black text-rose-600 dark:text-rose-400 tracking-wider block">Ausentes</span>
+                      <span className="text-base sm:text-lg font-black text-rose-700 dark:text-rose-300">{declined}</span>
+                    </div>
+                    <div className="p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/40">
+                      <span className="text-[10px] uppercase font-black text-amber-600 dark:text-amber-400 tracking-wider block">Pendentes</span>
+                      <span className="text-base sm:text-lg font-black text-amber-700 dark:text-amber-300">{pending}</span>
+                    </div>
+                  </div>
+
+                  {/* Feedback Toast */}
+                  {bulkPresenceFeedback && (
+                    <div className={`p-2.5 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                      bulkPresenceFeedback.type === "success"
+                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300"
+                        : "bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300"
+                    }`}>
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>{bulkPresenceFeedback.message}</span>
+                    </div>
+                  )}
+
+                  {/* Top Action Buttons & Search */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleLaunchAllAttendance}
+                        disabled={isBulkConfirmingAttendance || total === 0}
+                        className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer disabled:opacity-60"
+                        title="Marcar presença de todos os integrantes de uma vez só"
+                      >
+                        {isBulkConfirmingAttendance ? (
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5" />
+                        )}
+                        <span>Lançar Presença de Todos</span>
+                      </button>
+
+                      {(confirmed > 0 || declined > 0) && (
+                        <button
+                          type="button"
+                          onClick={handleResetAllAttendance}
+                          disabled={isBulkConfirmingAttendance}
+                          className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                          title="Redefinir presenças de todos para pendente"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Redefinir</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {total > 4 && (
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={attendanceSearchTerm}
+                          onChange={(e) => setAttendanceSearchTerm(e.target.value)}
+                          placeholder="Buscar integrante..."
+                          className="w-full sm:w-48 pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 dark:text-slate-200 placeholder:text-slate-400"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Scrollable Members List */}
+            <div className="flex-1 overflow-y-auto pr-1 my-3 custom-scrollbar space-y-2">
+              {(() => {
+                const term = attendanceSearchTerm.trim().toLowerCase();
+                const filteredUids = viewScheduleMemberUids.filter((uid) => {
+                  if (!term) return true;
+                  const mObj = members.find((m) => m.uid === uid);
+                  const name = mObj?.name || (uid === user?.uid ? (userData?.name || user?.displayName || "") : "");
+                  const roles = getScheduleMemberRoles(viewSchedule, uid).join(" ");
+                  return name.toLowerCase().includes(term) || roles.toLowerCase().includes(term);
+                });
+
+                if (viewScheduleMemberUids.length === 0) {
+                  return (
+                    <div className="p-8 text-center bg-slate-50 dark:bg-slate-850 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+                      <Users className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                      <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                        Nenhum integrante cadastrado nesta escala.
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (filteredUids.length === 0) {
+                  return (
+                    <div className="p-6 text-center bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-200 dark:border-slate-800">
+                      <p className="text-xs font-semibold text-slate-500">
+                        Nenhum integrante encontrado com &quot;{attendanceSearchTerm}&quot;.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return filteredUids.map((uid) => {
+                  const mObj = members.find((m) => m.uid === uid);
+                  const mName = mObj?.name || (uid === user?.uid ? (userData?.name || user?.displayName || "Integrante") : "Integrante");
+                  const roles = getScheduleMemberRoles(viewSchedule, uid);
+                  const isConfirmed = isMemberConfirmed(viewSchedule, uid);
+                  const isDeclined = isMemberDeclined(viewSchedule, uid);
+                  const confData = (viewSchedule as any).confirmations?.[uid];
+                  const isUpdating = updatingAttendanceUid === uid;
+
+                  return (
+                    <div
+                      key={uid}
+                      className={cn(
+                        "p-3 sm:p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3",
+                        isConfirmed
+                          ? "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-800/40"
+                          : isDeclined
+                          ? "bg-rose-50/50 dark:bg-rose-950/20 border-rose-200/80 dark:border-rose-800/40"
+                          : "bg-slate-50/70 dark:bg-slate-850/60 border-slate-200/70 dark:border-slate-800/60"
+                      )}
+                    >
+                      {/* Member Info */}
+                      <div className="flex items-center gap-3 min-w-0">
+                        {mObj?.photoURL ? (
+                          <img
+                            src={mObj.photoURL}
+                            alt={mName}
+                            className="w-10 h-10 rounded-xl object-cover shrink-0 border border-slate-200 dark:border-slate-700"
+                          />
+                        ) : (
+                          <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs text-white shrink-0 shadow-xs",
+                            isConfirmed
+                              ? "bg-gradient-to-tr from-emerald-600 to-teal-600"
+                              : isDeclined
+                              ? "bg-gradient-to-tr from-rose-600 to-pink-600"
+                              : "bg-gradient-to-tr from-slate-600 to-slate-700"
+                          )}>
+                            {mName.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-black text-slate-800 dark:text-slate-100 truncate">
+                              {mName}
+                            </span>
+                            {uid === user?.uid && (
+                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                                Você
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                            {roles.map((r, rIdx) => (
+                              <span
+                                key={rIdx}
+                                className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60"
+                              >
+                                {r}
+                              </span>
+                            ))}
+
+                            {/* Status Pill */}
+                            <span
+                              className={cn(
+                                "text-[10px] font-black px-2 py-0.5 rounded-md inline-flex items-center gap-1",
+                                isConfirmed
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                                  : isDeclined
+                                  ? "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                                  : "bg-slate-200/80 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                              )}
+                            >
+                              {isConfirmed ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                  <span>Presente</span>
+                                </>
+                              ) : isDeclined ? (
+                                <>
+                                  <X className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+                                  <span>Ausente</span>
+                                </>
+                              ) : (
+                                <span>Pendente</span>
+                              )}
+                            </span>
+                          </div>
+
+                          {confData?.confirmedBy && (
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 italic">
+                              Registrado por {confData.confirmedBy}
+                              {confData.confirmedAt && (
+                                <> às {new Date(confData.confirmedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</>
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons for this Member */}
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                        {isUpdating ? (
+                          <div className="px-4 py-2 flex items-center justify-center">
+                            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        ) : (
+                          <>
+                            {/* Botão Presente */}
+                            <button
+                              type="button"
+                              onClick={() => handleSetMemberAttendance(uid, "confirmed")}
+                              className={cn(
+                                "px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1 cursor-pointer active:scale-95",
+                                isConfirmed
+                                  ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/40"
+                                  : "bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-slate-700 dark:text-slate-200 hover:text-emerald-700 dark:hover:text-emerald-300 border border-slate-200 dark:border-slate-700"
+                              )}
+                              title={`Marcar ${mName} como presente`}
+                            >
+                              <Check className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>Presente</span>
+                            </button>
+
+                            {/* Botão Ausente */}
+                            <button
+                              type="button"
+                              onClick={() => handleSetMemberAttendance(uid, "declined")}
+                              className={cn(
+                                "px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1 cursor-pointer active:scale-95",
+                                isDeclined
+                                  ? "bg-rose-600 text-white shadow-sm ring-2 ring-rose-500/40"
+                                  : "bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-700 dark:text-slate-200 hover:text-rose-700 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700"
+                              )}
+                              title={`Marcar ${mName} como ausente`}
+                            >
+                              <X className="w-3.5 h-3.5 text-rose-500" />
+                              <span>Ausente</span>
+                            </button>
+
+                            {/* Botão Redefinir para Pendente (se já confirmado ou ausente) */}
+                            {(isConfirmed || isDeclined) && (
+                              <button
+                                type="button"
+                                onClick={() => handleSetMemberAttendance(uid, "pending")}
+                                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                title="Redefinir para pendente"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4 shrink-0">
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                {viewScheduleMemberUids.filter((uid) => isMemberConfirmed(viewSchedule, uid)).length} de {viewScheduleMemberUids.length} presentes
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setIsAttendanceModalOpen(false)}
+                className="px-6 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 cursor-pointer"
+              >
+                Concluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
           <div
@@ -5146,8 +6201,9 @@ export default function SchedulesPage() {
                                             : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-blue-200 dark:hover:border-blue-900/30"
                                         }`}
                                       >
-                                        {m.name}
-                                        {m.vocalRange ? `(${m.vocalRange})` : ""}
+                                        <span>{m.name}</span>
+                                        {m.vocalRange ? <span className="opacity-75 font-normal">({m.vocalRange})</span> : ""}
+                                        <WorshipRoleBadges member={m} size="xs" />
                                         {isAvailable && (
                                           <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Disponível"></span>
                                         )}
@@ -5242,7 +6298,8 @@ export default function SchedulesPage() {
                                             : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-blue-200 dark:hover:border-blue-900/30"
                                         }`}
                                       >
-                                        {m.name}
+                                        <span>{m.name}</span>
+                                        <WorshipRoleBadges member={m} size="xs" />
                                         {isAvailable && (
                                           <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Disponível"></span>
                                         )}
@@ -6156,7 +7213,7 @@ export default function SchedulesPage() {
                     className="p-5 bg-slate-50 hover:bg-rose-50/80 dark:bg-slate-800/60 dark:hover:bg-rose-950/40 border border-slate-200/80 hover:border-rose-200 dark:border-slate-700/80 dark:hover:border-rose-800 rounded-2xl transition-all cursor-pointer group flex items-center justify-between shadow-xs hover:shadow-md"
                   >
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span
                           className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
                             isDance
@@ -6171,6 +7228,11 @@ export default function SchedulesPage() {
                         <h4 className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
                           {serviceName || `Culto #${sIdx + 1}`}
                         </h4>
+                        <ScheduleConflictBadge
+                          summary={scheduleConflictsMap.get(schedule.id)}
+                          size="sm"
+                          variant="badge"
+                        />
                       </div>
                       <p className="text-xs text-slate-400 font-medium">
                         {churchName} • {schedule.locationType === "external" ? `Externo: ${schedule.locationName || "Local"}` : "Interno"}

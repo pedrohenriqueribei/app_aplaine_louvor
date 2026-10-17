@@ -50,6 +50,11 @@ interface SundayReadinessBarProps {
   orderOfServiceCount?: number;
   onRemindPendingWhatsApp?: (deptName: string, unconfirmedNames: string[]) => void;
   scheduleId?: string;
+  isUserScheduled?: boolean;
+  isUserConfirmed?: boolean;
+  userRoleName?: string;
+  onQuickConfirm?: () => void;
+  canAccessManagement?: boolean;
 }
 
 export function SundayReadinessBar({
@@ -61,6 +66,11 @@ export function SundayReadinessBar({
   orderOfServiceCount = 6,
   onRemindPendingWhatsApp,
   scheduleId,
+  isUserScheduled = false,
+  isUserConfirmed = false,
+  userRoleName,
+  onQuickConfirm,
+  canAccessManagement = true,
 }: SundayReadinessBarProps) {
   const [expandedTimeline, setExpandedTimeline] = useState(false);
 
@@ -237,6 +247,44 @@ export function SundayReadinessBar({
         </div>
       </div>
 
+      {/* ALERTA DE PRESENÇA RÁPIDA PARA O VOLUNTÁRIO ESCALADO NESTE CULTO */}
+      {isUserScheduled && (
+        <div className="mt-4 p-3.5 rounded-2xl bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-black text-slate-900 dark:text-slate-100">
+                Você está escalado neste culto{userRoleName ? ` como ${userRoleName}` : ""}!
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                {isUserConfirmed
+                  ? "Sua presença já está confirmada. Bom ministério!"
+                  : "Por favor, confirme sua presença com 1 clique para ajudar a equipe."}
+              </p>
+            </div>
+          </div>
+
+          <div>
+            {isUserConfirmed ? (
+              <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 text-xs font-black">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Confirmado ✅</span>
+              </span>
+            ) : onQuickConfirm ? (
+              <button
+                onClick={onQuickConfirm}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Confirmar Presença (1 Clique)</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      )}
+
       {/* HORIZONTAL MINISTRIES READINESS PILLS */}
       <div className="pt-5 space-y-4">
         <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
@@ -298,7 +346,7 @@ export function SundayReadinessBar({
                     <span className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
                       <CheckCircle2 className="w-4 h-4" />
                     </span>
-                  ) : (
+                  ) : canAccessManagement ? (
                     <button
                       onClick={() =>
                         onRemindPendingWhatsApp
@@ -316,6 +364,10 @@ export function SundayReadinessBar({
                       <MessageCircle className="w-3 h-3" />
                       <span>Cobrar</span>
                     </button>
+                  ) : (
+                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-lg border border-amber-200 dark:border-amber-800/40">
+                      Pendente
+                    </span>
                   )}
                 </div>
               </div>

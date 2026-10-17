@@ -28,6 +28,7 @@ interface MonthlyAvailabilityWidgetProps {
   deptDisplayName?: string;
   loading?: boolean;
   onNudgeWhatsApp?: () => void;
+  canAccessManagement?: boolean;
 }
 
 export function MonthlyAvailabilityWidget({
@@ -38,6 +39,7 @@ export function MonthlyAvailabilityWidget({
   deptDisplayName = "Equipe Geral",
   loading = false,
   onNudgeWhatsApp,
+  canAccessManagement = true,
 }: MonthlyAvailabilityWidgetProps) {
   const isHealthy = percentage >= 70;
   const isMedium = percentage >= 45 && percentage < 70;
@@ -123,9 +125,11 @@ export function MonthlyAvailabilityWidget({
           </div>
 
           <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
-            {isHealthy
-              ? `Ótima adesão! A liderança já pode fechar as escalas de ${currentMonthName} com segurança.`
-              : `Ainda faltam ${Math.max(0, totalCount - respondedCount)} voluntários informarem suas datas disponíveis.`}
+            {canAccessManagement
+              ? isHealthy
+                ? `Ótima adesão! A liderança já pode fechar as escalas de ${currentMonthName} com segurança.`
+                : `Ainda faltam ${Math.max(0, totalCount - respondedCount)} voluntários informarem suas datas disponíveis.`
+              : "Mantenha seus dias disponíveis atualizados para que seus líderes possam organizar as escalas com tranquilidade e sem sobrecarga."}
           </p>
         </div>
 
@@ -157,19 +161,29 @@ export function MonthlyAvailabilityWidget({
 
       {/* AÇÕES OPERACIONAIS */}
       <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-2">
-        <button
-          onClick={handleSendGentleReminder}
-          className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 active:scale-98"
-        >
-          <MessageCircle className="w-3.5 h-3.5" />
-          <span>Cobrança Gentil no WhatsApp</span>
-        </button>
+        {canAccessManagement ? (
+          <button
+            onClick={handleSendGentleReminder}
+            className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 active:scale-98 cursor-pointer"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span>Cobrança Gentil no WhatsApp</span>
+          </button>
+        ) : (
+          <Link
+            href="/dashboard/availability"
+            className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 active:scale-98"
+          >
+            <CalendarCheck className="w-3.5 h-3.5" />
+            <span>Informar Minha Disponibilidade</span>
+          </Link>
+        )}
 
         <Link
           href="/dashboard/availability"
           className="w-full py-2 px-3 rounded-xl text-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center gap-1.5"
         >
-          <span>Abrir Quadro de Disponibilidade</span>
+          <span>{canAccessManagement ? "Abrir Quadro de Disponibilidade" : "Ver Minha Grade de Datas"}</span>
           <ArrowRight className="w-3 h-3 text-slate-400" />
         </Link>
       </div>

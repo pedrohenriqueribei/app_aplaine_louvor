@@ -13,10 +13,12 @@ import {
   setDoc,
   writeBatch,
   serverTimestamp,
+  arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
-import { Bell, CheckCircle, Trash2, Clock, Calendar, Sliders, Eye, Send } from "lucide-react";
+import { Bell, CheckCircle, Trash2, Clock, Calendar, Sliders, Eye, Send, CheckCircle2 } from "lucide-react";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { SentBroadcastsManager } from "@/components/SentBroadcastsManager";
 
@@ -25,6 +27,8 @@ interface Notification {
   userId: string;
   broadcastId?: string;
   senderId?: string;
+  scheduleId?: string;
+  status?: string;
   title: string;
   body: string;
   type: string;
@@ -140,6 +144,36 @@ export default function NotificationsPage() {
       }
     } catch (err) {
       console.error("Error marking notification read:", err);
+    }
+  };
+
+  const handleConfirmPresenceFromNotification = async (notif: Notification) => {
+    if (!user) return;
+    try {
+      const scheduleId = notif.scheduleId || (notif.id.startsWith("conf_") ? notif.id.split("_")[1] : null);
+      if (scheduleId) {
+        try {
+          await updateDoc(doc(db, "schedules", scheduleId), {
+            [`confirmations.${user.uid}`]: {
+              status: "confirmed",
+              confirmedAt: new Date().toISOString(),
+              userName: userData?.name || user.displayName || "Voluntário",
+            },
+            confirmedMembers: arrayUnion(user.uid),
+            declinedMembers: arrayRemove(user.uid),
+          });
+        } catch (schedErr) {
+          console.warn("Could not update schedule directly from notification:", schedErr);
+        }
+      }
+
+      await updateDoc(doc(db, "notifications", notif.id), {
+        read: true,
+        readAt: serverTimestamp(),
+        status: "confirmed",
+      });
+    } catch (err) {
+      console.error("Error confirming presence from notification:", err);
     }
   };
 
@@ -288,8 +322,28 @@ export default function NotificationsPage() {
                     >
                       {notif.body}
                     </p>
-                    {!notif.read && (
-                      <div className="mt-4 flex gap-3">
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      {(notif.type.includes("schedule") || notif.scheduleId || notif.id.startsWith("conf_")) && (
+                        notif.status === "confirmed" || notif.type === "schedule_confirmed" ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <span>Presença Confirmada</span>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConfirmPresenceFromNotification(notif);
+                            }}
+                            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Confirmar Presença (1 Clique)</span>
+                          </button>
+                        )
+                      )}
+
+                      {!notif.read && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -299,8 +353,8 @@ export default function NotificationsPage() {
                         >
                           Entendido
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

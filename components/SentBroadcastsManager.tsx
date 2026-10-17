@@ -142,19 +142,26 @@ export function SentBroadcastsManager({
           // Fallback if index or churchId query is missing
           if (user?.uid) {
             const fallbackQ = query(collection(db, 'broadcasts'), where('senderId', '==', user.uid));
-            onSnapshot(fallbackQ, (fallbackSnap) => {
-              const fallbackDocs = fallbackSnap.docs.map((d) => ({
-                id: d.id,
-                ...d.data(),
-              })) as BroadcastRecord[];
-              fallbackDocs.sort((a, b) => {
-                const tA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-                const tB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-                return tB - tA;
-              });
-              setBroadcasts(fallbackDocs);
-              setLoading(false);
-            });
+            onSnapshot(
+              fallbackQ,
+              (fallbackSnap) => {
+                const fallbackDocs = fallbackSnap.docs.map((d) => ({
+                  id: d.id,
+                  ...d.data(),
+                })) as BroadcastRecord[];
+                fallbackDocs.sort((a, b) => {
+                  const tA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                  const tB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                  return tB - tA;
+                });
+                setBroadcasts(fallbackDocs);
+                setLoading(false);
+              },
+              (fallbackErr) => {
+                console.warn('Fallback broadcasts listener error:', fallbackErr);
+                setLoading(false);
+              }
+            );
           } else {
             setLoading(false);
           }

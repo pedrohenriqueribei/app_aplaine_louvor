@@ -13,6 +13,8 @@ import {
   ChevronDown,
   Layers,
   ArrowRight,
+  Crown,
+  Lock,
 } from "lucide-react";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
 import Link from "next/link";
@@ -39,6 +41,8 @@ interface ContextLensSwitcherProps {
     secretariat?: number;
     kids?: number;
   };
+  userLedMinistries?: MinistryLens[];
+  isGlobalLeader?: boolean;
 }
 
 export function ContextLensSwitcher({
@@ -49,6 +53,8 @@ export function ContextLensSwitcher({
   availableCampuses = ["Sede Principal", "Campus Norte", "Campus Sul"],
   churchName,
   counts,
+  userLedMinistries = [],
+  isGlobalLeader = false,
 }: ContextLensSwitcherProps) {
   const [campusDropdownOpen, setCampusDropdownOpen] = React.useState(false);
 
@@ -134,6 +140,9 @@ export function ContextLensSwitcher({
           {lenses.map((lens) => {
             const Icon = lens.icon;
             const isActive = activeLens === lens.id;
+            const isLeaderOfThisLens = isGlobalLeader || (userLedMinistries && userLedMinistries.includes(lens.id));
+            const hasAnyLeadership = isGlobalLeader || (userLedMinistries && userLedMinistries.length > 0);
+            const isRestricted = hasAnyLeadership && !isLeaderOfThisLens;
 
             return (
               <button
@@ -148,6 +157,28 @@ export function ContextLensSwitcher({
                 <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isActive ? "text-white" : lens.accentColor}`} />
                 <span className="hidden sm:inline">{lens.label}</span>
                 <span className="sm:hidden">{lens.shortLabel}</span>
+
+                {isLeaderOfThisLens && (
+                  <span
+                    className={`inline-flex items-center gap-0.5 text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+                      isActive ? "bg-amber-400 text-slate-950" : "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300"
+                    }`}
+                    title="Você é líder deste ministério"
+                  >
+                    <Crown className="w-2.5 h-2.5 fill-current" />
+                    <span className="hidden md:inline">Líder</span>
+                  </span>
+                )}
+
+                {isRestricted && (
+                  <span
+                    className="opacity-60"
+                    title="Informações gerenciais restritas aos líderes deste ministério"
+                  >
+                    <Lock className="w-2.5 h-2.5" />
+                  </span>
+                )}
+
                 {typeof lens.badgeCount === "number" && lens.badgeCount > 0 && (
                   <span
                     className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
@@ -209,7 +240,7 @@ export function ContextLensSwitcher({
         </div>
       </div>
 
-      {/* BANNER DE FOCO DA LENTE (QUANDO MINISTÉRIO SELECIONADO NÃO É 'TODOS') */}
+      {/* BANNER DE FOCO DA LENTE */}
       {activeLens !== "all" && (
         <motion.div
           initial={{ opacity: 0, y: -5 }}
@@ -221,13 +252,21 @@ export function ContextLensSwitcher({
               <currentLensObj.icon className={`w-4 h-4 ${currentLensObj.accentColor}`} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-extrabold text-slate-900 dark:text-slate-100">
                   Lente Ativa: {currentLensObj.label}
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-500">
-                  Filtro Departamental
-                </span>
+                {isGlobalLeader || (userLedMinistries && userLedMinistries.includes(activeLens)) ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center gap-1 border border-emerald-200 dark:border-emerald-800/50">
+                    <Crown className="w-2.5 h-2.5 fill-current text-amber-500" />
+                    Gestão Autorizada
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 flex items-center gap-1 border border-amber-200 dark:border-amber-800/50">
+                    <Lock className="w-2.5 h-2.5" />
+                    Gestão Restrita a Líderes
+                  </span>
+                )}
               </div>
               <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
                 {currentLensObj.description}

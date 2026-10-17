@@ -1,7 +1,18 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, getDoc, doc, query, where, documentId } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  getDoc,
+  doc,
+  query,
+  where,
+  documentId,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
+} from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { db, auth, handleFirestoreError, OperationType } from "@/lib/firebase";
 import {
@@ -18,6 +29,7 @@ import {
   CheckCircle2,
   Cake,
   ArrowRight,
+  Mail,
   Sparkles,
   MessageCircle,
   PartyPopper,
@@ -52,6 +64,8 @@ import {
   Radio,
   UserX,
   Repeat,
+  Crown,
+  Lock,
 } from "lucide-react";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
 import { motion, AnimatePresence } from "motion/react";
@@ -69,6 +83,15 @@ import { MonthlyAvailabilityWidget } from "@/components/MonthlyAvailabilityWidge
 import { TopPlayedSongsWidget } from "@/components/TopPlayedSongsWidget";
 import { ChurchAnnouncementsFeed } from "@/components/ChurchAnnouncementsFeed";
 import { DashboardMainGrid } from "@/components/DashboardMainGrid";
+import { ScheduleGapsAnalyticsWidget } from "@/components/ScheduleGapsAnalyticsWidget";
+import type {
+  CriticalDayItem,
+  DayAvailabilityMapItem,
+} from "@/components/CriticalAvailabilityWidget";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { detectAllScheduleConflicts, type ScheduleConflictSummary } from "@/lib/scheduleConflicts";
+import { ScheduleConflictBadge } from "@/components/ScheduleConflictBadge";
+import { QuickScheduleConfirmationBanner } from "@/components/QuickScheduleConfirmationBanner";
 
 interface BirthdayMember {
   uid: string;
@@ -92,6 +115,7 @@ interface UpcomingScheduleSummary {
   songsCount: number;
   missingRoles: string[];
   hasRehearsal?: boolean;
+  conflictSummary?: ScheduleConflictSummary | null;
 }
 
 interface PredictiveAlert {
@@ -129,6 +153,8 @@ export default function DashboardPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedLens, setSelectedLens] = useState<MinistryLens>("all");
   const [selectedCampus, setSelectedCampus] = useState<string>("Sede Principal");
+  const [allSchedules, setAllSchedules] = useState<any[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Estados dos Modais Interativos de Ação Preditiva
   const [substituteModal, setSubstituteModal] = useState<{
@@ -211,6 +237,16 @@ export default function DashboardPage() {
     }, 4500);
   };
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("verified") === "true") {
+        triggerToast("🎉 E-mail verificado com sucesso! Seu perfil agora possui o selo oficial de verificação.");
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, []);
+
   const [kpiMetrics, setKpiMetrics] = useState({
     healthScore: 100,
     healthSubtext: "Culto preparado com sucesso",
@@ -257,23 +293,166 @@ export default function DashboardPage() {
     deptDisplayName: "Equipe",
     loading: true,
   });
-  const [resetSent, setResetSent] = useState(false);
 
-  const isWorshipLeader = Boolean(userData?.roles?.worship?.includes("leader"));
-  const isDanceLeader = Boolean(
-    userData?.roles?.dance?.includes("leader") ||
-    userData?.roles?.dance?.includes("dance_leader")
+  const [criticalAvailabilityData, setCriticalAvailabilityData] = useState<{
+    criticalDays: CriticalDayItem[];
+    allDaysAvailability: DayAvailabilityMapItem[];
+    totalTeamCount: number;
+    deptDisplayName: string;
+    loading: boolean;
+  }>({
+    criticalDays: [],
+    allDaysAvailability: [],
+    totalTeamCount: 0,
+    deptDisplayName: "Equipe",
+    loading: true,
+  });
+
+  const [resetSent, setResetSent] = useState(false);
+  const [churchDepartments, setChurchDepartments] = useState<any[]>([]);
+
+  const isSuperAdmin = Boolean(
+    userData?.role === "super_admin" ||
+    userData?.super_admin === true ||
+    user?.email === "pedrohenriqueribei@gmail.com"
   );
-  const isMultimediaLeader = Boolean(userData?.roles?.multimedia?.includes("leader"));
-  const isSecretariatLeader = Boolean(userData?.roles?.secretariat?.includes("leader"));
-  const isGlobalLeader = userData?.role === "líder";
-  const isSuperAdmin = userData?.role === "super_admin" || userData?.super_admin === true;
+
+  const isGlobalLeader = Boolean(
+    isSuperAdmin ||
+    userData?.role === "líder" ||
+    userData?.role === "lider" ||
+    userData?.role === "pastor" ||
+    userData?.role === "admin"
+  );
+
+  const checkChurchDeptLeadership = (type: string) => {
+    if (!Array.isArray(churchDepartments) || !user) return false;
+    const currentUid = user.uid;
+    const currentEmail = user.email?.toLowerCase();
+    return churchDepartments.some((dept: any) => {
+      const dType = (dept.type || dept.id || "").toLowerCase();
+      const matchType =
+        (type === "worship" && (dType.includes("worship") || dType.includes("louvor"))) ||
+        (type === "multimedia" && (dType.includes("multi") || dType.includes("midia") || dType.includes("mídia"))) ||
+        (type === "dance" && dType.includes("dan")) ||
+        (type === "secretariat" && (dType.includes("sec") || dType.includes("acolh"))) ||
+        (type === "kids" && (dType.includes("kid") || dType.includes("infan")));
+
+      if (!matchType) return false;
+      if (!Array.isArray(dept.members)) return false;
+
+      return dept.members.some((m: any) => {
+        const matchId = (m.id && m.id === currentUid) || (m.uid && m.uid === currentUid);
+        const matchEmail = m.email && currentEmail && m.email.toLowerCase() === currentEmail;
+        if (!matchId && !matchEmail) return false;
+        return Boolean(
+          m.isLeader === true ||
+          (Array.isArray(m.roles) && (m.roles.includes("leader") || m.roles.includes("lider") || m.roles.includes(`${type}_leader`))) ||
+          m.role === "líder" || m.role === "lider"
+        );
+      });
+    });
+  };
+
+  const isWorshipLeader = Boolean(
+    isGlobalLeader ||
+    userData?.roles?.worship?.includes("leader") ||
+    userData?.roles?.worship?.includes("worship_leader") ||
+    userData?.roles?.worship?.includes("lider") ||
+    checkChurchDeptLeadership("worship")
+  );
+  const isDanceLeader = Boolean(
+    isGlobalLeader ||
+    userData?.roles?.dance?.includes("leader") ||
+    userData?.roles?.dance?.includes("dance_leader") ||
+    userData?.roles?.dance?.includes("lider") ||
+    checkChurchDeptLeadership("dance")
+  );
+  const isMultimediaLeader = Boolean(
+    isGlobalLeader ||
+    userData?.roles?.multimedia?.includes("leader") ||
+    userData?.roles?.multimedia?.includes("multimedia_leader") ||
+    userData?.roles?.multimedia?.includes("lider") ||
+    checkChurchDeptLeadership("multimedia")
+  );
+  const isSecretariatLeader = Boolean(
+    isGlobalLeader ||
+    userData?.roles?.secretariat?.includes("leader") ||
+    userData?.roles?.secretariat?.includes("secretariat_leader") ||
+    userData?.roles?.secretariat?.includes("lider") ||
+    userData?.roles?.secretariat?.includes("admin") ||
+    checkChurchDeptLeadership("secretariat")
+  );
+  const isKidsLeader = Boolean(
+    isGlobalLeader ||
+    userData?.roles?.kids?.includes("leader") ||
+    userData?.roles?.kids?.includes("kids_leader") ||
+    userData?.roles?.kids?.includes("lider") ||
+    checkChurchDeptLeadership("kids")
+  );
+
+  // Lista dos ministérios dos quais o usuário atual é líder designado
+  const userLedMinistries = useMemo(() => {
+    if (isSuperAdmin || isGlobalLeader) {
+      return ["all", "worship", "multimedia", "dance", "secretariat", "kids"] as MinistryLens[];
+    }
+    const list: MinistryLens[] = [];
+    if (isWorshipLeader) list.push("worship");
+    if (isMultimediaLeader) list.push("multimedia");
+    if (isDanceLeader) list.push("dance");
+    if (isSecretariatLeader) list.push("secretariat");
+    if (isKidsLeader) list.push("kids");
+    return list;
+  }, [isSuperAdmin, isGlobalLeader, isWorshipLeader, isMultimediaLeader, isDanceLeader, isSecretariatLeader, isKidsLeader]);
+
+  const hasAnyLeadershipRole = userLedMinistries.length > 0;
+
+  // Política de Governança: Somente líderes do respectivo ministério (ou coordenação pastoral) acessam dados gerenciais
+  const canAccessManagementForLens = (lens: MinistryLens): boolean => {
+    if (isSuperAdmin || isGlobalLeader) return true;
+    if (lens === "all") {
+      // Visão Pastoral Global consolidada é reservada a Pastores e Super Admins
+      return false;
+    }
+    return userLedMinistries.includes(lens);
+  };
+
+  const canAccessActiveManagement = canAccessManagementForLens(selectedLens);
+
+  const getMinistryLabel = (lens: MinistryLens) => {
+    switch (lens) {
+      case "worship":
+        return "Ministério de Louvor";
+      case "multimedia":
+        return "Ministério de Multimídia";
+      case "dance":
+        return "Ministério de Dança";
+      case "secretariat":
+        return "Secretaria & Acolhimento";
+      case "kids":
+        return "Ministério Infantil";
+      case "all":
+        return "Visão Geral Pastoral";
+      default:
+        return lens;
+    }
+  };
+
+  // Se o usuário lidera um ministério específico e estiver na visão 'all', posiciona automaticamente no seu ministério
+  useEffect(() => {
+    if (!userData) return;
+    if (isSuperAdmin || isGlobalLeader) return;
+    if (userLedMinistries.length > 0 && selectedLens === "all") {
+      setSelectedLens(userLedMinistries[0]);
+    }
+  }, [userData, userLedMinistries, isSuperAdmin, isGlobalLeader, selectedLens]);
 
   const isLeader =
     isWorshipLeader ||
     isDanceLeader ||
     isMultimediaLeader ||
     isSecretariatLeader ||
+    isKidsLeader ||
     isGlobalLeader ||
     isSuperAdmin;
 
@@ -340,7 +519,7 @@ export default function DashboardPage() {
       try {
         const hasChurch = Boolean(userData.churchId && userData.churchId.trim() !== "");
 
-        const [membersSnap, songsSnap, schedulesSnap, churchesSnap] =
+        const [membersSnap, songsSnap, schedulesSnap, churchesSnap, servicesSnap] =
           await Promise.all([
             hasChurch
               ? getDocs(
@@ -374,6 +553,14 @@ export default function DashboardPage() {
                   ),
                 )
               : getDocs(collection(db, "churches")),
+            hasChurch
+              ? getDocs(
+                  query(
+                    collection(db, "services"),
+                    where("churchId", "==", userData.churchId),
+                  ),
+                )
+              : Promise.resolve({ size: 0, docs: [] }),
           ]);
 
         setStats({
@@ -383,10 +570,20 @@ export default function DashboardPage() {
           churches: churchesSnap.size,
         });
 
+        const rawServices: any[] = [];
+        if (servicesSnap && "docs" in servicesSnap && Array.isArray((servicesSnap as any).docs)) {
+          (servicesSnap as any).docs.forEach((d: any) => {
+            rawServices.push({ id: d.id, ...d.data() });
+          });
+        }
+
         if (churchesSnap && "docs" in churchesSnap && Array.isArray((churchesSnap as any).docs) && (churchesSnap as any).docs.length > 0) {
           const cData = (churchesSnap as any).docs[0]?.data();
           if (cData?.name) {
             setChurchName(cData.name);
+          }
+          if (Array.isArray(cData?.departments)) {
+            setChurchDepartments(cData.departments);
           }
         }
 
@@ -451,11 +648,15 @@ export default function DashboardPage() {
             rawSchedules.push({ id: d.id, ...d.data() });
           });
         }
+        setAllSchedules(rawSchedules);
 
         // Filter schedules from today onwards, sorted ascending
         const upcomingList = rawSchedules
           .filter((s) => s.date && s.date >= todayStr)
           .sort((a, b) => a.date.localeCompare(b.date));
+
+        // Detecção de conflitos de integrantes escalados em mais de 1 ministério no mesmo dia e período
+        const conflictsMap = detectAllScheduleConflicts(rawSchedules, rawServices, memberList);
 
         const summaries: UpcomingScheduleSummary[] = upcomingList.slice(0, 5).map((s) => {
           const roles = s.roles || {};
@@ -490,6 +691,7 @@ export default function DashboardPage() {
             songsCount,
             missingRoles: missing,
             hasRehearsal: Boolean(s.rehearsalDate),
+            conflictSummary: conflictsMap.get(s.id) || null,
           };
         });
 
@@ -511,17 +713,20 @@ export default function DashboardPage() {
           missingListForKpi = nextSchedule.missingRoles || [];
           criticalGaps = missingListForKpi.length;
           const totalRequired = Math.max(1, nextSchedule.membersCount + criticalGaps);
+          const rawNext = rawSchedules.find((s) => s.id === nextSchedule.id);
+          const confirmedCount = rawNext?.confirmedMembers?.length || (rawNext?.confirmations ? Object.values(rawNext.confirmations).filter((c: any) => c.status === "confirmed").length : 0);
           
           if (criticalGaps > 0) {
             // Formata exatamente como solicitado: (ex: "Falta 1 Baixista, 1 Projeção")
             const formattedGaps = missingListForKpi.map((r) => `1 ${r}`).join(", ");
             criticalGapsSubtext = `Falta: ${formattedGaps}`;
-            healthScore = Math.max(20, Math.round((nextSchedule.membersCount / totalRequired) * 100));
-            healthSubtext = `${healthScore}% confirmados (${nextSchedule.membersCount} voluntários) • Culto de ${formatScheduleDate(nextSchedule.date)}`;
+            healthScore = Math.max(15, Math.round(((confirmedCount > 0 ? confirmedCount : nextSchedule.membersCount) / totalRequired) * 100));
+            healthSubtext = `${healthScore}% de prontidão (${confirmedCount} de ${nextSchedule.membersCount} confirmados) • Culto de ${formatScheduleDate(nextSchedule.date)}`;
           } else {
-            healthScore = 100;
-            criticalGapsSubtext = `Equipe 100% completa para ${formatScheduleDate(nextSchedule.date)}`;
-            healthSubtext = `100% confirmados (${nextSchedule.membersCount} voluntários) • Paz de espírito para o culto de ${formatScheduleDate(nextSchedule.date)}`;
+            const ratio = nextSchedule.membersCount > 0 ? Math.round((confirmedCount / nextSchedule.membersCount) * 100) : 100;
+            healthScore = confirmedCount > 0 ? ratio : 100;
+            criticalGapsSubtext = `Equipe completa (${nextSchedule.membersCount} vagas) para ${formatScheduleDate(nextSchedule.date)}`;
+            healthSubtext = `${confirmedCount > 0 ? `${healthScore}% confirmados (${confirmedCount} de ${nextSchedule.membersCount} voluntários)` : `100% escalados (${nextSchedule.membersCount} voluntários)`} • Culto de ${formatScheduleDate(nextSchedule.date)}`;
           }
         }
 
@@ -803,17 +1008,25 @@ export default function DashboardPage() {
             try {
               const docId = `${uid}_${currentYear}_${currentMonth}`;
               const snap = await getDoc(doc(db, "availability", docId));
-              if (snap.exists() && Array.isArray(snap.data()?.days) && snap.data().days.length > 0) {
-                return true;
+              const mName = membersMap[uid]?.name || "Integrante";
+              if (snap.exists() && Array.isArray(snap.data()?.days)) {
+                const days = (snap.data().days as number[]) || [];
+                return {
+                  uid,
+                  name: mName,
+                  days,
+                  hasResponded: days.length > 0,
+                };
               }
+              return { uid, name: mName, days: [], hasResponded: false };
             } catch (e) {
               console.warn(`Could not load availability for ${uid}:`, e);
+              return { uid, name: membersMap[uid]?.name || "Integrante", days: [], hasResponded: false };
             }
-            return false;
           });
 
           const availResults = await Promise.all(availPromises);
-          const respondedMembers = availResults.filter(Boolean).length;
+          const respondedMembers = availResults.filter((r) => r.hasResponded).length;
           const percentage = totalMembers > 0 ? Math.round((respondedMembers / totalMembers) * 100) : 0;
 
           setDeptAvailabilityStats({
@@ -823,8 +1036,97 @@ export default function DashboardPage() {
             deptDisplayName: displayName,
             loading: false,
           });
+
+          // Computa os dias com menos de 50% de disponibilidade dos voluntários
+          const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+          const weekdayNames = [
+            "Domingo",
+            "Segunda-feira",
+            "Terça-feira",
+            "Quarta-feira",
+            "Quinta-feira",
+            "Sexta-feira",
+            "Sábado",
+          ];
+          const weekdayShorts = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+          const calcCriticalDays: CriticalDayItem[] = [];
+          const calcAllDays: DayAvailabilityMapItem[] = [];
+
+          for (let d = 1; d <= daysInMonth; d++) {
+            const dateObj = new Date(currentYear, currentMonth, d);
+            const weekday = dateObj.getDay();
+            const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+            const hasScheduleAlready = (rawSchedules || []).some(
+              (s) => s.date && s.date.startsWith(dateStr)
+            );
+
+            // Dias de culto: Domingos (0), Quartas (3) ou datas onde já há escalas cadastradas
+            const isServiceDay = weekday === 0 || weekday === 3 || hasScheduleAlready;
+
+            const availableVolunteers = availResults
+              .filter((r) => r.days.includes(d))
+              .map((r) => ({ id: r.uid, name: r.name }));
+
+            const unavailableVolunteers = availResults
+              .filter((r) => !r.days.includes(d))
+              .map((r) => ({ id: r.uid, name: r.name }));
+
+            const availableCount = availableVolunteers.length;
+            const dayPercentage = totalMembers > 0 ? Math.round((availableCount / totalMembers) * 100) : 0;
+            const isCritical = totalMembers > 0 && dayPercentage < 50;
+
+            if (isCritical) {
+              calcCriticalDays.push({
+                dayNumber: d,
+                dateStr,
+                weekdayName: weekdayNames[weekday],
+                weekdayShort: weekdayShorts[weekday],
+                availableCount,
+                totalCount: totalMembers,
+                percentage: dayPercentage,
+                status: dayPercentage < 30 ? "critical" : "warning",
+                isServiceDay,
+                serviceName: isServiceDay
+                  ? weekday === 0
+                    ? "Culto de Domingo"
+                    : weekday === 3
+                    ? "Culto de Quarta"
+                    : "Culto Especial"
+                  : undefined,
+                hasScheduleAlready,
+                availableVolunteers,
+                unavailableVolunteers,
+              });
+            }
+
+            calcAllDays.push({
+              dayNumber: d,
+              dateStr,
+              weekdayShort: weekdayShorts[weekday],
+              availableCount,
+              totalCount: totalMembers,
+              percentage: dayPercentage,
+              isServiceDay,
+              isCritical,
+            });
+          }
+
+          setCriticalAvailabilityData({
+            criticalDays: calcCriticalDays,
+            allDaysAvailability: calcAllDays,
+            totalTeamCount: totalMembers,
+            deptDisplayName: displayName,
+            loading: false,
+          });
+        } else {
+          setDeptAvailabilityStats((prev) => ({ ...prev, loading: false }));
+          setCriticalAvailabilityData((prev) => ({ ...prev, loading: false }));
         }
       } catch (err: any) {
+        setDeptAvailabilityStats((prev) => ({ ...prev, loading: false }));
+        setCriticalAvailabilityData((prev) => ({ ...prev, loading: false }));
         handleFirestoreError(err, OperationType.LIST, "dashboard");
       }
     }
@@ -838,6 +1140,7 @@ export default function DashboardPage() {
     isSecretariatLeader,
     isGlobalLeader,
     isSuperAdmin,
+    refreshKey,
   ]);
 
   const monthNames = [
@@ -877,6 +1180,28 @@ export default function DashboardPage() {
       date: nextSched?.date || undefined,
     });
 
+    // 1.1 Alerta de Conflito de Escala entre Ministérios Diferentes no mesmo dia e período
+    const conflictingUpcoming = upcomingSchedules.find((s) => s.conflictSummary?.hasConflict);
+    if (conflictingUpcoming && conflictingUpcoming.conflictSummary) {
+      const cSummary = conflictingUpcoming.conflictSummary;
+      const firstConf = cSummary.conflicts[0];
+      const memberNames = cSummary.conflictingMemberNames.slice(0, 2).join(", ");
+      alerts.push({
+        id: `alerta-conflito-ministerios-${conflictingUpcoming.id}`,
+        type: "urgency",
+        title: `Conflito de Ministérios: ${memberNames}`,
+        description: firstConf?.description || `Voluntário escalado em mais de um ministério no mesmo dia e período (${conflictingUpcoming.date}).`,
+        badge: "Conflito de Escala",
+        category: "urgency",
+        actionType: "link",
+        actionLabel: "Resolver na Grade",
+        actionHref: "/dashboard/schedules",
+        secondaryActionLabel: "Ver Escalas",
+        secondaryActionHref: "/dashboard/schedules",
+        date: conflictingUpcoming.date,
+      });
+    }
+
     // 2. Detector de Fadiga do Voluntário - COR ÂMBAR (ATENÇÃO)
     // Exemplo: "Lucas Silva está escalado há 4 domingos consecutivos (Mídia + Louvor). Que tal dar folga neste domingo?"
     // Ação sugerida: "Ver voluntários descansados da mesma função".
@@ -913,21 +1238,39 @@ export default function DashboardPage() {
       secondaryActionHref: "/dashboard/songs",
     });
 
-    // 4. Fechamento de Ciclo de Disponibilidade - COR ÂMBAR (ATENÇÃO)
-    // Exemplo: "Faltam 3 dias para fechar a grade de Novembro e 8 voluntários de Dança ainda não informaram datas."
-    // Ação sugerida: "Disparar cobrança gentil no WhatsApp de quem falta".
-    alerts.push({
-      id: "alerta-fechamento-ciclo",
-      type: "attention",
-      title: "Fechamento de Ciclo de Disponibilidade",
-      description: "Faltam 3 dias para fechar a grade de Novembro e 8 voluntários de Dança ainda não informaram datas.",
-      badge: "Ciclo de Grade",
-      category: "attention",
-      actionType: "reminder",
-      actionLabel: "Disparar cobrança gentil no WhatsApp de quem falta",
-      secondaryActionLabel: "Ver Disponibilidade",
-      secondaryActionHref: "/dashboard/availability",
-    });
+    // 4. Alerta de Disponibilidade Crítica (< 50% de Quórum)
+    const criticalCultos = criticalAvailabilityData.criticalDays.filter((d) => d.isServiceDay);
+    if (criticalCultos.length > 0) {
+      const datesLabel = criticalCultos.map((d) => `dia ${d.dayNumber}`).slice(0, 3).join(", ");
+      alerts.push({
+        id: "alerta-disponibilidade-critica",
+        type: "urgency",
+        title: `Disponibilidade Crítica: ${criticalCultos.length} ${criticalCultos.length === 1 ? "culto com < 50%" : "cultos com < 50%"}`,
+        description: `Atenção antes de rodar a escala: ${criticalCultos.length} ${criticalCultos.length === 1 ? "culto possui" : "cultos possuem"} menos da metade dos voluntários disponíveis (${datesLabel}${criticalCultos.length > 3 ? "..." : ""}).`,
+        badge: "< 50% Quórum",
+        category: "urgency",
+        actionType: "reminder",
+        actionLabel: "Cobrar Equipe no WhatsApp",
+        secondaryActionLabel: "Ver Datas Críticas",
+        secondaryActionHref: "/dashboard/availability",
+      });
+    } else {
+      const missingCount = deptAvailabilityStats.totalCount - deptAvailabilityStats.respondedCount;
+      alerts.push({
+        id: "alerta-fechamento-ciclo",
+        type: "attention",
+        title: `Fechamento de Disponibilidade (${currentMonthName})`,
+        description: missingCount > 0
+          ? `${missingCount} voluntário(s) de ${deptAvailabilityStats.deptDisplayName} ainda não informaram datas para a próxima escala.`
+          : `Toda a equipe de ${deptAvailabilityStats.deptDisplayName} respondeu a disponibilidade deste mês!`,
+        badge: missingCount > 0 ? "Ciclo de Grade" : "Quórum Completo",
+        category: "attention",
+        actionType: "reminder",
+        actionLabel: missingCount > 0 ? "Disparar cobrança gentil no WhatsApp de quem falta" : "Ver Quadro",
+        secondaryActionLabel: "Ver Disponibilidade",
+        secondaryActionHref: "/dashboard/availability",
+      });
+    }
 
     // 5. Visitante Esfriando (Retenção) - COR ÂMBAR (ATENÇÃO)
     // Exemplo: "3 visitantes do último domingo ainda não receberam mensagem de boas-vindas da secretaria."
@@ -985,6 +1328,11 @@ export default function DashboardPage() {
     monthBirthdays,
     burnoutMembersList,
     dismissedAlerts,
+    criticalAvailabilityData.criticalDays,
+    currentMonthName,
+    deptAvailabilityStats.deptDisplayName,
+    deptAvailabilityStats.respondedCount,
+    deptAvailabilityStats.totalCount,
   ]);
 
   const filteredAlerts = useMemo(() => {
@@ -1193,64 +1541,126 @@ export default function DashboardPage() {
     },
   ];
 
-  const quickActionsList = [
-    {
-      label: "Nova Escala",
-      desc: "Criar culto & equipe",
-      href: "/dashboard/schedules",
-      icon: CalendarPlus,
-      color: "text-orange-600 dark:text-orange-400",
-      bg: "bg-orange-500/10 hover:bg-orange-500/20",
-      border: "border-orange-200 dark:border-orange-800/60",
-    },
-    {
-      label: "Lançar Disponibilidade",
-      desc: "Informar dias livres",
-      href: "/dashboard/availability",
-      icon: CalendarCheck,
-      color: "text-emerald-600 dark:text-emerald-400",
-      bg: "bg-emerald-500/10 hover:bg-emerald-500/20",
-      border: "border-emerald-200 dark:border-emerald-800/60",
-    },
-    {
-      label: "Montar Repertório",
-      desc: "Cifras, BPM e louvores",
-      href: "/dashboard/songs",
-      icon: Music,
-      color: "text-purple-600 dark:text-purple-400",
-      bg: "bg-purple-500/10 hover:bg-purple-500/20",
-      border: "border-purple-200 dark:border-purple-800/60",
-    },
-    {
-      label: "Registrar Visitante",
-      desc: "Acolhimento rápido",
-      href: "/dashboard/visitors",
-      icon: UserPlus,
-      color: "text-blue-600 dark:text-blue-400",
-      bg: "bg-blue-500/10 hover:bg-blue-500/20",
-      border: "border-blue-200 dark:border-blue-800/60",
-    },
-    {
-      label: "Novo Integrante",
-      desc: "Cadastrar voluntário",
-      href: "/dashboard/members",
-      icon: Users,
-      color: "text-indigo-600 dark:text-indigo-400",
-      bg: "bg-indigo-500/10 hover:bg-indigo-500/20",
-      border: "border-indigo-200 dark:border-indigo-800/60",
-    },
-    {
-      label: "Enviar Notificação",
-      desc: "Lembretes & avisos",
-      href: "/dashboard/notifications",
-      icon: Send,
-      color: "text-pink-600 dark:text-pink-400",
-      bg: "bg-pink-500/10 hover:bg-pink-500/20",
-      border: "border-pink-200 dark:border-pink-800/60",
-    },
-  ];
+  const quickActionsList = useMemo(() => {
+    if (canAccessActiveManagement) {
+      return [
+        {
+          label: "Nova Escala",
+          desc: "Criar culto & equipe",
+          href: "/dashboard/schedules",
+          icon: CalendarPlus,
+          color: "text-orange-600 dark:text-orange-400",
+          bg: "bg-orange-500/10 hover:bg-orange-500/20",
+          border: "border-orange-200 dark:border-orange-800/60",
+        },
+        {
+          label: "Lançar Disponibilidade",
+          desc: "Informar dias livres",
+          href: "/dashboard/availability",
+          icon: CalendarCheck,
+          color: "text-emerald-600 dark:text-emerald-400",
+          bg: "bg-emerald-500/10 hover:bg-emerald-500/20",
+          border: "border-emerald-200 dark:border-emerald-800/60",
+        },
+        {
+          label: "Montar Repertório",
+          desc: "Cifras, BPM e louvores",
+          href: "/dashboard/songs",
+          icon: Music,
+          color: "text-purple-600 dark:text-purple-400",
+          bg: "bg-purple-500/10 hover:bg-purple-500/20",
+          border: "border-purple-200 dark:border-purple-800/60",
+        },
+        {
+          label: "Registrar Visitante",
+          desc: "Acolhimento rápido",
+          href: "/dashboard/visitors",
+          icon: UserPlus,
+          color: "text-blue-600 dark:text-blue-400",
+          bg: "bg-blue-500/10 hover:bg-blue-500/20",
+          border: "border-blue-200 dark:border-blue-800/60",
+        },
+        {
+          label: "Novo Integrante",
+          desc: "Cadastrar voluntário",
+          href: "/dashboard/members",
+          icon: Users,
+          color: "text-indigo-600 dark:text-indigo-400",
+          bg: "bg-indigo-500/10 hover:bg-indigo-500/20",
+          border: "border-indigo-200 dark:border-indigo-800/60",
+        },
+        {
+          label: "Enviar Notificação",
+          desc: "Lembretes & avisos",
+          href: "/dashboard/notifications",
+          icon: Send,
+          color: "text-pink-600 dark:text-pink-400",
+          bg: "bg-pink-500/10 hover:bg-pink-500/20",
+          border: "border-pink-200 dark:border-pink-800/60",
+        },
+      ];
+    } else {
+      return [
+        {
+          label: "Minha Disponibilidade",
+          desc: "Atualizar dias livres",
+          href: "/dashboard/availability",
+          icon: CalendarCheck,
+          color: "text-emerald-600 dark:text-emerald-400",
+          bg: "bg-emerald-500/10 hover:bg-emerald-500/20",
+          border: "border-emerald-200 dark:border-emerald-800/60",
+        },
+        {
+          label: "Minhas Escalas",
+          desc: "Consultar convocações",
+          href: "/dashboard/schedules",
+          icon: Calendar,
+          color: "text-blue-600 dark:text-blue-400",
+          bg: "bg-blue-500/10 hover:bg-blue-500/20",
+          border: "border-blue-200 dark:border-blue-800/60",
+        },
+        {
+          label: "Repertório Musical",
+          desc: "Cifras e louvores",
+          href: "/dashboard/songs",
+          icon: Music,
+          color: "text-purple-600 dark:text-purple-400",
+          bg: "bg-purple-500/10 hover:bg-purple-500/20",
+          border: "border-purple-200 dark:border-purple-800/60",
+        },
+        {
+          label: "Mural de Recados",
+          desc: "Avisos da igreja",
+          href: "#church-announcements-feed",
+          icon: Bell,
+          color: "text-orange-600 dark:text-orange-400",
+          bg: "bg-orange-500/10 hover:bg-orange-500/20",
+          border: "border-orange-200 dark:border-orange-800/60",
+        },
+        {
+          label: "Aniversariantes",
+          desc: "Parabenizar irmãos",
+          href: "#aniversariantes-do-mes",
+          icon: Cake,
+          color: "text-pink-600 dark:text-pink-400",
+          bg: "bg-pink-500/10 hover:bg-pink-500/20",
+          border: "border-pink-200 dark:border-pink-800/60",
+        },
+        {
+          label: "Notificações",
+          desc: "Avisos recebidos",
+          href: "/dashboard/notifications",
+          icon: MessageCircle,
+          color: "text-indigo-600 dark:text-indigo-400",
+          bg: "bg-indigo-500/10 hover:bg-indigo-500/20",
+          border: "border-indigo-200 dark:border-indigo-800/60",
+        },
+      ];
+    }
+  }, [canAccessActiveManagement]);
 
   const handleAlertAction = (alert: any) => {
+    if (!canAccessActiveManagement) return;
     if (alert.actionType === "substitute") {
       setSubstituteModal({
         isOpen: true,
@@ -1385,21 +1795,53 @@ export default function DashboardPage() {
         {/* Saudação com Nome da Igreja e Usuário */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-black uppercase tracking-widest text-blue-800 dark:text-blue-400">
-                Painel de Gestão
+                {canAccessActiveManagement ? "Painel de Gestão Ministerial" : "Portal do Integrante"}
               </span>
               {churchName && (
                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                   {churchName}
                 </span>
               )}
+              {isSuperAdmin || isGlobalLeader ? (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 flex items-center gap-1 border border-blue-200 dark:border-blue-800">
+                  <Crown className="w-3 h-3 fill-amber-500 text-amber-500" /> Coordenação Geral & Pastoral
+                </span>
+              ) : hasAnyLeadershipRole ? (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 flex items-center gap-1 border border-amber-200 dark:border-amber-800">
+                  <Crown className="w-3 h-3 fill-amber-500 text-amber-500" /> Líder: {userLedMinistries.map(m => getMinistryLabel(m).replace('Ministério de ', '')).join(', ')}
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                  <Users className="w-3 h-3 text-slate-500" /> Perfil: Integrante / Voluntário
+                </span>
+              )}
             </div>
-            <h1 className="text-3xl sm:text-4xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tight mt-1">
-              Olá, {userData?.name ? userData.name.split(" ")[0] : "Líder"} 👋
+            <h1 className="text-3xl sm:text-4xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tight mt-1 flex items-center gap-2.5 flex-wrap">
+              <span>Olá, {userData?.name ? userData.name.split(" ")[0] : (hasAnyLeadershipRole ? "Líder" : "Voluntário")} 👋</span>
+              <VerifiedBadge
+                verified={Boolean(userData?.emailVerified || userData?.email_verified || user?.emailVerified)}
+                size="sm"
+                showText={true}
+              />
             </h1>
+            {user && !Boolean(userData?.emailVerified || userData?.email_verified || user?.emailVerified) && (
+              <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80 shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                <span>E-mail não confirmado</span>
+                <Link
+                  href={`/verify-email?email=${encodeURIComponent(user.email || userData?.email || "")}&userId=${user.uid}`}
+                  className="font-bold underline hover:text-amber-950 dark:hover:text-amber-100 ml-1 inline-flex items-center gap-1"
+                >
+                  Validar código agora <ArrowRight className="w-3 h-3" />
+                </Link>
+              </div>
+            )}
             <p className="text-sm text-slate-400 dark:text-slate-500 font-medium">
-              Centro de comando com inteligência antecipada para ministérios, voluntários e próximos cultos
+              {canAccessActiveManagement
+                ? `Painel de gestão e indicadores estratégicos do ${getMinistryLabel(selectedLens)}`
+                : "Acompanhe suas escalas, disponibilidade e avisos da igreja"}
             </p>
           </div>
         </div>
@@ -1419,6 +1861,8 @@ export default function DashboardPage() {
             secretariat: pendingVisitorsCount,
             kids: 3,
           }}
+          userLedMinistries={userLedMinistries}
+          isGlobalLeader={isSuperAdmin || isGlobalLeader}
         />
 
         {/* [Ações Rápidas em Grid] Integradas no Cabeçalho */}
@@ -1469,114 +1913,231 @@ export default function DashboardPage() {
       </header>
 
       {/* ========================================================================= */}
-      {/* NÍVEL 2: LINHA 1 (KPIs VITAIS) */}
-      {/* [ % Confirmação Domingo ] [ Buracos Críticos ] [ Risco Sobrecarga ] [ SLA ] */}
+      {/* NOTIFICAÇÃO RÁPIDA: CONFIRMAÇÃO DE PRESENÇA EM 1 CLIQUE */}
       {/* ========================================================================= */}
-      <section className="space-y-4">
-        <VitalKpisRow
-          metrics={{
-            healthScore: kpiMetrics.healthScore,
-            healthSubtext: kpiMetrics.healthSubtext,
-            criticalGapsCount: kpiMetrics.criticalGapsCount,
-            criticalGapsSubtext: kpiMetrics.criticalGapsSubtext,
-            burnoutRiskCount: kpiMetrics.burnoutRiskCount,
-            burnoutSubtext: kpiMetrics.burnoutSubtext,
-            slaVisitorsRate: kpiMetrics.slaVisitorsRate,
-            slaVisitorsSubtext: kpiMetrics.slaVisitorsSubtext,
-            pendingVisitorsCount: pendingVisitorsCount,
-          }}
-          onOpenKpiModal={(id) => setSelectedKpiModal(id)}
-          onToggleGuide={() => setShowKpiGuide(!showKpiGuide)}
-          showGuide={showKpiGuide}
-        />
+      <QuickScheduleConfirmationBanner
+        schedules={allSchedules}
+        currentUserId={userData?.uid || user?.uid}
+        currentUserName={userData?.name || user?.displayName || "Voluntário"}
+        churchName={churchName || "Nossa Igreja"}
+        allMembers={allChurchMembers}
+        isLeader={isLeader}
+        onConfirmationSuccess={(scheduleId, newStatus) => {
+          setRefreshKey((k) => k + 1);
+          triggerToast(
+            newStatus === "confirmed"
+              ? "🎉 Presença confirmada com sucesso em 1 clique!"
+              : "Ausência informada com sucesso."
+          );
+        }}
+      />
 
-        {/* GUIA COMPLETO DOS INDICADORES ESTRATÉGICOS (COLAPSÁVEL) */}
-        <AnimatePresence>
-          {showKpiGuide && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="bg-gradient-to-br from-indigo-50/50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/80 rounded-[2.5rem] border border-indigo-100 dark:border-slate-800 p-6 sm:p-7 shadow-xs">
-                <div className="flex items-center justify-between gap-4 mb-4">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                      Matriz Estratégica dos Indicadores Indispensáveis
-                    </h3>
+      {/* ========================================================================= */}
+      {/* NÍVEL 2: LINHA 1 (KPIs VITAIS OU POLÍTICA DE VISUALIZAÇÃO GERENCIAL) */}
+      {/* ========================================================================= */}
+      {canAccessActiveManagement ? (
+        <section className="space-y-4">
+          <VitalKpisRow
+            metrics={{
+              healthScore: kpiMetrics.healthScore,
+              healthSubtext: kpiMetrics.healthSubtext,
+              criticalGapsCount: kpiMetrics.criticalGapsCount,
+              criticalGapsSubtext: kpiMetrics.criticalGapsSubtext,
+              burnoutRiskCount: kpiMetrics.burnoutRiskCount,
+              burnoutSubtext: kpiMetrics.burnoutSubtext,
+              slaVisitorsRate: kpiMetrics.slaVisitorsRate,
+              slaVisitorsSubtext: kpiMetrics.slaVisitorsSubtext,
+              pendingVisitorsCount: pendingVisitorsCount,
+            }}
+            onOpenKpiModal={(id) => setSelectedKpiModal(id)}
+            onToggleGuide={() => setShowKpiGuide(!showKpiGuide)}
+            showGuide={showKpiGuide}
+          />
+
+          {/* GUIA COMPLETO DOS INDICADORES ESTRATÉGICOS (COLAPSÁVEL) */}
+          <AnimatePresence>
+            {showKpiGuide && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="bg-gradient-to-br from-indigo-50/50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/80 rounded-[2.5rem] border border-indigo-100 dark:border-slate-800 p-6 sm:p-7 shadow-xs">
+                  <div className="flex items-center justify-between gap-4 mb-4">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                        Matriz Estratégica dos Indicadores Indispensáveis
+                      </h3>
+                    </div>
+                    <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
+                      Toque em qualquer card para ver o diagnóstico operacional detalhado
+                    </span>
                   </div>
-                  <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
-                    Toque em qualquer card para ver o diagnóstico operacional detalhado
-                  </span>
-                </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                        <th className="pb-3 pr-4">KPI</th>
-                        <th className="pb-3 px-4">O que mede</th>
-                        <th className="pb-3 pl-4">Por que é indispensável</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-600 dark:text-slate-300">
-                      <tr>
-                        <td className="py-3.5 pr-4 font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          Taxa de Confirmação de Escalas <br />
-                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">(Health Score do Domingo)</span>
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
-                          % de voluntários que já confirmaram presença para o próximo culto (ex: 87% confirmados).
-                        </td>
-                        <td className="py-3.5 pl-4 text-slate-700 dark:text-slate-300 font-medium">
-                          Dá ao líder paz de espírito na quinta/sexta-feira, destacando se faltam posições críticas.
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="py-3.5 pr-4 font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          Buracos Críticos na Escala
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
-                          Número de funções obrigatórias desfalecidas no próximo culto (ex: &quot;Falta 1 Baixista, 1 Projeção&quot;).
-                        </td>
-                        <td className="py-3.5 pl-4 text-slate-700 dark:text-slate-300 font-medium">
-                          Evita surpresas 30 minutos antes do início do culto.
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="py-3.5 pr-4 font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          Índice de Sobrecarga <br />
-                          <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">(Burnout Risk)</span>
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
-                          Voluntários escalados mais de 3 fins de semana consecutivos ou em múltiplos ministérios no mesmo domingo.
-                        </td>
-                        <td className="py-3.5 pl-4 text-slate-700 dark:text-slate-300 font-medium">
-                          Protege a saúde emocional e espiritual da equipe de voluntários.
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="py-3.5 pr-4 font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          Taxa de Contato com Visitantes <br />
-                          <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold">(SLA de Acolhimento)</span>
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
-                          % de visitantes do último domingo contatados em até 48h.
-                        </td>
-                        <td className="py-3.5 pl-4 text-slate-700 dark:text-slate-300 font-medium">
-                          Garante que novos membros não caiam no esquecimento da secretaria.
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          <th className="pb-3 pr-4">KPI</th>
+                          <th className="pb-3 px-4">O que mede</th>
+                          <th className="pb-3 pl-4">Por que é indispensável</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-600 dark:text-slate-300">
+                        <tr>
+                          <td className="py-3.5 pr-4 font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                            Taxa de Confirmação de Escalas <br />
+                            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">(Health Score do Domingo)</span>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
+                            % de voluntários que já confirmaram presença para o próximo culto (ex: 87% confirmados).
+                          </td>
+                          <td className="py-3.5 pl-4 text-slate-700 dark:text-slate-300 font-medium">
+                            Dá ao líder paz de espírito na quinta/sexta-feira, destacando se faltam posições críticas.
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-3.5 pr-4 font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                            Buracos Críticos na Escala
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
+                            Número de funções obrigatórias desfalecidas no próximo culto (ex: &quot;Falta 1 Baixista, 1 Projeção&quot;).
+                          </td>
+                          <td className="py-3.5 pl-4 text-slate-700 dark:text-slate-300 font-medium">
+                            Evita surpresas 30 minutos antes do início do culto.
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-3.5 pr-4 font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                            Índice de Sobrecarga <br />
+                            <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">(Burnout Risk)</span>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
+                            Voluntários escalados mais de 3 fins de semana consecutivos ou em múltiplos ministérios no mesmo domingo.
+                          </td>
+                          <td className="py-3.5 pl-4 text-slate-700 dark:text-slate-300 font-medium">
+                            Protege a saúde emocional e espiritual da equipe de voluntários.
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-3.5 pr-4 font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                            Taxa de Contato com Visitantes <br />
+                            <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold">(SLA de Acolhimento)</span>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
+                            % de visitantes do último domingo contatados em até 48h.
+                          </td>
+                          <td className="py-3.5 pl-4 text-slate-700 dark:text-slate-300 font-medium">
+                            Garante que novos membros não caiam no esquecimento da secretaria.
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* HISTÓRICO DE BURACOS NA ESCALA & ROTATIVIDADE POR MINISTÉRIO (3 MESES) */}
+          <ScheduleGapsAnalyticsWidget
+            schedules={allSchedules}
+            activeLens={selectedLens}
+            churchName={churchName || "Nossa Igreja"}
+          />
+        </section>
+      ) : (
+        /* CARD INFORMATIVO DE POLÍTICA DE VISUALIZAÇÃO GERENCIAL (QUANDO NÃO É LÍDER DA LENTE ATIVA) */
+        <div className="space-y-4">
+          {hasAnyLeadershipRole ? (
+            <div className="bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 rounded-[2.5rem] p-6 sm:p-7 shadow-xs">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/20">
+                    <Lock className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                        Política de Governança Ministerial
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800/60">
+                        Acesso Gerencial Restrito
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-display font-black text-slate-900 dark:text-slate-100">
+                      {selectedLens === "all"
+                        ? "Visão Geral Consolidada Reservada à Coordenação Pastoral"
+                        : `Métricas Gerenciais Restritas à Liderança do ${getMinistryLabel(selectedLens)}`}
+                    </h3>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 max-w-2xl mt-1 leading-relaxed">
+                      {selectedLens === "all"
+                        ? "A visão pastoral integrada engloba diagnósticos e indicadores estratégicos globais de todos os departamentos. Como líder ministerial, você tem autonomia e acesso completo para gerenciar o seu próprio ministério."
+                        : `Você está autenticado com privilégios de Líder de ${userLedMinistries.map(m => getMinistryLabel(m).replace('Ministério de ', '')).join(', ')}. Os indicadores de saúde, riscos de sobrecarga, lacunas críticas e taxas de rotatividade do ${getMinistryLabel(selectedLens)} são restritos aos seus respectivos líderes designados.`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5 shrink-0 self-start md:self-auto flex-wrap">
+                  {userLedMinistries.length > 0 && userLedMinistries[0] !== selectedLens && (
+                    <button
+                      onClick={() => setSelectedLens(userLedMinistries[0])}
+                      className="px-4 py-2.5 rounded-2xl bg-blue-800 hover:bg-blue-900 text-white text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer active:scale-95"
+                    >
+                      <Crown className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      <span>Ir para Gestão de {getMinistryLabel(userLedMinistries[0]).replace('Ministério de ', '')}</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
-            </motion.div>
+            </div>
+          ) : (
+            <div className="bg-gradient-to-br from-blue-50/70 via-white to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/80 rounded-[2.5rem] border border-blue-100 dark:border-slate-800 p-6 sm:p-7 shadow-xs">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-800 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-800/20">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-blue-800 dark:text-blue-400">
+                        Portal do Integrante Voluntário
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50">
+                        Participação Ativa
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-display font-black text-slate-900 dark:text-slate-100">
+                      Suas Escalas, Atividades e Avisos da Igreja
+                    </h3>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 max-w-2xl mt-1 leading-relaxed">
+                      Bem-vindo! Este é o seu espaço operacional para confirmar presenças com 1 clique, consultar ensaios marcados e registrar suas datas livres no calendário. Informações gerenciais de equipe (riscos de fadiga, buracos críticos na escala e relatórios de SLA) são confidenciais e exclusivas para líderes ministeriais e pastores.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 self-start md:self-auto flex-wrap">
+                  <Link
+                    href="/dashboard/availability"
+                    className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer active:scale-95"
+                  >
+                    <CalendarCheck className="w-3.5 h-3.5" />
+                    <span>Atualizar Disponibilidade</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/schedules"
+                    className="px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-2"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>Minhas Escalas</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
           )}
-        </AnimatePresence>
-      </section>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* NÍVEL 3: DISTRIBUIÇÃO EM COLUNA PRINCIPAL (2/3) E COLUNA LATERAL (1/3) */}
@@ -1592,6 +2153,9 @@ export default function DashboardPage() {
         currentMonthName={currentMonthName}
         churchName={churchName || "Nossa Igreja"}
         deptAvailabilityStats={deptAvailabilityStats}
+        criticalDays={criticalAvailabilityData.criticalDays}
+        allDaysAvailability={criticalAvailabilityData.allDaysAvailability}
+        loadingCriticalAvailability={criticalAvailabilityData.loading}
         onAlertAction={handleAlertAction}
         onNudgeAvailability={() => {
           handleAlertAction({
@@ -1602,6 +2166,15 @@ export default function DashboardPage() {
             description: "",
             actionType: "reminder",
           });
+        }}
+        onNudgeCriticalWhatsApp={(selectedDays) => {
+          const daysText = selectedDays && selectedDays.length > 0
+            ? selectedDays.length <= 4
+              ? `nos dias ${selectedDays.join(", ")}`
+              : `em ${selectedDays.length} datas críticas`
+            : "nas datas críticas deste mês";
+          const msg = `Graça e paz, equipe! 🙏 Identificamos que ${daysText} de ${currentMonthName} estamos com menos de 50% de voluntários disponíveis para a escala. Por favor, atualizem sua disponibilidade no app da igreja para conseguirmos montar a escala! Deus abençoe! 🙌`;
+          window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
         }}
         onOpenForgottenSongs={() => {
           handleAlertAction({
@@ -1614,11 +2187,34 @@ export default function DashboardPage() {
           });
         }}
         onCopyBirthdayToast={(name) => triggerToast(`📋 Mensagem de parabéns para ${name} copiada!`)}
+        currentUserId={userData?.uid || user?.uid}
+        rawSchedules={allSchedules}
+        onQuickConfirmPresence={async (scheduleId) => {
+          const userId = userData?.uid || user?.uid;
+          if (!userId) return;
+          try {
+            await updateDoc(doc(db, "schedules", scheduleId), {
+              [`confirmations.${userId}`]: {
+                status: "confirmed",
+                confirmedAt: new Date().toISOString(),
+                userName: userData?.name || user?.displayName || "Voluntário",
+              },
+              confirmedMembers: arrayUnion(userId),
+              declinedMembers: arrayRemove(userId),
+            });
+            setRefreshKey((k) => k + 1);
+            triggerToast("🎉 Presença confirmada com sucesso em 1 clique!");
+          } catch (err) {
+            console.error("Erro ao confirmar presença:", err);
+          }
+        }}
+        churchId={userData?.churchId || ""}
+        canAccessManagement={canAccessActiveManagement}
       />
 
       {/* MODAL DE DIAGNÓSTICO E AÇÃO RÁPIDA DO KPI SELECIONADO */}
         <AnimatePresence>
-          {selectedKpiModal && (
+          {selectedKpiModal && canAccessActiveManagement && (
             <div
               className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/60 backdrop-blur-sm"
               onClick={() => setSelectedKpiModal(null)}
@@ -1753,6 +2349,22 @@ export default function DashboardPage() {
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Preencha essas funções agora para garantir que a equipe ensaie e o culto comece pontualmente.
                     </p>
+
+                    {/* Destaque do Histórico Trimestral */}
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200">
+                        <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+                          <BarChart3 className="w-4 h-4" />
+                          Histórico Trimestral de Buracos
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wider text-slate-400">
+                          Últimos 3 Meses
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                        Multimídia (Áudio/Projeção) e Louvor (Baixo/Bateria) concentram a maior escassez de voluntários e rotatividade no período. Veja o gráfico interativo completo no painel principal.
+                      </p>
+                    </div>
 
                     <div className="pt-4 flex justify-end gap-3">
                       <button

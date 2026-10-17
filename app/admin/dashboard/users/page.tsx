@@ -8,6 +8,7 @@ import { Users, Loader2, Search, X, CheckCircle2, User as UserIcon, Save, Music,
 import { BallerinaIcon } from '@/components/BallerinaIcon';
 import * as Dialog from '@radix-ui/react-dialog';
 import { formatPhone, formatBirthDate } from '@/lib/utils';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 
 interface PlatformUser {
   id: string;
@@ -18,6 +19,8 @@ interface PlatformUser {
   churchId?: string;
   role?: string;
   status?: string;
+  emailVerified?: boolean;
+  email_verified?: boolean;
   createdAt?: any;
   roles?: {
     worship?: string[];
@@ -356,7 +359,13 @@ export default function AdminUsersPage() {
                           {u.name ? u.name.charAt(0) : <UserIcon className="w-5 h-5" />}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-800 dark:text-slate-200">{u.name || 'Sem nome'}</p>
+                          <p className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <span>{u.name || 'Sem nome'}</span>
+                            <VerifiedBadge
+                              verified={Boolean(u.emailVerified || u.email_verified)}
+                              size="xs"
+                            />
+                          </p>
                           <p className="text-xs text-slate-500">{u.email}</p>
                           {u.dataNascimento && (
                             <p className="text-[11px] font-bold text-pink-600 dark:text-pink-400 flex items-center gap-1 mt-0.5">
@@ -408,8 +417,13 @@ export default function AdminUsersPage() {
                       {selectedUser.name ? selectedUser.name.charAt(0) : <UserIcon className="w-8 h-8" />}
                     </div>
                     <div>
-                      <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">
-                        {selectedUser.name || 'Sem nome'}
+                      <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">
+                        <span>{selectedUser.name || 'Sem nome'}</span>
+                        <VerifiedBadge
+                          verified={Boolean(selectedUser.emailVerified || selectedUser.email_verified)}
+                          size="sm"
+                          showText={true}
+                        />
                       </h2>
                       <p className="text-slate-500 dark:text-slate-400">{selectedUser.email}</p>
                     </div>

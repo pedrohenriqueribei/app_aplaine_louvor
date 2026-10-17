@@ -36,6 +36,7 @@ import {
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
+import { auditCreate, auditUpdate, auditDelete } from "@/lib/audit";
 
 interface Song {
   id: string;
@@ -125,12 +126,26 @@ export default function SongsPage() {
     try {
       if (editingSong) {
         const songRef = doc(db, "songs", editingSong.id);
-        await updateDoc(songRef, {
+        const updatePayload = {
           ...formData,
           churchId: userData?.churchId || "",
           updatedAt: serverTimestamp(),
           updatedBy: user.uid,
-        });
+        };
+        await updateDoc(songRef, updatePayload);
+
+        // Record Audit Update (only diff will be stored, no-op if unchanged)
+        auditUpdate(
+          "Song",
+          editingSong.id,
+          formData.title || editingSong.title,
+          editingSong,
+          formData,
+          {
+            churchId: userData?.churchId || "",
+            departmentId: "louvor",
+          }
+        ).catch((err) => console.warn("Audit song update error:", err));
       } else {
         const songRef = doc(collection(db, "songs"));
         const songData = {
@@ -144,6 +159,18 @@ export default function SongsPage() {
           id: songRef.id,
         };
         await setDoc(songRef, songData);
+
+        // Record Audit Create
+        auditCreate(
+          "Song",
+          songRef.id,
+          formData.title,
+          songData,
+          {
+            churchId: userData?.churchId || "",
+            departmentId: "louvor",
+          }
+        ).catch((err) => console.warn("Audit song create error:", err));
       }
 
       setIsModalOpen(false);
@@ -157,7 +184,21 @@ export default function SongsPage() {
   const handleDelete = async (id: string) => {
     if (!confirm("Deseja realmente excluir esta música?")) return;
     try {
+      const songToDelete = songs.find((s) => s.id === id);
       await deleteDoc(doc(db, "songs", id));
+
+      // Record Audit Delete
+      auditDelete(
+        "Song",
+        id,
+        songToDelete?.title || `Música (${id})`,
+        songToDelete || { id },
+        {
+          churchId: userData?.churchId || "",
+          departmentId: "louvor",
+        }
+      ).catch((err) => console.warn("Audit song delete error:", err));
+
       fetchSongs();
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, `songs/${id}`);

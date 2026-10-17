@@ -211,36 +211,55 @@ export default function DanceWorkspace({ churchId }: DanceWorkspaceProps) {
       where("churchId", "==", churchId)
     );
 
-    const unsubChoreo = onSnapshot(choreoQuery, (snap) => {
-      const items = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Choreography[];
+    const unsubChoreo = onSnapshot(
+      choreoQuery,
+      (snap) => {
+        const items = snap.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Choreography[];
 
-      if (items.length === 0 && snap.empty) {
-        // Seed default preview if empty
-        seedDefaults(churchId);
-      } else {
-        setChoreographies(items);
+        if (items.length === 0 && snap.empty) {
+          // Seed default preview if empty
+          seedDefaults(churchId);
+        } else {
+          setChoreographies(items);
+        }
+      },
+      (error) => {
+        console.warn("Choreographies real-time sync notice:", error);
       }
-    });
+    );
 
-    const unsubGroups = onSnapshot(groupsQuery, (snap) => {
-      const items = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as DanceGroup[];
-      setGroups(items);
-    });
+    const unsubGroups = onSnapshot(
+      groupsQuery,
+      (snap) => {
+        const items = snap.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as DanceGroup[];
+        setGroups(items);
+      },
+      (error) => {
+        console.warn("Dance groups real-time sync notice:", error);
+      }
+    );
 
-    const unsubRehearsals = onSnapshot(rehearsalsQuery, (snap) => {
-      const items = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as DanceRehearsal[];
-      setRehearsals(items);
-      setLoading(false);
-    });
+    const unsubRehearsals = onSnapshot(
+      rehearsalsQuery,
+      (snap) => {
+        const items = snap.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as DanceRehearsal[];
+        setRehearsals(items);
+        setLoading(false);
+      },
+      (error) => {
+        console.warn("Dance rehearsals real-time sync notice:", error);
+        setLoading(false);
+      }
+    );
 
     return () => {
       unsubChoreo();
