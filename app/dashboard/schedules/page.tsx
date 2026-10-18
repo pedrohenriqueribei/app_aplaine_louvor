@@ -4220,18 +4220,18 @@ export default function SchedulesPage() {
 
       {/* Detailed Schedule Viewer Popup */}
       {viewSchedule && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 transition-all">
+        <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto transition-all">
           {/* Backdrop */}
           <div
             onClick={() => setSelectedScheduleForView(null)}
-            className="absolute inset-0 bg-slate-950/40 dark:bg-slate-950/80 backdrop-blur-sm transition-opacity"
+            className="fixed inset-0 bg-slate-950/40 dark:bg-slate-950/80 backdrop-blur-sm transition-opacity"
           />
           
           {/* Modal Body */}
-          <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl p-6 sm:p-10 md:p-12 overflow-hidden flex flex-col max-h-[92vh] animate-[fadeIn_0.2s_ease-out]">
+          <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-3xl sm:rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl p-4 sm:p-8 md:p-12 overflow-y-auto max-h-[94vh] sm:max-h-[92vh] flex flex-col my-auto animate-[fadeIn_0.2s_ease-out] custom-scrollbar">
             
-            {/* Header */}
-            <div className="flex justify-between items-start gap-6 border-b border-slate-100 dark:border-slate-800 pb-6 mb-6">
+            {/* Header Sticky */}
+            <div className="sticky -top-4 sm:-top-8 md:-top-12 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md -mx-4 -mt-4 px-4 pt-4 sm:-mx-8 sm:-mt-8 sm:px-8 sm:pt-8 md:-mx-12 md:-mt-12 md:px-12 md:pt-12 pb-4 sm:pb-6 mb-4 sm:mb-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start gap-4 sm:gap-6 shrink-0 shadow-2xs">
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   {isDanceScale ? (
@@ -4419,8 +4419,8 @@ export default function SchedulesPage() {
               );
             })()}
 
-            {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto pr-2 sm:pr-4 custom-scrollbar space-y-8">
+            {/* Conteúdo Principal da Escala (Rola com a pop-up inteira) */}
+            <div className="flex-1 space-y-6 sm:space-y-8">
               
               {/* Observações / Notas */}
               {viewSchedule.notes && viewSchedule.notes.trim() && (
@@ -4486,7 +4486,7 @@ export default function SchedulesPage() {
 
               {/* Seção de Ensaio e Playlist da Escala (Ministro Principal) */}
               {isWorshipScale && (
-                <div className="p-6 bg-gradient-to-br from-blue-50/30 to-indigo-50/20 dark:from-blue-950/10 dark:to-indigo-950/5 border border-blue-100/40 dark:border-blue-900/20 rounded-[2rem] space-y-5">
+                <div className="p-4 sm:p-6 bg-gradient-to-br from-blue-50/30 to-indigo-50/20 dark:from-blue-950/10 dark:to-indigo-950/5 border border-blue-100/40 dark:border-blue-900/20 rounded-2xl sm:rounded-[2rem] space-y-4 sm:space-y-5">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
                       <h4 className="text-xs font-black uppercase tracking-widest text-blue-900 dark:text-blue-400 flex items-center gap-2">
@@ -4506,7 +4506,7 @@ export default function SchedulesPage() {
                           setPlaylistSearchTerm("");
                           setIsPlaylistModalOpen(true);
                         }}
-                        className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-md space-x-1.5 transition-all active:scale-95 flex items-center"
+                        className="w-full sm:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-md space-x-1.5 transition-all active:scale-95 flex items-center justify-center cursor-pointer"
                         id="btn-manage-playlist"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -4517,7 +4517,7 @@ export default function SchedulesPage() {
 
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
                     {/* Detalhes do Ensaio - Compacto e organizado (lg:col-span-4) */}
-                    <div className="lg:col-span-4 p-5 bg-white dark:bg-slate-900/60 rounded-3xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between shadow-xs">
+                    <div className="lg:col-span-4 p-4 sm:p-5 bg-white dark:bg-slate-900/60 rounded-2xl sm:rounded-3xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between shadow-xs">
                       <div>
                         <div className="flex items-center gap-2 mb-3">
                           <span className="p-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-xl">
@@ -4562,14 +4562,14 @@ export default function SchedulesPage() {
                     </div>
 
                     {/* Detalhes da Playlist - DESTAQUE PRINCIPAL (lg:col-span-8, muito mais visível) */}
-                    <div className="lg:col-span-8 p-5 sm:p-6 bg-gradient-to-br from-indigo-50/50 via-white to-blue-50/30 dark:from-slate-900 dark:via-slate-900/90 dark:to-slate-850 rounded-3xl border-2 border-indigo-100 dark:border-indigo-900/40 shadow-sm space-y-4">
+                    <div className="lg:col-span-8 p-4 sm:p-6 bg-gradient-to-br from-indigo-50/50 via-white to-blue-50/30 dark:from-slate-900 dark:via-slate-900/90 dark:to-slate-850 rounded-2xl sm:rounded-3xl border-2 border-indigo-100 dark:border-indigo-900/40 shadow-sm space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100/60 dark:border-slate-800 pb-3">
                         <div className="flex items-center gap-2.5">
-                          <span className="p-2.5 bg-indigo-600 text-white rounded-2xl shadow-md shadow-indigo-600/20">
+                          <span className="p-2 sm:p-2.5 bg-indigo-600 text-white rounded-2xl shadow-md shadow-indigo-600/20 shrink-0">
                             <Music className="w-4 h-4" />
                           </span>
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <h4 className="text-sm font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight">
                                 Músicas para Estudo
                               </h4>
@@ -4585,7 +4585,7 @@ export default function SchedulesPage() {
                       </div>
 
                       {viewSchedule.playlist && viewSchedule.playlist.length > 0 ? (
-                        <div className="space-y-2 max-h-80 overflow-y-auto pr-1.5 custom-scrollbar">
+                        <div className="space-y-2 sm:max-h-96 sm:overflow-y-auto pr-0 sm:pr-1.5 custom-scrollbar">
                           {viewSchedule.playlist.map((songId) => {
                             const songObj = songs.find((s) => s.id === songId) || personalSongs.find((s) => s.id === songId);
                             const songKey = songObj?.key?.trim();
@@ -5309,7 +5309,7 @@ export default function SchedulesPage() {
 
                     {/* Lista de Músicas */}
                     {allWorshipSongIdsForDance.length > 0 ? (
-                      <div className="space-y-2 max-h-80 overflow-y-auto pr-1.5 custom-scrollbar">
+                      <div className="space-y-2 sm:max-h-96 sm:overflow-y-auto pr-0 sm:pr-1.5 custom-scrollbar">
                         {filteredDanceWorshipSongIds.length > 0 ? (
                           filteredDanceWorshipSongIds.map((songId, idx) => {
                             const songObj = songs.find((s) => s.id === songId) || personalSongs.find((s) => s.id === songId);
