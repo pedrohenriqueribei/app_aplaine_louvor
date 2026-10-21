@@ -1,6 +1,6 @@
 {
-  "summary": "Plano de implementação da barra superior fixa flutuante com efeito de vidro fosco, ativada após a rolagem da página em todo o sistema. Contém título da página, notificações, busca, alternador de tema e perfil de usuário compacto.",
-  "updatedAt": "2026-10-17T13:11:33.751218741Z",
+  "summary": "Plano de implementação completo para a funcionalidade de foto de perfil no Applaine, incluindo upload do dispositivo com compressão otimizada, modal interativo de recorte/zoom com máscara circular, atualização simultânea no Firebase Auth e Firestore, sincronização em tempo real nos componentes de interface (barra flutuante, perfil e listagem de membros) e regras de segurança do Firestore.",
+  "updatedAt": "2026-10-20T02:04:46.155034972Z",
   "requestFeedback": true,
   "userFacing": true
 }

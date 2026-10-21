@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth, db, handleFirestoreError, OperationType } from '@/lib/firebase';
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, query, where, getDocs, collection, deleteDoc } from 'firebase/firestore';
 
@@ -15,6 +15,7 @@ interface AuthContextType {
   signUpWithEmail: (email: string, pass: string, name: string, data: { phone: string, instruments: string[], vocalRange: string, churchId?: string, roles?: { worship?: string[], multimedia?: string[], secretariat?: string[], dance?: string[] }, danceStyles?: string[], danceGroups?: string[], [key: string]: any }) => Promise<void>;
   markEmailVerified: () => void;
   refreshUserData: () => Promise<void>;
+  updateUserProfilePhoto: (photoURL: string | null, targetUserId?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -272,6 +273,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateUserProfilePhoto = async (photoURL: string | null, targetUserId?: string) => {
+    const targetUid = targetUserId || auth.currentUser?.uid;
+    if (!targetUid) return;
+
+    const isCurrent = !targetUserId || targetUserId === auth.currentUser?.uid;
+
+    try {
+      // 1. Atualiza no Firestore (onde a foto em base64/URL é armazenada com segurança)
+      await updateDoc(doc(db, 'users', targetUid), {
+        photoURL: photoURL || null,
+        updatedAt: serverTimestamp(),
+      });
+
+      // 2. Atualiza o estado em memória para atualização instantânea em toda a interface
+      if (isCurrent) {
+        setUserData((prev: any) =>
+          prev ? { ...prev, photoURL: photoURL || null } : prev
+        );
+      }
+
+      // 3. Atualiza o perfil do Firebase Auth apenas se for URL válida curta (<= 2000 caracteres) ou remoção
+      // O Firebase Auth rejeita strings base64 longas com o erro auth/invalid-profile-attribute
+      if (isCurrent && auth.currentUser) {
+        try {
+          if (!photoURL) {
+            await updateProfile(auth.currentUser, { photoURL: '' });
+          } else if (!photoURL.startsWith('data:') && photoURL.length <= 2000) {
+            await updateProfile(auth.currentUser, { photoURL });
+          }
+          setUser({ ...auth.currentUser } as User);
+        } catch (authErr) {
+          console.warn('Firebase Auth updateProfile photoURL ignorado (gerenciado pelo Firestore):', authErr);
+        }
+      }
+    } catch (err) {
+      console.error('Error updating profile photo in Firestore:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `users/${targetUid}`);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -284,6 +325,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUpWithEmail,
         markEmailVerified,
         refreshUserData,
+        updateUserProfilePhoto,
       }}
     >
       {children}

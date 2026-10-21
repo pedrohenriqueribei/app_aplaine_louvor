@@ -121,9 +121,36 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main ref={mainRef} className="flex-1 p-6 md:p-12 overflow-y-auto">
-        <header className="flex justify-end mb-8 md:mb-12">
-          <ThemeToggle />
+      <main ref={mainRef} className="flex-1 p-4 sm:p-6 md:p-10 lg:p-12 overflow-y-auto">
+        <header className="mb-8 md:mb-10 pb-6 border-b border-slate-200/80 dark:border-slate-800/80">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 dark:text-slate-500 mb-1 tracking-wide">
+                <span>Applane</span>
+                <span>/</span>
+                <span className="text-blue-600 dark:text-blue-400 font-bold">Super Admin</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-display font-black text-slate-900 dark:text-slate-50 tracking-tight">
+                {getAdminPageTitle()}
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-normal mt-1">
+                Controle global de igrejas, usuários, auditoria e diretrizes do sistema.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              <Link
+                href="/dashboard"
+                className="px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-blue-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all shadow-xs"
+              >
+                Voltar ao Portal
+              </Link>
+              <ThemeToggle
+                className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-blue-800 dark:hover:text-blue-400 transition-all shadow-xs"
+                iconClassName="w-4 h-4"
+              />
+            </div>
+          </div>
         </header>
         {children}
       </main>

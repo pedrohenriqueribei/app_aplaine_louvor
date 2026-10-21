@@ -51,6 +51,7 @@
             "quietHoursEnd": { "type": "string" }
           }
         },
+        "photoURL": { "type": "string", "description": "URL ou payload otimizado da foto de perfil do usuário" },
         "emailVerified": { "type": "boolean", "description": "Status de validação de e-mail do usuário" },
         "email_verified": { "type": "boolean", "description": "Status de validação de e-mail do usuário" },
         "emailVerifiedAt": { "type": "string", "format": "date-time", "description": "Data de verificação do e-mail" },

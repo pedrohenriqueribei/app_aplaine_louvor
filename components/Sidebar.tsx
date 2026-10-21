@@ -24,6 +24,7 @@ import {
   Briefcase
 } from 'lucide-react';
 import { BallerinaIcon } from '@/components/BallerinaIcon';
+import { UserAvatar } from '@/components/UserAvatar';
 import { cn } from '@/lib/utils';
 import { auth, db } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
@@ -49,7 +50,7 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const { userData, isSuperAdmin } = useAuth();
+  const { user, userData, isSuperAdmin } = useAuth();
 
   const isMinistryRoute = pathname.includes('/ministries');
   const [isMinistriesExpanded, setIsMinistriesExpanded] = useState<boolean>(isMinistryRoute);
@@ -72,6 +73,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   useEffect(() => {
     let isMounted = true;
     async function resolveChurch() {
+      if (!auth.currentUser && !user) return;
+
       const urlMatch = pathname?.match(/\/dashboard\/churches\/([^/]+)/);
       const targetId = urlMatch?.[1] || userData?.churchId;
 
@@ -83,7 +86,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             setChurchData(churchDoc.data() as any);
           }
         } catch (err) {
-          console.error('Error fetching church in sidebar:', err);
+          console.warn('Could not fetch church details in sidebar:', err);
         }
       } else {
         try {
@@ -94,7 +97,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             setChurchData(first.data() as any);
           }
         } catch (err) {
-          console.error('Error fetching default church in sidebar:', err);
+          console.warn('Could not fetch default church in sidebar:', err);
         }
       }
     }
@@ -103,7 +106,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     return () => {
       isMounted = false;
     };
-  }, [pathname, userData?.churchId]);
+  }, [pathname, userData?.churchId, user]);
 
   // List of all church ministries
   const ministryList = useMemo(() => {
@@ -296,10 +299,33 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         ))}
       </nav>
 
-      <div className="pt-4 mt-auto">
+      <div className="pt-4 mt-auto border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+        {(userData || user) && (
+          <Link
+            href={`/dashboard/members/${userData?.uid || user?.uid || ""}`}
+            onClick={onClose}
+            className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group cursor-pointer"
+            title="Ver meu perfil"
+          >
+            <UserAvatar
+              photoURL={userData?.photoURL || user?.photoURL}
+              name={userData?.name || user?.displayName || "Usuário"}
+              size="sm"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-blue-800 dark:group-hover:text-blue-400 transition-colors leading-tight">
+                {userData?.name || user?.displayName || "Meu Perfil"}
+              </p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate leading-tight mt-0.5">
+                {userData?.email || user?.email || ""}
+              </p>
+            </div>
+          </Link>
+        )}
+
         <button 
           onClick={() => signOut(auth)}
-          className="w-full flex items-center gap-4 px-5 py-3 rounded-2xl text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all font-bold group cursor-pointer"
+          className="w-full flex items-center gap-4 px-5 py-2.5 rounded-2xl text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all font-bold group cursor-pointer text-sm"
         >
           <LogOut className="w-5 h-5 text-slate-300 dark:text-slate-700 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors" />
           Sair

@@ -92,6 +92,7 @@ import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { detectAllScheduleConflicts, type ScheduleConflictSummary } from "@/lib/scheduleConflicts";
 import { ScheduleConflictBadge } from "@/components/ScheduleConflictBadge";
 import { QuickScheduleConfirmationBanner } from "@/components/QuickScheduleConfirmationBanner";
+import { resolveScheduleMinistries, type ScheduleMinistryBadge } from "@/lib/ministryUtils";
 
 interface BirthdayMember {
   uid: string;
@@ -109,7 +110,11 @@ interface BirthdayMember {
 interface UpcomingScheduleSummary {
   id: string;
   date: string;
-  ministry?: "worship" | "multimedia" | "dance";
+  ministry?: "worship" | "multimedia" | "dance" | "secretariat" | "kids" | string;
+  ministries?: string[];
+  ministryBadgeLabels?: ScheduleMinistryBadge[];
+  primaryLabel?: string;
+  primaryBadgeColor?: string;
   locationName?: string;
   membersCount: number;
   songsCount: number;
@@ -310,6 +315,7 @@ export default function DashboardPage() {
 
   const [resetSent, setResetSent] = useState(false);
   const [churchDepartments, setChurchDepartments] = useState<any[]>([]);
+  const [churchData, setChurchData] = useState<any>(null);
 
   const isSuperAdmin = Boolean(
     userData?.role === "super_admin" ||
@@ -422,15 +428,15 @@ export default function DashboardPage() {
   const getMinistryLabel = (lens: MinistryLens) => {
     switch (lens) {
       case "worship":
-        return "Ministério de Louvor";
+        return churchData?.worshipMinistryName || "Ministério de Louvor";
       case "multimedia":
-        return "Ministério de Multimídia";
+        return churchData?.multimediaMinistryName || "Ministério de Multimídia";
       case "dance":
-        return "Ministério de Dança";
+        return churchData?.danceMinistryName || "Ministério de Dança";
       case "secretariat":
-        return "Secretaria & Acolhimento";
+        return churchData?.secretariatMinistryName || "Secretaria & Acolhimento";
       case "kids":
-        return "Ministério Infantil";
+        return churchData?.kidsMinistryName || "Ministério Infantil";
       case "all":
         return "Visão Geral Pastoral";
       default:
@@ -514,7 +520,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function fetchData() {
-      if (!userData) return;
+      if (!userData || !user || !auth.currentUser) return;
 
       try {
         const hasChurch = Boolean(userData.churchId && userData.churchId.trim() !== "");
@@ -577,8 +583,11 @@ export default function DashboardPage() {
           });
         }
 
+        let churchDocData: any = null;
         if (churchesSnap && "docs" in churchesSnap && Array.isArray((churchesSnap as any).docs) && (churchesSnap as any).docs.length > 0) {
           const cData = (churchesSnap as any).docs[0]?.data();
+          churchDocData = cData;
+          setChurchData(cData);
           if (cData?.name) {
             setChurchName(cData.name);
           }
@@ -662,19 +671,29 @@ export default function DashboardPage() {
           const roles = s.roles || {};
           const missing: string[] = [];
 
-          if (!s.ministry || s.ministry === "worship") {
+          // Resolução precisa e contextual do ministério e selos oficiais
+          const resolved = resolveScheduleMinistries(
+            s,
+            churchDocData,
+            churchDocData?.departments || [],
+            selectedLens
+          );
+
+          if (resolved.ministries.includes("worship")) {
             if (!roles.mainMinister) missing.push("Ministro");
             if (!roles.drummer) missing.push("Bateria");
             if (!roles.bassist) missing.push("Baixo");
             if (!roles.keyboardist && !roles.acousticGuitarist && !roles.electricGuitarist) {
               missing.push("Harmonia (Teclado/Violão)");
             }
-          } else if (s.ministry === "multimedia") {
+          }
+          if (resolved.ministries.includes("multimedia")) {
             const pc = roles.pcOperators || [];
             const audio = roles.audioOperators || [];
             if (!pc.length || !pc[0]) missing.push("Projeção");
             if (!audio.length || !audio[0]) missing.push("Áudio");
-          } else if (s.ministry === "dance") {
+          }
+          if (resolved.ministries.includes("dance")) {
             const dancers = roles.dancers || [];
             if (!dancers.length || dancers.every((d: string) => !d)) missing.push("Dançarinos");
           }
@@ -685,7 +704,11 @@ export default function DashboardPage() {
           return {
             id: s.id,
             date: s.date,
-            ministry: s.ministry || "worship",
+            ministry: resolved.primary,
+            ministries: resolved.ministries,
+            ministryBadgeLabels: resolved.badges,
+            primaryLabel: resolved.primaryLabel,
+            primaryBadgeColor: resolved.primaryBadgeColor,
             locationName: s.locationName,
             membersCount,
             songsCount,
@@ -1127,11 +1150,15 @@ export default function DashboardPage() {
       } catch (err: any) {
         setDeptAvailabilityStats((prev) => ({ ...prev, loading: false }));
         setCriticalAvailabilityData((prev) => ({ ...prev, loading: false }));
-        handleFirestoreError(err, OperationType.LIST, "dashboard");
+        console.warn("Dashboard fetchData warning:", err);
+        if (auth.currentUser && user) {
+          handleFirestoreError(err, OperationType.LIST, "dashboard");
+        }
       }
     }
     fetchData();
   }, [
+    user,
     userData,
     isLeader,
     isDanceLeader,
@@ -1344,6 +1371,13 @@ export default function DashboardPage() {
     return upcomingSchedules.map((s) => {
       const isCritical = s.missingRoles.length >= 2;
       const isWarning = s.missingRoles.length > 0;
+      const displayBadges = s.ministryBadgeLabels?.map((b) => b.shortLabel) || [
+        s.ministry === "dance"
+          ? churchData?.danceMinistryAcronym || "Dança"
+          : s.ministry === "multimedia"
+            ? churchData?.multimediaMinistryAcronym || "Mídia"
+            : churchData?.worshipMinistryAcronym || "Louvor",
+      ];
       return {
         date: s.date,
         title: `Culto de ${formatScheduleDate(s.date)}`,
@@ -1353,32 +1387,33 @@ export default function DashboardPage() {
         confirmedSlots: s.membersCount,
         missingRoles: s.missingRoles,
         scheduleId: s.id,
-        ministries: [
-          s.ministry === "dance"
-            ? "Dança"
-            : s.ministry === "multimedia"
-              ? "Mídia"
-              : "Louvor",
-        ],
+        ministries: displayBadges,
       };
     });
-  }, [upcomingSchedules]);
+  }, [upcomingSchedules, churchData]);
 
   const filteredUpcomingSchedules = useMemo(() => {
     if (selectedLens === "all") return upcomingSchedules;
-    if (selectedLens === "dance") {
-      const match = upcomingSchedules.filter((s) => s.ministry === "dance");
-      return match.length > 0 ? match : upcomingSchedules;
-    }
-    if (selectedLens === "multimedia") {
-      const match = upcomingSchedules.filter((s) => s.ministry === "multimedia");
-      return match.length > 0 ? match : upcomingSchedules;
-    }
-    if (selectedLens === "worship") {
-      const match = upcomingSchedules.filter((s) => !s.ministry || s.ministry === "worship");
-      return match.length > 0 ? match : upcomingSchedules;
-    }
-    return upcomingSchedules;
+    return upcomingSchedules.filter((s) => {
+      if (s.ministries && s.ministries.length > 0) {
+        return s.ministries.some((m) => {
+          const lm = m.toLowerCase();
+          if (selectedLens === "dance") return lm.includes("dan");
+          if (selectedLens === "multimedia") return lm.includes("multi") || lm.includes("midia") || lm.includes("mídia");
+          if (selectedLens === "worship") return lm.includes("worship") || lm.includes("louvor");
+          if (selectedLens === "secretariat") return lm.includes("sec") || lm.includes("acolh");
+          if (selectedLens === "kids") return lm.includes("kid") || lm.includes("infan");
+          return lm === selectedLens;
+        });
+      }
+      const rawMin = String(s.ministry || "").toLowerCase();
+      if (selectedLens === "dance") return rawMin.includes("dan");
+      if (selectedLens === "multimedia") return rawMin.includes("multi") || rawMin.includes("midia") || rawMin.includes("mídia");
+      if (selectedLens === "worship") return rawMin.includes("worship") || rawMin.includes("louvor");
+      if (selectedLens === "secretariat") return rawMin.includes("sec") || rawMin.includes("acolh");
+      if (selectedLens === "kids") return rawMin.includes("kid") || rawMin.includes("infan");
+      return rawMin === selectedLens;
+    });
   }, [upcomingSchedules, selectedLens]);
 
   const smartKpis = [
@@ -2210,6 +2245,8 @@ export default function DashboardPage() {
         }}
         churchId={userData?.churchId || ""}
         canAccessManagement={canAccessActiveManagement}
+        selectedLens={selectedLens}
+        churchData={churchData}
       />
 
       {/* MODAL DE DIAGNÓSTICO E AÇÃO RÁPIDA DO KPI SELECIONADO */}

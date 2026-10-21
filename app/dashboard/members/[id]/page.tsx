@@ -29,6 +29,8 @@ import {
 } from "@/lib/utils";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { UserAvatar } from "@/components/UserAvatar";
+import { ProfilePhotoCropModal } from "@/components/ProfilePhotoCropModal";
 import {
   ArrowLeft,
   Mail,
@@ -53,6 +55,7 @@ import {
   AlertTriangle,
   Sparkles,
   Cake,
+  Camera,
 } from "lucide-react";
 
 interface Musician {
@@ -60,6 +63,7 @@ interface Musician {
   name: string;
   email: string;
   phone: string;
+  photoURL?: string | null;
   dataNascimento?: Date | Timestamp | string | null;
   instruments: string[];
   vocalRange: string;
@@ -94,7 +98,7 @@ interface Band {
 export default function MusicianProfilePage() {
   const { id } = useParams();
   const router = useRouter();
-  const { user, isSuperAdmin, userData } = useAuth();
+  const { user, isSuperAdmin, userData, updateUserProfilePhoto } = useAuth();
   const [musician, setMusician] = useState<Musician | null>(null);
   const [churchName, setChurchName] = useState<string>("---");
   const [churches, setChurches] = useState<{ id: string; name: string }[]>([]);
@@ -103,6 +107,7 @@ export default function MusicianProfilePage() {
   const [lastScheduleDate, setLastScheduleDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"info" | "songs">("info");
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
   // Edit Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -634,10 +639,17 @@ export default function MusicianProfilePage() {
         <div className="relative px-8 md:px-12 pb-12">
           {/* Avatar Area */}
           <div className="flex flex-col md:flex-row md:items-end gap-6 -mt-16 mb-10">
-            <div className="w-32 h-32 bg-white dark:bg-slate-900 rounded-[2.5rem] p-2 shadow-2xl">
-              <div className="w-full h-full bg-slate-50 dark:bg-slate-800 rounded-[2rem] flex items-center justify-center text-blue-800 dark:text-blue-400 text-4xl font-black border border-slate-100 dark:border-slate-700">
-                {musician.name.charAt(0)}
-              </div>
+            <div className="w-32 h-32 bg-white dark:bg-slate-900 rounded-[2.5rem] p-2 shadow-2xl shrink-0 flex items-center justify-center">
+              <UserAvatar
+                photoURL={musician.photoURL || (id === user?.uid ? (userData?.photoURL || user?.photoURL) : null)}
+                name={musician.name}
+                size="2xl"
+                className="w-full h-full"
+                editable={Boolean(id === user?.uid || isSuperAdmin || isCurrentUserLeader)}
+                onEditClick={() => setIsPhotoModalOpen(true)}
+                onClick={() => (id === user?.uid || isSuperAdmin || isCurrentUserLeader) && setIsPhotoModalOpen(true)}
+                title={id === user?.uid || isSuperAdmin || isCurrentUserLeader ? "Clique para alterar a foto de perfil" : musician.name}
+              />
             </div>
             <div className="pb-4">
               <div className="flex items-center gap-2.5 flex-wrap">
@@ -684,6 +696,18 @@ export default function MusicianProfilePage() {
               </div>
             </div>
             <div className="md:ml-auto pb-4 flex flex-wrap items-center gap-3">
+              {Boolean(id === user?.uid || isSuperAdmin || isCurrentUserLeader) && (
+                <button
+                  type="button"
+                  onClick={() => setIsPhotoModalOpen(true)}
+                  className="bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 px-4 py-3 rounded-2xl font-bold flex items-center gap-2 transition-all active:scale-95 cursor-pointer shadow-sm text-sm"
+                  title="Alterar ou remover foto de perfil"
+                >
+                  <Camera className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>Foto</span>
+                </button>
+              )}
+
               <button
                 id="edit-profile-btn"
                 onClick={handleOpenEdit}
@@ -1631,6 +1655,20 @@ export default function MusicianProfilePage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Modal de Envio e Recorte de Foto de Perfil */}
+      {Boolean(id === user?.uid || isSuperAdmin || isCurrentUserLeader) && (
+        <ProfilePhotoCropModal
+          isOpen={isPhotoModalOpen}
+          onClose={() => setIsPhotoModalOpen(false)}
+          currentPhotoURL={musician.photoURL || (id === user?.uid ? (userData?.photoURL || user?.photoURL) : null)}
+          userName={musician.name}
+          onSavePhoto={async (newPhotoURL) => {
+            await updateUserProfilePhoto(newPhotoURL, id as string);
+            setMusician((prev) => (prev ? { ...prev, photoURL: newPhotoURL } : prev));
+          }}
+        />
+      )}
     </div>
   );
 }

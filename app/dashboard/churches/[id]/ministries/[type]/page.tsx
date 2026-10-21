@@ -465,17 +465,15 @@ export default function MinistryDetailPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-12 pb-20 text-slate-800 dark:text-slate-100">
-      <header className="flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 text-slate-400 dark:text-slate-500 hover:text-blue-800 dark:hover:text-blue-400 font-bold transition-colors group"
+          className="inline-flex items-center gap-2.5 px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-800 shadow-xs transition-all text-sm font-semibold group cursor-pointer active:scale-95"
         >
-          <div className="w-10 h-10 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center border border-slate-100 dark:border-slate-800 group-hover:border-blue-100 dark:group-hover:border-blue-900 group-hover:shadow-lg transition-all">
-            <ArrowLeft className="w-5 h-5" />
-          </div>
+          <ArrowLeft className="w-4 h-4 text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:-translate-x-0.5 transition-all" />
           <span>Voltar para a Igreja</span>
         </button>
-      </header>
+      </div>
 
       <section className="bg-white dark:bg-slate-900 rounded-[4rem] p-12 border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
         <div

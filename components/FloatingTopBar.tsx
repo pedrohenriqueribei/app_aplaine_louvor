@@ -3,9 +3,12 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, Search, User as UserIcon, Menu, ArrowUp } from "lucide-react";
+import { Bell, Search, User as UserIcon, Menu, ArrowUp, Camera } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { UserAvatar } from "@/components/UserAvatar";
+import { ProfilePhotoCropModal } from "@/components/ProfilePhotoCropModal";
+import { useAuth } from "@/components/AuthProvider";
 
 export interface FloatingTopBarProps {
   title: string;
@@ -35,7 +38,9 @@ export function FloatingTopBar({
   isAdmin = false,
 }: FloatingTopBarProps) {
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const router = useRouter();
+  const { updateUserProfilePhoto } = useAuth();
 
   useEffect(() => {
     const checkScroll = (e?: Event) => {
@@ -169,7 +174,10 @@ export function FloatingTopBar({
               </button>
             )}
 
-            <ThemeToggle />
+            <ThemeToggle
+              className="p-2 sm:p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-800 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all shadow-xs"
+              iconClassName="w-4 h-4"
+            />
 
             {!isAdmin && (
               <button
@@ -183,9 +191,8 @@ export function FloatingTopBar({
               >
                 <Bell className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75 animate-ping" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500 border border-white dark:border-slate-900" />
+                  <span className="absolute -top-1 -right-1 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-red-600 text-white text-[9px] font-bold shadow-xs">
+                    {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}
               </button>
@@ -195,26 +202,27 @@ export function FloatingTopBar({
 
             {/* Perfil Compacto */}
             {user && (
-              <Link
-                href={defaultProfileHref}
-                className="flex items-center gap-2.5 py-1 px-1.5 sm:pr-3 rounded-xl border border-slate-200/80 dark:border-slate-800 hover:border-blue-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all cursor-pointer group shadow-xs"
-                title="Meu Perfil"
-              >
-                <div className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-50 dark:bg-blue-900/30 rounded-lg flex items-center justify-center text-blue-800 dark:text-blue-400 font-bold overflow-hidden shrink-0">
-                  {user?.photoURL ? (
-                    <img
-                      src={user.photoURL}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <UserIcon className="w-4 h-4 text-blue-500" />
-                  )}
+              <div className="flex items-center gap-1.5 py-0.5 px-1 sm:pr-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 hover:border-blue-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all shadow-xs">
+                {/* Avatar com gatilho direto para alterar foto */}
+                <div className="relative group/avatar">
+                  <UserAvatar
+                    photoURL={userData?.photoURL || user?.photoURL}
+                    name={userData?.name || user?.displayName || "Usuário"}
+                    size="sm"
+                    editable={true}
+                    onEditClick={() => setIsPhotoModalOpen(true)}
+                    onClick={() => setIsPhotoModalOpen(true)}
+                    title="Clique para alterar a foto de perfil"
+                  />
                 </div>
 
-                <div className="hidden sm:block text-left max-w-[120px] md:max-w-[160px]">
+                <Link
+                  href={defaultProfileHref}
+                  className="hidden sm:block text-left max-w-[120px] md:max-w-[160px] pl-1 group/name cursor-pointer"
+                  title="Meu Perfil"
+                >
                   <div className="flex items-center gap-1">
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate leading-tight group-hover:text-blue-700 dark:group-hover:text-blue-400">
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate leading-tight group-hover/name:text-blue-700 dark:group-hover/name:text-blue-400">
                       {userData?.name || user?.displayName || "Usuário"}
                     </p>
                     <VerifiedBadge
@@ -231,11 +239,24 @@ export function FloatingTopBar({
                       {userRoleTitle}
                     </p>
                   )}
-                </div>
-              </Link>
+                </Link>
+              </div>
             )}
           </div>
         </div>
-    </aside>
-  );
-}
+
+        {/* Modal de Foto de Perfil */}
+        {user && (
+          <ProfilePhotoCropModal
+            isOpen={isPhotoModalOpen}
+            onClose={() => setIsPhotoModalOpen(false)}
+            currentPhotoURL={userData?.photoURL || user?.photoURL}
+            userName={userData?.name || user?.displayName || "Meu Perfil"}
+            onSavePhoto={async (newPhotoURL) => {
+              await updateUserProfilePhoto(newPhotoURL);
+            }}
+          />
+        )}
+      </aside>
+    );
+  }

@@ -34,10 +34,13 @@ import {
   Eye,
   Cake,
   Calendar,
+  Camera,
 } from "lucide-react";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
 import { SentBroadcastsManager } from "@/components/SentBroadcastsManager";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { UserAvatar } from "@/components/UserAvatar";
+import { ProfilePhotoCropModal } from "@/components/ProfilePhotoCropModal";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { motion } from "motion/react";
@@ -55,6 +58,7 @@ interface Member {
   name: string;
   email: string;
   status: "active" | "inactive";
+  photoURL?: string | null;
   dataNascimento?: Date | Timestamp | string | null;
   instruments?: string[];
   phone?: string;
@@ -72,7 +76,7 @@ interface Member {
 }
 
 export default function MembersPage() {
-  const { user, userData, isSuperAdmin } = useAuth();
+  const { user, userData, isSuperAdmin, updateUserProfilePhoto } = useAuth();
   const [userProfile, setUserProfile] = useState<Member | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [memberLastSchedules, setMemberLastSchedules] = useState<Record<string, { date: string; formatted: string }>>({});
@@ -84,6 +88,7 @@ export default function MembersPage() {
   const [activeTab, setActiveTab] = useState<"all" | "worship" | "multimedia" | "dance" | "secretariat">("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [photoTargetMember, setPhotoTargetMember] = useState<Member | null>(null);
   const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
   const [isSentBroadcastsModalOpen, setIsSentBroadcastsModalOpen] = useState(false);
   const [broadcastData, setBroadcastData] = useState({
@@ -1264,9 +1269,12 @@ export default function MembersPage() {
                     href={`/dashboard/members/${member.uid}`}
                     className="flex items-center gap-4 hover:opacity-80 transition-opacity group/link"
                   >
-                    <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-blue-800 dark:text-blue-400 font-black group-hover/link:bg-blue-100 dark:group-hover/link:bg-blue-900/50 transition-colors">
-                      {member.name.charAt(0)}
-                    </div>
+                    <UserAvatar
+                      photoURL={member.photoURL}
+                      name={member.name}
+                      size="lg"
+                      className="group-hover/link:ring-2 ring-blue-500/30 transition-all shrink-0"
+                    />
                     <div>
                       <p className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 group-hover/link:text-blue-800 dark:group-hover/link:text-blue-400 transition-colors">
                         <span>{member.name}</span>
@@ -1593,9 +1601,32 @@ export default function MembersPage() {
           <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl p-12 overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-800/10 blur-[100px] -mr-32 -mt-32"></div>
 
-            <h2 className="text-3xl font-display font-bold text-slate-800 dark:text-slate-100 mb-10">
+            <h2 className="text-3xl font-display font-bold text-slate-800 dark:text-slate-100 mb-6">
               {editingMember ? "Editar Integrante" : "Novo Integrante"}
             </h2>
+
+            {editingMember && (
+              <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 mb-6 relative z-10">
+                <UserAvatar
+                  photoURL={editingMember.photoURL}
+                  name={editingMember.name}
+                  size="xl"
+                  editable={true}
+                  onEditClick={() => setPhotoTargetMember(editingMember)}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate">Foto de Perfil</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">Recorte circular e compressão otimizada</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPhotoTargetMember(editingMember)}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors cursor-pointer shrink-0"
+                >
+                  Alterar Foto
+                </button>
+              </div>
+            )}
 
             <form
               onSubmit={handleSave}
@@ -2491,6 +2522,27 @@ export default function MembersPage() {
           setIsBroadcastModalOpen(true);
         }}
       />
+
+      {/* Modal de Foto de Perfil de Integrante */}
+      {photoTargetMember && (
+        <ProfilePhotoCropModal
+          isOpen={Boolean(photoTargetMember)}
+          onClose={() => setPhotoTargetMember(null)}
+          currentPhotoURL={photoTargetMember.photoURL}
+          userName={photoTargetMember.name}
+          onSavePhoto={async (newPhotoURL) => {
+            await updateUserProfilePhoto(newPhotoURL, photoTargetMember.uid);
+            setMembers((prev) =>
+              prev.map((m) =>
+                m.uid === photoTargetMember.uid ? { ...m, photoURL: newPhotoURL } : m
+              )
+            );
+            if (editingMember?.uid === photoTargetMember.uid) {
+              setEditingMember((prev) => (prev ? { ...prev, photoURL: newPhotoURL } : prev));
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

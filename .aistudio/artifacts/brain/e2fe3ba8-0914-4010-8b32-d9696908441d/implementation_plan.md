@@ -1,55 +1,67 @@
-# Barra Superior Fixa Flutuante com Efeito Glassmorphism ao Rolar
+# Funcionalidade de Foto de Perfil com Recorte e Compressão Otimizada
 
-Plano de arquitetura e design para criar uma barra de navegação superior fixa com efeito translúcido de vidro fosco (glassmorphism), que permanece invisível no topo da página e surge suavemente ao iniciar a rolagem vertical, disponibilizando título contextual, busca rápida, notificações, tema e perfil compacto em todas as telas da plataforma.
+Plano de arquitetura e design para permitir que integrantes e líderes façam o envio, ajuste interativo e exibição de suas fotos de perfil na plataforma Applaine, integrando compressão client-side de alto desempenho, pré-visualização com corte circular e persistência no Firebase Auth e Firestore.
 
 ### User Review & Critical Decisions
 
 > [!IMPORTANT]
-> As preferências de design e comportamento foram confirmadas pelo usuário na etapa de alinhamento e guiarão toda a execução:
+> As decisões de produto e experiência do usuário foram confirmadas na fase de esclarecimento e nortearão toda a implementação:
 
--   **Elementos da Barra Superior**: Título contextual da página atual, badge de notificações em tempo real, acionador de busca, alternador de tema claro/escuro e badge compacto do perfil do usuário com foto/avatar e indicador de verificação.
--   **Estilo Visual**: Barra flutuante tipo cápsula/pill translúcida com acabamento em vidro fosco (`backdrop-blur-md`, bordas suaves com contraste sutil, sombras profundas e cantos arredondados `rounded-2xl`).
--   **Abrangência do Sistema**: Ativa em todas as páginas da plataforma, integrada de forma padronizada através dos layouts mestres (`DashboardShell`, `AdminShell` e páginas complementares), respeitando a largura do conteúdo e a presença da barra lateral existente (desktop e mobile).
+-   **Método de Envio**: Upload direto do dispositivo do usuário (suportando arquivos JPEG, PNG e WebP, além da câmera do smartphone), com processamento e compressão automática no cliente para garantir carregamento instantâneo e leveza de dados.
+-   **Ferramenta de Ajuste e Recorte**: Modal interativo com pré-visualização em tempo real, máscara de corte circular/quadrado, controle deslizante de zoom (1x a 3x) e reposicionamento por arraste (pan), além de opção para remover a foto existente.
+-   **Pontos de Acesso na Interface**:
+    1.  Diretamente no cartão de perfil do integrante (`/dashboard/members/[id]`), com botão de câmera dedicado sobre o avatar.
+    2.  No avatar do usuário na barra flutuante superior (`FloatingTopBar`), com menu de ação rápida para visualização/troca imediata de foto.
+    3.  No modal administrativo de edição de integrante (`/dashboard/members`).
 
 ---
 
 ### 1. Overview & Core Concept
 
--   **What It Does**: Monitora a rolagem vertical do usuário (tanto no container de rolagem `<main>` quanto na janela global `window`). Enquanto o usuário estiver no topo da página (rolagem $\le 60\text{px}$), a barra fixa fica oculta e transparente. Assim que ultrapassa esse limiar, a barra desliza suavemente de cima para baixo com transição fluida de opacidade e translação vertical, mantendo os controles primários de contexto e navegação acessíveis sem forçar o retorno manual ao topo.
--   **Target Audience / Persona**: Pastores, líderes de ministério, músicos, equipe de multimídia e administradores que visualizam tabelas extensas de escalas, membros, relatórios e eventos e necessitam de navegação ágil.
--   **Key Value**: Elimina o atrito de ter que rolar longas telas de volta ao topo para checar notificações, acessar o perfil ou alternar páginas, mantendo a experiência limpa e focada no conteúdo.
+-   **What It Does**: Oferece aos integrantes e líderes uma experiência visual moderna e humanizada para gerenciar sua identidade na igreja. Ao selecionar uma imagem, o usuário visualiza um modal com recorte circular, ajusta o enquadramento através de zoom e arraste suave, e ao salvar, a imagem é processada e armazenada como imagem otimizada em WebP/JPEG com resolução ideal (300x300px), atualizando o perfil do Firebase Authentication (`updateProfile`) e o documento do usuário no Firestore (`users/{userId}.photoURL`).
+-   **Target Audience / Persona**: Músicos, cantores, equipe de multimídia, grupo de dança, pastores e líderes ministeriais que precisam de reconhecimento visual rápido em escalas, chamadas e relatórios.
+-   **Key Value**: Proporciona reconhecimento visual imediato nas escalas de domingo, listas ministeriais e barras de navegação, elevando a identidade comunitária e a usabilidade em dispositivos móveis e desktops.
 
 ---
 
 ### 2. User Experience & Visual Design
 
 -   **Key User Flows**:
-    1.  *Topo da Página (Zero Scroll)*: O cabeçalho padrão da página é renderizado normalmente. A barra flutuante superior permanece com `opacity-0`, `pointer-events-none` e translação para cima (`-translate-y-4`).
-    2.  *Descida na Rolagem (> 60px)*: A barra fixa desliza com aceleração suave (`transition-all duration-300 ease-out`), fixando-se no topo com recuo de margem (`top-4`) ou aderente ao topo do viewport.
-    3.  *Interações Rápidas*: O usuário pode clicar no atalho de busca para abrir a busca rápida/menu, alternar entre modos claro/escuro (`ThemeToggle`), clicar no sino para ver notificações pendentes ou clicar no perfil para ir direto à sua página de membro.
-    4.  *Retorno ao Topo*: Ao rolar de volta para o início, a barra flutuante se desvanece suavemente sem solavancos visuais.
+    1.  *Acionamento*:
+        -   O usuário clica no botão com ícone de câmera posicionado no canto inferior do avatar do seu perfil (`/dashboard/members/[id]`) ou clica diretamente no avatar da barra flutuante (`FloatingTopBar`).
+    2.  *Seleção do Arquivo*:
+        -   Abre o seletor nativo de fotos do dispositivo (ou permite arrastar e soltar a imagem).
+    3.  *Ajuste e Recorte Interativo*:
+        -   Um modal elegante é aberto exibindo a foto selecionada com máscara circular iluminada, guias de alinhamento sutis, botões de zoom (`-` e `+`) com controle deslizante, e opção de reposicionar a imagem arrastando com o dedo ou mouse.
+    4.  *Confirmação e Processamento*:
+        -   Ao clicar em "Salvar Foto", um canvas invisível renderiza o recorte exato nas dimensões otimizadas ($300 \times 300\text{px}$, formato WebP/JPEG com compressão de 82%), gerando uma imagem ultraleve (< 40KB).
+        -   O sistema salva simultaneamente no Firebase Auth (`updateProfile`) e no Firestore (`users/{uid}`), atualizando o estado do `AuthProvider` sem recarregar a tela.
+    5.  *Remoção*:
+        -   Opção clara de "Remover foto" para restaurar a inicial do nome com badge padrão.
 
 -   **Visual Identity & Theme**:
-    -   *Aesthetic Direction*: Sofisticado, limpo, padrão SaaS contemporâneo de alta fidelidade sem ruídos visuais.
-    -   *Efeito Glassmorphism*:
-        -   Modo Claro: `bg-white/80 backdrop-blur-md border border-slate-200/80 shadow-lg shadow-slate-900/5`
-        -   Modo Escuro: `dark:bg-slate-900/80 dark:backdrop-blur-md dark:border-slate-800/80 dark:shadow-black/20`
-    -   *Typography*: Fonte display `Outfit` para títulos e `Inter` para metadados, com truncamento inteligente (`truncate max-w-[200px] sm:max-w-[320px]`) e rótulos concisos em linha única.
-    -   *Responsividade & Mobile*: Em telas menores (`< 768px`), prioriza o título enxuto, badge de notificações e avatar, mantendo a altura abaixo de $56\text{px}$ para atender com folga o teto de 15% de sticky surfaces em dispositivos móveis.
+    -   *Modal de Edição*: `bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800/80 rounded-[2.5rem] shadow-2xl`.
+    -   *Área de Pré-Visualização*: Área com fundo escurecido contrastante, círculo centralizador com contorno de alta precisão (`ring-2 ring-blue-500/80 shadow-2xl`), suporte a gestos de toque em smartphones.
+    -   *Controles de Zoom*: Barra deslizante com botões de micro-passo (`ZoomIn` e `ZoomOut`) e valor percentual discreto em números tabulares (`tabular-nums font-mono`).
+    -   *Propagação Global*: Exibição da foto com cantos arredondados contínuos e fallback resiliente (se a foto falhar no carregamento, exibe a letra inicial com fundo estilizado, sem quebrar o layout).
 
 ---
 
 ### 3. Key Product Decisions & Trade-Offs
 
--   **Decisão 1: Componente Reutilizável Centralizado (`FloatingTopBar`)**
-    -   *Chosen Approach*: Criar um componente dedicado `FloatingTopBar.tsx` desacoplado que recebe o título da página, subtítulo, dados do usuário, contagem de notificações e callbacks de busca/menu.
-    -   *Why*: Garante consistência visual idêntica entre o `DashboardShell`, telas administrativas e páginas públicas/internas, evitando duplicação de lógica de scroll e estilização.
-    -   *Alternatives Considered*: Inserir a lógica diretamente dentro de cada arquivo de página, descartado por violar o princípio DRY e gerar inconsistências visuais.
+-   **Decisão 1: Compressão e Otimização no Cliente via Canvas HTML5**
+    -   *Chosen Approach*: Processar o corte e a compressão diretamente no navegador do usuário gerando WebP (com fallback JPEG) de tamanho compacto ($300 \times 300\text{px}$, ~35KB).
+    -   *Why*: Elimina dependência de infraestrutura externa de processamento pesado, garante upload ultrarrápido mesmo em conexões 3G/4G móveis, não gera custos extras de cloud functions e mantém a foto imediatamente disponível na nuvem.
+    -   *Alternatives Considered*: Enviar a foto bruta de 8MB para o servidor redimensionar, descartado por latência excessiva no celular e alto consumo de banda.
 
--   **Decisão 2: Detecção Híbrida de Rolagem (Container `<main>` + `window`)**
-    -   *Chosen Approach*: Implementar um hook/listener com listeners passivos (`{ passive: true }`) monitorando a rolagem do container interno `<main ref={mainRef}>` e também de `window`.
-    -   *Why*: O layout da plataforma utiliza `overflow-y-auto` na tag `<main>` em layouts com sidebar fixa, tornando os listeners puramente de `window` ineficazes se o body não rolar. A abordagem híbrida funciona perfeitamente em qualquer estrutura.
-    -   *Alternatives Considered*: Observar via `IntersectionObserver` no cabeçalho original. A detecção direta de scroll com limiar de $60\text{px}$ e flag `scrolled` oferece feedback instantâneo e sem delay de intersecção.
+-   **Decisão 2: Persistência Híbrida (Firebase Auth `photoURL` + Firestore `users/{uid}.photoURL`)**
+    -   *Chosen Approach*: Atualizar o perfil do Firebase Auth (`updateProfile`) e o documento do usuário no Firestore (`photoURL`).
+    -   *Why*: O Firebase Auth mantém a foto associada ao token de autenticação (disponível instantaneamente no `user.photoURL`), enquanto o Firestore permite que outros membros vejam a foto na lista de integrantes, escalas e perfis públicos sem exigir chamadas extras.
+    -   *Alternatives Considered*: Apenas no Firebase Auth, descartado pois outros usuários na congregação não teriam acesso às fotos uns dos outros nas escalas.
+
+-   **Decisão 3: Componente Dedicado de Avatar com Fallback Gracioso (`UserAvatar`)**
+    -   *Chosen Approach*: Criar um componente unificado `components/UserAvatar.tsx` com tratamento de estados (carregamento, imagem quebrada, inicial do nome e tamanho customizável `sm`, `md`, `lg`, `xl`).
+    -   *Why*: Centraliza a estilização e evita duplicação de tags `<img onError=...>` espalhadas pelo projeto, prevenindo qualquer ocorrência de imagem quebrada.
 
 ---
 
@@ -59,44 +71,53 @@ Plano de arquitetura e design para criar uma barra de navegação superior fixa 
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        DashboardShell / Layout                         │
+│                        Fluxo de Foto de Perfil                         │
 │                                                                        │
 │   ┌────────────────────────────────────────────────────────────────┐   │
-│   │ FloatingTopBar (Sticky/Fixed, top-4, z-50)                    │   │
-│   │ [Status: Oculto se scroll <= 60px; Visível se scroll > 60px]    │   │
-│   │                                                                │   │
-│   │  [Logo/Título Atual]  ···  [Busca] [Tema] [Notificações] [Perfil]│
+│   │ FloatingTopBar / MemberProfilePage / MembersList               │   │
+│   │  [Avatar com acionador de clique / botão de câmera]            │   │
+│   └───────────────────────────────┬────────────────────────────────┘   │
+│                                   │                                    │
+│                                   ▼                                    │
+│   ┌────────────────────────────────────────────────────────────────┐   │
+│   │ ProfilePhotoCropModal.tsx                                      │   │
+│   │  - Seletor de arquivo (input file / drag-drop)                 │   │
+│   │  - Preview com máscara circular e pan/drag                     │   │
+│   │  - Controle de zoom slider (1x - 3x)                           │   │
+│   │  - Compressão via HTML5 Canvas (300x300 WebP/JPEG, ~35KB)      │   │
+│   └───────────────────────────────┬────────────────────────────────┘   │
+│                                   │                                    │
+│                                   ▼                                    │
+│   ┌────────────────────────────────────────────────────────────────┐   │
+│   │ Sincronização & Persistência                                   │   │
+│   │  ├─ Firebase Auth: updateProfile(auth.currentUser, {photoURL}) │   │
+│   │  ├─ Firestore: updateDoc(doc(db, 'users', uid), {photoURL})    │   │
+│   │  └─ AuthProvider: setUserData / refreshUserData()              │   │
+│   └───────────────────────────────┬────────────────────────────────┘   │
+│                                   │                                    │
+│                                   ▼                                    │
+│   ┌────────────────────────────────────────────────────────────────┐   │
+│   │ Exibição Atualizada em Tempo Real                              │   │
+│   │  ├─ FloatingTopBar.tsx (perfil superior compacto)              │   │
+│   │  ├─ app/dashboard/members/[id]/page.tsx (cabeçalho de perfil) │   │
+│   │  ├─ app/dashboard/members/page.tsx (tabela e cards mobile)     │   │
+│   │  └─ components/Sidebar.tsx (perfil da barra lateral)           │   │
 │   └────────────────────────────────────────────────────────────────┘   │
-│                                                                        │
-│   ┌───────────────┐  ┌─────────────────────────────────────────────┐   │
-│   │    Sidebar    │  │ <main ref={mainRef} className="overflow-y"> │   │
-│   │               │  │                                             │   │
-│   │  Navegação    │  │  ┌────────────────────────────────────────┐ │   │
-│   │  Principal    │  │  │ Header Original da Página (em fluxo)   │ │   │
-│   │               │  │  └────────────────────────────────────────┘ │   │
-│   │               │  │                                             │   │
-│   │               │  │  ┌────────────────────────────────────────┐ │   │
-│   │               │  │  │ Conteúdo da Página ({children})        │ │   │
-│   │               │  │  └────────────────────────────────────────┘ │   │
-│   └───────────────┘  └─────────────────────────────────────────────┘   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Component & State Mapping
+#### Blueprint & Security Rules Strategy
 
--   **`FloatingTopBar.tsx`**:
-    -   Props: `title: string`, `user: User | null`, `userData: any`, `unreadCount: number`, `onOpenSearch?: () => void`, `onOpenMenu?: () => void`, `containerRef?: React.RefObject<HTMLElement | null>`.
-    -   Estado interno `isScrolled: boolean`: alternado quando `scrollTop > 60px`.
-    -   Estilização animada com classes Tailwind:
-        -   Oculto: `opacity-0 -translate-y-4 pointer-events-none scale-98`
-        -   Visível: `opacity-100 translate-y-0 pointer-events-auto scale-100`
-        -   Transições: `transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]`
--   **`DashboardShell.tsx`**:
-    -   Integra o `FloatingTopBar` posicionado de forma fixa sobre a área principal com alinhamento adequado à barra lateral esquerda (desktop `md:left-72 left-4 right-4 md:right-12`).
-    -   Conecta a contagem de notificações já existente e a foto/avatar do usuário.
--   **`AdminShell.tsx`**:
-    -   Integra o `FloatingTopBar` para as telas de administração (`/admin/dashboard`, `/admin/dashboard/users`, `/admin/dashboard/security`).
--   **Qualidade e Performance**:
-    -   Utiliza propriedades exclusivas de compositor (`opacity`, `transform`).
-    -   Zero layout shifts na página (o fluxo natural do documento não é alterado).
-    -   Suporte nativo ao modo escuro e claro sincronizado com o `ThemeToggle`.
+1.  **`firebase-blueprint.json`**:
+    -   Atualizar a entidade `User` para incluir a propriedade opcional `photoURL: { "type": "string", "description": "URL ou payload otimizado da foto de perfil" }`.
+2.  **`firestore.rules`**:
+    -   Atualizar o helper `isValidUser(data)` para validar `(!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 200000))`.
+    -   Incluir `'photoURL'` nas chaves permitidas para atualização pelo próprio usuário (`affectedKeys().hasOnly([...])`).
+    -   Executar validação e deploy das regras de segurança com o RPC `DeployRules`.
+3.  **Componentes e Modificações**:
+    -   `components/ProfilePhotoCropModal.tsx`: Novo componente interativo para seleção, corte e compressão.
+    -   `components/UserAvatar.tsx`: Novo componente unificado com fallback automático por inicial e estilos responsivos.
+    -   `components/FloatingTopBar.tsx`: Renderização do avatar atualizado e gatilho direto para alterar foto.
+    -   `app/dashboard/members/[id]/page.tsx`: Inclusão do botão de câmera sobre o avatar principal e acoplamento ao modal de recorte.
+    -   `app/dashboard/members/page.tsx`: Integração da exibição de fotos na listagem geral de integrantes e no modal de edição.
+    -   `components/AuthProvider.tsx`: Exposição do método de sincronização instantânea de avatar.

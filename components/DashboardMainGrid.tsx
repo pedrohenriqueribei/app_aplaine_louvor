@@ -28,6 +28,11 @@ import { TopPlayedSongsWidget } from "./TopPlayedSongsWidget";
 import { ChurchAnnouncementsFeed } from "./ChurchAnnouncementsFeed";
 import { ScheduleConflictBadge } from "./ScheduleConflictBadge";
 import type { ScheduleConflictSummary } from "@/lib/scheduleConflicts";
+import {
+  type ScheduleMinistryBadge,
+  getMinistryCustomName,
+  getMinistryShortName,
+} from "@/lib/ministryUtils";
 
 export interface PredictiveAlertItem {
   id: string;
@@ -47,7 +52,11 @@ export interface PredictiveAlertItem {
 export interface UpcomingScheduleItem {
   id: string;
   date: string;
-  ministry?: "worship" | "multimedia" | "dance" | string;
+  ministry?: "worship" | "multimedia" | "dance" | "secretariat" | "kids" | string;
+  ministries?: string[];
+  ministryBadgeLabels?: ScheduleMinistryBadge[];
+  primaryLabel?: string;
+  primaryBadgeColor?: string;
   locationName?: string;
   membersCount: number;
   songsCount: number;
@@ -88,6 +97,8 @@ interface DashboardMainGridProps {
   onQuickConfirmPresence?: (scheduleId: string) => void;
   churchId?: string;
   canAccessManagement?: boolean;
+  selectedLens?: string;
+  churchData?: any;
 }
 
 export function DashboardMainGrid({
@@ -114,6 +125,8 @@ export function DashboardMainGrid({
   onQuickConfirmPresence,
   churchId,
   canAccessManagement = true,
+  selectedLens = "all",
+  churchData,
 }: DashboardMainGridProps) {
   const router = useRouter();
   const [alertsFilter, setAlertsFilter] = useState<"all" | "urgency" | "attention" | "goal">("all");
@@ -487,19 +500,99 @@ export function DashboardMainGrid({
           {filteredUpcomingSchedules.length > 0 ? (
             <div className="space-y-3">
               {filteredUpcomingSchedules.map((schedule) => {
-                const ministryLabel =
-                  schedule.ministry === "dance"
-                    ? "Dança"
-                    : schedule.ministry === "multimedia"
-                      ? "Multimídia"
-                      : "Louvor";
+                // Determinação precisa do(s) ministério(s) e nome(s) reais configurados
+                const rawMin = String(schedule.ministry || "").toLowerCase();
+                const isDanceSchedule =
+                  rawMin.includes("dan") ||
+                  schedule.ministries?.some((m) => m.toLowerCase().includes("dan"));
+                const isMultimediaSchedule =
+                  rawMin.includes("multi") ||
+                  rawMin.includes("midia") ||
+                  rawMin.includes("mídia") ||
+                  schedule.ministries?.some((m) => {
+                    const lm = m.toLowerCase();
+                    return lm.includes("multi") || lm.includes("midia") || lm.includes("mídia");
+                  });
+                const isSecretariatSchedule =
+                  rawMin.includes("sec") ||
+                  rawMin.includes("acolh") ||
+                  schedule.ministries?.some((m) => m.toLowerCase().includes("sec"));
+                const isKidsSchedule =
+                  rawMin.includes("kid") ||
+                  rawMin.includes("infan") ||
+                  schedule.ministries?.some((m) => m.toLowerCase().includes("kid"));
 
-                const ministryBadgeColor =
-                  schedule.ministry === "dance"
-                    ? "bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300"
-                    : schedule.ministry === "multimedia"
-                      ? "bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300"
-                      : "bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300";
+                // Nome customizado conforme a igreja ou padrão correto
+                const danceName = churchData?.danceMinistryAcronym || churchData?.danceMinistryName || "Dança";
+                const multimediaName = churchData?.multimediaMinistryAcronym || churchData?.multimediaMinistryName || "Multimídia";
+                const worshipName = churchData?.worshipMinistryAcronym || churchData?.worshipMinistryName || "Louvor";
+                const secretariatName = "Secretaria";
+                const kidsName = "Infantil";
+
+                // Selos atribuídos a esta escala
+                const resolvedBadges: Array<{ key: string; label: string; colorClass: string }> = [];
+
+                if (schedule.ministryBadgeLabels && schedule.ministryBadgeLabels.length > 0) {
+                  schedule.ministryBadgeLabels.forEach((b) => {
+                    resolvedBadges.push({
+                      key: b.key,
+                      label: b.shortLabel || b.label,
+                      colorClass: b.colorClass,
+                    });
+                  });
+                } else {
+                  if (isDanceSchedule) {
+                    resolvedBadges.push({
+                      key: "dance",
+                      label: danceName,
+                      colorClass: "bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 shadow-2xs",
+                    });
+                  }
+                  if (isMultimediaSchedule) {
+                    resolvedBadges.push({
+                      key: "multimedia",
+                      label: multimediaName,
+                      colorClass: "bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 shadow-2xs",
+                    });
+                  }
+                  if (isSecretariatSchedule) {
+                    resolvedBadges.push({
+                      key: "secretariat",
+                      label: secretariatName,
+                      colorClass: "bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 shadow-2xs",
+                    });
+                  }
+                  if (isKidsSchedule) {
+                    resolvedBadges.push({
+                      key: "kids",
+                      label: kidsName,
+                      colorClass: "bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 shadow-2xs",
+                    });
+                  }
+                  // Se não for nenhum dos outros ou se tiver worship explícito
+                  if (
+                    resolvedBadges.length === 0 ||
+                    rawMin.includes("worship") ||
+                    rawMin.includes("louvor") ||
+                    (!isDanceSchedule && !isMultimediaSchedule && !isSecretariatSchedule && !isKidsSchedule)
+                  ) {
+                    resolvedBadges.unshift({
+                      key: "worship",
+                      label: worshipName,
+                      colorClass: "bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 shadow-2xs",
+                    });
+                  }
+                }
+
+                // Prioriza o selo do ministério atualmente selecionado no filtro de lentes
+                const primaryBadge =
+                  selectedLens !== "all"
+                    ? resolvedBadges.find((b) => b.key === selectedLens) || resolvedBadges[0]
+                    : resolvedBadges[0];
+                const secondaryBadges =
+                  selectedLens === "all"
+                    ? resolvedBadges.filter((b) => b.key !== primaryBadge.key)
+                    : [];
 
                 return (
                   <div
@@ -516,9 +609,21 @@ export function DashboardMainGrid({
                           <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
                             {formatScheduleDate(schedule.date)}
                           </h4>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${ministryBadgeColor}`}>
-                            {ministryLabel}
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-colors ${primaryBadge.colorClass}`}
+                            title={`Ministério: ${primaryBadge.label}`}
+                          >
+                            {primaryBadge.label}
                           </span>
+                          {secondaryBadges.map((sec) => (
+                            <span
+                              key={sec.key}
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${sec.colorClass}`}
+                              title={`Também escalado em: ${sec.label}`}
+                            >
+                              {sec.label}
+                            </span>
+                          ))}
                           {schedule.hasRehearsal && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
                               Ensaio marcado
@@ -537,7 +642,7 @@ export function DashboardMainGrid({
                             <Users className="w-3.5 h-3.5" />
                             {schedule.membersCount} integrantes
                           </span>
-                          {schedule.ministry === "worship" && (
+                          {(schedule.ministry === "worship" || primaryBadge.key === "worship") && (
                             <span className="flex items-center gap-1">
                               <Music className="w-3.5 h-3.5" />
                               {schedule.songsCount} músicas
@@ -576,10 +681,24 @@ export function DashboardMainGrid({
             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 p-8 shadow-xs text-center">
               <Calendar className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
               <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-1">
-                Nenhuma escala para os próximos dias
+                {selectedLens !== "all"
+                  ? `Nenhuma escala de ${
+                      selectedLens === "dance"
+                        ? churchData?.danceMinistryName || "Dança"
+                        : selectedLens === "multimedia"
+                          ? churchData?.multimediaMinistryName || "Multimídia"
+                          : selectedLens === "worship"
+                            ? churchData?.worshipMinistryName || "Louvor"
+                            : selectedLens === "secretariat"
+                              ? "Secretaria"
+                              : "Infantil"
+                    } para os próximos dias`
+                  : "Nenhuma escala para os próximos dias"}
               </h4>
               <p className="text-xs text-slate-400 dark:text-slate-500 mb-4 max-w-sm mx-auto">
-                Crie uma nova escala e convoque os voluntários da igreja.
+                {selectedLens !== "all"
+                  ? "Crie uma nova escala para este ministério e convoque os voluntários."
+                  : "Crie uma nova escala e convoque os voluntários da igreja."}
               </p>
               <button
                 onClick={() => router.push("/dashboard/schedules")}
