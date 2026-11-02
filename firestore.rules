@@ -328,6 +328,18 @@ service cloud.firestore {
       allow delete: if leadsChurch(existing().get('churchId', ''));
     }
 
+    match /events/{eventId} {
+      allow read: if isSignedIn();
+      allow create: if isValidId(eventId) &&
+                    incoming().id == eventId &&
+                    (isSuperAdmin() || inChurch(incoming().get('churchId', '')));
+      allow update: if isValidId(eventId) &&
+                    incoming().id == existing().id &&
+                    incoming().get('churchId', '') == existing().get('churchId', '') &&
+                    (isSuperAdmin() || inChurch(existing().get('churchId', '')));
+      allow delete: if isSuperAdmin() || leadsChurch(existing().get('churchId', ''));
+    }
+
     match /schedules/{scheduleId} {
       allow read: if isSignedIn();
       allow create: if isValidId(scheduleId) && isValidSchedule(incoming()) &&

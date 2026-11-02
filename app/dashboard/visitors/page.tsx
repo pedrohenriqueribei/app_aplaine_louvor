@@ -36,9 +36,18 @@ import {
   TrendingUp,
   X,
   Filter,
+  Copy,
+  Check,
+  QrCode,
+  Share2,
+  Download,
+  Printer,
+  Link as LinkIcon,
+  RefreshCw,
 } from "lucide-react";
+import QRCode from "qrcode";
 import { useAuth } from "@/components/AuthProvider";
-import { formatPhone } from "@/lib/utils";
+import { formatPhone, cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 
 interface Visitor {
@@ -50,6 +59,11 @@ interface Visitor {
   followupStatus: "pending" | "contacted" | "member";
   churchId: string;
   notes: string;
+  source?: string;
+  howMet?: string;
+  invitedBy?: string;
+  ageGroup?: string;
+  prayerRequest?: string;
 }
 
 type FunnelStageKey = "pending" | "contacted" | "member";
@@ -128,6 +142,104 @@ export default function VisitorsPage() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Share link and QR Code state
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const qrCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
+
+  // Computes the visitor form URL
+  const visitorFormUrl = useMemo(() => {
+    if (typeof window === "undefined") return "/visitante";
+    const churchParam = userData?.churchId ? `?churchId=${encodeURIComponent(userData.churchId)}` : "";
+    return `${window.location.origin}/visitante${churchParam}`;
+  }, [userData?.churchId]);
+
+  const whatsAppShareUrl = useMemo(() => {
+    const msg = `Olá! Seja muito bem-vindo(a) à nossa igreja! Preparamos este formulário rápido para mantermos contato e orarmos por você: ${visitorFormUrl}`;
+    return `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  }, [visitorFormUrl]);
+
+  const handleCopyVisitorLink = async () => {
+    try {
+      await navigator.clipboard.writeText(visitorFormUrl);
+      setCopiedLink(true);
+      showToast("Link do formulário copiado com sucesso! 🎉");
+      setTimeout(() => setCopiedLink(false), 3000);
+    } catch {
+      showToast("Link: " + visitorFormUrl);
+    }
+  };
+
+  // Render QR Code on canvas when modal opens
+  useEffect(() => {
+    if (isShareModalOpen && qrCanvasRef.current && visitorFormUrl) {
+      QRCode.toCanvas(
+        qrCanvasRef.current,
+        visitorFormUrl,
+        {
+          width: 240,
+          margin: 2,
+          color: {
+            dark: "#1e3a8a",
+            light: "#ffffff",
+          },
+        },
+        (error) => {
+          if (error) console.error("Error generating QR code:", error);
+        }
+      );
+    }
+  }, [isShareModalOpen, visitorFormUrl]);
+
+  const handleDownloadQrCode = () => {
+    if (!qrCanvasRef.current) return;
+    const url = qrCanvasRef.current.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.download = `qrcode-visitantes-${userData?.churchId || "igreja"}.png`;
+    link.href = url;
+    link.click();
+    showToast("QR Code baixado com sucesso!");
+  };
+
+  const handlePrintQrCode = () => {
+    if (!qrCanvasRef.current) return;
+    const dataUrl = qrCanvasRef.current.toDataURL("image/png");
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Por favor, permita popups para imprimir.");
+      return;
+    }
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>QR Code de Boas-Vindas - Visitantes</title>
+          <style>
+            body { font-family: sans-serif; text-align: center; padding: 40px; margin: 0; background: #fff; }
+            .card { max-width: 420px; margin: 0 auto; border: 2px dashed #93c5fd; border-radius: 28px; padding: 36px 24px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+            h1 { font-size: 26px; color: #1e3a8a; margin: 0 0 8px 0; font-weight: 800; }
+            p { color: #475569; font-size: 14px; margin: 0 0 24px 0; line-height: 1.5; }
+            img { width: 230px; height: 230px; display: block; margin: 0 auto; }
+            .tag { display: inline-block; background: #eff6ff; color: #1d4ed8; padding: 6px 16px; border-radius: 9999px; font-size: 12px; font-weight: bold; margin-bottom: 16px; }
+            .footer { margin-top: 24px; font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="tag">Ficha de Boas-Vindas</div>
+            <h1>Seja Muito Bem-vindo(a)!</h1>
+            <p>Aponte a câmera do seu celular para o QR Code abaixo para preencher seu cadastro de visitante:</p>
+            <img src="${dataUrl}" alt="QR Code" />
+            <div class="footer">Acolhimento & Visitantes • Applaine</div>
+          </div>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const fetchVisitors = React.useCallback(async () => {
@@ -438,7 +550,7 @@ export default function VisitorsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
           {/* SELETOR DE VISUALIZAÇÃO: FUNIL VS GRADE */}
           <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl">
             <button
@@ -450,7 +562,7 @@ export default function VisitorsPage() {
               }`}
             >
               <Kanban className="w-3.5 h-3.5" />
-              <span>Funil de Acolhimento</span>
+              <span>Funil</span>
             </button>
             <button
               onClick={() => setViewMode("grid")}
@@ -465,6 +577,51 @@ export default function VisitorsPage() {
             </button>
           </div>
 
+          {/* BOTÃO COM LINK PARA SER COPIADO (CADASTRO DE VISITANTE) */}
+          <button
+            id="btn-copiar-link-visitante"
+            onClick={handleCopyVisitorLink}
+            className={`px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all shadow-md active:scale-95 shrink-0 cursor-pointer ${
+              copiedLink
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
+                : "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20"
+            }`}
+            title="Copiar link do formulário de cadastro de visitante"
+          >
+            {copiedLink ? (
+              <>
+                <Check className="w-4 h-4 text-emerald-200" />
+                <span>Link Copiado!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4" />
+                <span>Copiar Link do Formulário</span>
+              </>
+            )}
+          </button>
+
+          {/* BOTÃO QR CODE & COMPARTILHAMENTO */}
+          <button
+            onClick={() => setIsShareModalOpen(true)}
+            className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center gap-1.5 transition-all shadow-xs active:scale-95 shrink-0 cursor-pointer"
+            title="Ver e Imprimir QR Code do Formulário"
+          >
+            <QrCode className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span className="hidden sm:inline">QR Code</span>
+          </button>
+
+          {/* ATUALIZAR */}
+          <button
+            onClick={fetchVisitors}
+            disabled={loading}
+            className="p-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl transition-all cursor-pointer disabled:opacity-50"
+            title="Atualizar lista de visitantes"
+          >
+            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+          </button>
+
+          {/* NOVO VISITANTE MANUAL */}
           <button
             onClick={() => {
               setEditingVisitor(null);
@@ -478,10 +635,10 @@ export default function VisitorsPage() {
               });
               setIsModalOpen(true);
             }}
-            className="bg-blue-800 hover:bg-blue-900 text-white px-5 py-2.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all shadow-lg shadow-blue-800/20 active:scale-95 shrink-0"
+            className="bg-slate-900 hover:bg-black dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all shadow-md active:scale-95 shrink-0 cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
-            <span>Novo Visitante</span>
+            <span>Novo Manual</span>
           </button>
         </div>
       </div>
@@ -562,6 +719,95 @@ export default function VisitorsPage() {
           <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-1 font-medium">
             Visitantes que integraram a membresia
           </p>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 2.1 BANNER: LINK PÚBLICO & QR CODE PARA FORMULÁRIO DE VISITANTES */}
+      {/* ========================================================================= */}
+      <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden border border-blue-800/40">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div className="space-y-1.5 max-w-xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-white/10 text-blue-200 backdrop-blur-xs border border-white/10">
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>Link de Auto-Cadastro de Visitantes</span>
+            </div>
+            <h3 className="text-lg sm:text-xl font-display font-black tracking-tight">
+              Ficha Online de Boas-Vindas
+            </h3>
+            <p className="text-xs sm:text-sm text-blue-100/80 leading-relaxed font-normal">
+              Compartilhe o link pelo WhatsApp ou exiba o QR Code na recepção e no telão da igreja. Os novos visitantes preenchem seus dados e entram direto no funil de acolhimento.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
+            {/* Input de visualização do link com botão copiar integrado */}
+            <div className="flex items-center bg-black/35 backdrop-blur-md rounded-2xl border border-white/15 p-1.5 pl-3.5 flex-1 lg:w-80 shadow-inner">
+              <LinkIcon className="w-3.5 h-3.5 text-blue-300 shrink-0 mr-2" />
+              <span className="text-xs font-mono text-blue-200 truncate select-all mr-2">
+                {visitorFormUrl}
+              </span>
+              <button
+                onClick={handleCopyVisitorLink}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                  copiedLink
+                    ? "bg-emerald-500 text-white"
+                    : "bg-white text-slate-900 hover:bg-blue-50"
+                }`}
+                title="Copiar link"
+              >
+                {copiedLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copiar</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Botão QR Code */}
+              <button
+                onClick={() => setIsShareModalOpen(true)}
+                className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 flex items-center justify-center gap-1.5 transition-all cursor-pointer backdrop-blur-xs active:scale-95"
+                title="Ver e Imprimir QR Code"
+              >
+                <QrCode className="w-4 h-4 text-blue-300" />
+                <span>QR Code</span>
+              </button>
+
+              {/* Botão WhatsApp */}
+              <a
+                href={whatsAppShareUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-950/20 active:scale-95"
+                title="Enviar link pelo WhatsApp"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>WhatsApp</span>
+              </a>
+
+              {/* Botão Abrir Formulário em Nova Aba */}
+              <a
+                href={visitorFormUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/15 flex items-center justify-center transition-all cursor-pointer active:scale-95"
+                title="Abrir e testar o formulário em nova aba"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -721,6 +967,12 @@ export default function VisitorsPage() {
                                   <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold">
                                     {timeAgo}
                                   </span>
+                                  {visitor.source === "public_form" && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 font-bold inline-flex items-center gap-0.5">
+                                      <Sparkles className="w-2.5 h-2.5" />
+                                      Online
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -860,9 +1112,17 @@ export default function VisitorsPage() {
                       <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
                         {visitor.name}
                       </h3>
-                      <p className="text-sm font-medium text-slate-500 mt-1">
-                        {new Date(visitor.firstVisit + "T12:00:00").toLocaleDateString("pt-BR")}
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-sm font-medium text-slate-500">
+                          {new Date(visitor.firstVisit + "T12:00:00").toLocaleDateString("pt-BR")}
+                        </p>
+                        {visitor.source === "public_form" && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold inline-flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            Online
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {getStatusBadge(visitor.followupStatus)}
                   </div>
@@ -1061,6 +1321,133 @@ export default function VisitorsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6. MODAL DE COMPARTILHAMENTO & QR CODE DO FORMULÁRIO */}
+      {/* ========================================================================= */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+          <div
+            onClick={() => setIsShareModalOpen(false)}
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+          />
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-6 sm:p-8 overflow-hidden border border-slate-200 dark:border-slate-800 space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-display font-black text-slate-900 dark:text-slate-100">
+                    Formulário de Visitante
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Compartilhe o link ou utilize o QR Code impresso
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsShareModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* QR CODE DISPLAY */}
+            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-3xl p-6 text-center border border-slate-100 dark:border-slate-800 space-y-3">
+              <div className="inline-block p-3 bg-white rounded-2xl shadow-sm border border-slate-200">
+                <canvas ref={qrCanvasRef} className="block w-48 h-48 mx-auto" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                  Aponte a câmera do celular para testar
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Ideal para projetar no telão ou imprimir e colocar na recepção
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadQrCode}
+                  className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  <span>Baixar PNG</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrintQrCode}
+                  className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <span>Imprimir para Mesa</span>
+                </button>
+              </div>
+            </div>
+
+            {/* LINK DIRECT COPY */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">
+                Link direto do formulário
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-600 dark:text-slate-300 truncate select-all">
+                  {visitorFormUrl}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyVisitorLink}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
+                    copiedLink
+                      ? "bg-emerald-600 text-white"
+                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                  }`}
+                >
+                  {copiedLink ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Copiar</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* WHATSAPP & EXTERNAL BUTTONS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <a
+                href={whatsAppShareUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Enviar no WhatsApp</span>
+              </a>
+
+              <a
+                href={visitorFormUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-2 transition-all"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>Testar / Abrir Formulário</span>
+              </a>
+            </div>
           </div>
         </div>
       )}

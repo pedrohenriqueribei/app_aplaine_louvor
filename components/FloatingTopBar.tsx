@@ -42,8 +42,13 @@ export function FloatingTopBar({
   const router = useRouter();
   const { updateUserProfilePhoto } = useAuth();
 
+  const lastScrollTimeRef = React.useRef<number>(0);
+  const touchStartPosRef = React.useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const isTouchDraggingRef = React.useRef<boolean>(false);
+
   useEffect(() => {
     const checkScroll = (e?: Event) => {
+      lastScrollTimeRef.current = Date.now();
       let targetScroll = 0;
       if (e && e.target && (e.target as any).scrollTop !== undefined) {
         targetScroll = Number((e.target as any).scrollTop) || 0;
@@ -91,6 +96,19 @@ export function FloatingTopBar({
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleOpenPhotoModal = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    // Previne abertura acidental durante rolagem (gesto de scroll recente nos últimos 600ms)
+    if (Date.now() - lastScrollTimeRef.current < 600) {
+      return;
+    }
+    if (isTouchDraggingRef.current) {
+      isTouchDraggingRef.current = false;
+      return;
+    }
+    setIsPhotoModalOpen(true);
+  };
+
   const defaultProfileHref = profileHref || (
     isAdmin
       ? "/admin/dashboard"
@@ -98,27 +116,28 @@ export function FloatingTopBar({
   );
 
   return (
-    <aside
-      aria-label="Barra de navegação superior rápida"
-      aria-hidden={!isScrolled}
-      className={`fixed top-3 z-40 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-        isAdmin
-          ? "left-3 right-3 sm:left-4 sm:right-4 md:left-[17.5rem] md:right-8 xl:left-[18rem] xl:right-12"
-          : "left-3 right-3 sm:left-4 sm:right-4 lg:left-[19.5rem] lg:right-8 xl:left-[20rem] xl:right-12"
-      } ${
-        isScrolled
-          ? "opacity-100 translate-y-0 scale-100 pointer-events-auto"
-          : "opacity-0 -translate-y-5 scale-95 pointer-events-none"
-      }`}
-    >
-      <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-900/10 dark:shadow-black/40 rounded-2xl px-3 sm:px-5 py-2.5 flex items-center justify-between gap-3">
+    <>
+      <aside
+        aria-label="Barra de navegação superior rápida"
+        aria-hidden={!isScrolled}
+        className={`fixed top-3 z-40 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          isAdmin
+            ? "left-3 right-3 sm:left-4 sm:right-4 md:left-[17.5rem] md:right-8 xl:left-[18rem] xl:right-12"
+            : "left-3 right-3 sm:left-4 sm:right-4 lg:left-[19.5rem] lg:right-8 xl:left-[20rem] xl:right-12"
+        } ${
+          isScrolled
+            ? "opacity-100 translate-y-0 scale-100 pointer-events-auto"
+            : "opacity-0 -translate-y-5 scale-95 pointer-events-none"
+        }`}
+      >
+        <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-900/10 dark:shadow-black/40 rounded-2xl px-3 sm:px-5 py-2.5 flex items-center justify-between gap-3">
           {/* Zona Esquerda: Logo / Título e Atalho para topo */}
           <div className="flex items-center gap-2.5 min-w-0">
             {onOpenMobileMenu && (
               <button
                 type="button"
                 onClick={onOpenMobileMenu}
-                className="lg:hidden p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="lg:hidden p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 title="Abrir menu"
                 aria-label="Abrir menu"
               >
@@ -129,7 +148,7 @@ export function FloatingTopBar({
             <button
               type="button"
               onClick={handleScrollToTop}
-              className="flex items-center gap-2 text-left group hover:opacity-85 transition-opacity min-w-0"
+              className="flex items-center gap-2 text-left group hover:opacity-85 transition-opacity min-w-0 cursor-pointer"
               title="Voltar ao topo da página"
             >
               <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40 flex items-center justify-center shrink-0">
@@ -166,7 +185,7 @@ export function FloatingTopBar({
               <button
                 type="button"
                 onClick={onOpenSearch}
-                className="p-2 sm:p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-800 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all shadow-xs"
+                className="p-2 sm:p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-800 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all shadow-xs cursor-pointer"
                 title="Pesquisar"
                 aria-label="Pesquisar"
               >
@@ -175,7 +194,7 @@ export function FloatingTopBar({
             )}
 
             <ThemeToggle
-              className="p-2 sm:p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-800 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all shadow-xs"
+              className="p-2 sm:p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-800 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all shadow-xs cursor-pointer"
               iconClassName="w-4 h-4"
             />
 
@@ -183,7 +202,7 @@ export function FloatingTopBar({
               <button
                 type="button"
                 onClick={() => router.push("/dashboard/notifications")}
-                className={`p-2 sm:p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-800 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all shadow-xs relative ${
+                className={`p-2 sm:p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-800 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all shadow-xs relative cursor-pointer ${
                   unreadCount > 0 ? "ring-2 ring-blue-500/20" : ""
                 }`}
                 title="Notificações"
@@ -203,18 +222,37 @@ export function FloatingTopBar({
             {/* Perfil Compacto */}
             {user && (
               <div className="flex items-center gap-1.5 py-0.5 px-1 sm:pr-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 hover:border-blue-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all shadow-xs">
-                {/* Avatar com gatilho direto para alterar foto */}
-                <div className="relative group/avatar">
+                {/* Avatar com gatilho direto e seguro para alterar foto ao clicar */}
+                <button
+                  type="button"
+                  onClick={handleOpenPhotoModal}
+                  onTouchStart={(e) => {
+                    const t = e.touches[0];
+                    touchStartPosRef.current = { x: t.clientX, y: t.clientY };
+                    isTouchDraggingRef.current = false;
+                  }}
+                  onTouchMove={(e) => {
+                    const t = e.touches[0];
+                    const dx = Math.abs(t.clientX - touchStartPosRef.current.x);
+                    const dy = Math.abs(t.clientY - touchStartPosRef.current.y);
+                    if (dx > 8 || dy > 8) {
+                      isTouchDraggingRef.current = true;
+                    }
+                  }}
+                  className="relative group/avatar cursor-pointer p-0.5 rounded-xl hover:ring-2 hover:ring-blue-500/40 transition-all active:scale-95"
+                  title="Clique na foto para alterar ou recortar sua foto de perfil"
+                  aria-label="Alterar foto de perfil"
+                >
                   <UserAvatar
                     photoURL={userData?.photoURL || user?.photoURL}
                     name={userData?.name || user?.displayName || "Usuário"}
                     size="sm"
-                    editable={true}
-                    onEditClick={() => setIsPhotoModalOpen(true)}
-                    onClick={() => setIsPhotoModalOpen(true)}
-                    title="Clique para alterar a foto de perfil"
+                    editable={false}
                   />
-                </div>
+                  <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-blue-600 text-white flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity shadow-xs pointer-events-none">
+                    <Camera className="w-2 h-2" />
+                  </span>
+                </button>
 
                 <Link
                   href={defaultProfileHref}
@@ -244,19 +282,20 @@ export function FloatingTopBar({
             )}
           </div>
         </div>
-
-        {/* Modal de Foto de Perfil */}
-        {user && (
-          <ProfilePhotoCropModal
-            isOpen={isPhotoModalOpen}
-            onClose={() => setIsPhotoModalOpen(false)}
-            currentPhotoURL={userData?.photoURL || user?.photoURL}
-            userName={userData?.name || user?.displayName || "Meu Perfil"}
-            onSavePhoto={async (newPhotoURL) => {
-              await updateUserProfilePhoto(newPhotoURL);
-            }}
-          />
-        )}
       </aside>
-    );
-  }
+
+      {/* Modal de Foto de Perfil (renderizado na raiz, desacoplado de transform/opacity da barra flutuante) */}
+      {user && (
+        <ProfilePhotoCropModal
+          isOpen={isPhotoModalOpen}
+          onClose={() => setIsPhotoModalOpen(false)}
+          currentPhotoURL={userData?.photoURL || user?.photoURL}
+          userName={userData?.name || user?.displayName || "Meu Perfil"}
+          onSavePhoto={async (newPhotoURL) => {
+            await updateUserProfilePhoto(newPhotoURL);
+          }}
+        />
+      )}
+    </>
+  );
+}

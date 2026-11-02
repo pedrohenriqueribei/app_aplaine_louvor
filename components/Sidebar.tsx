@@ -21,7 +21,8 @@ import {
   ChevronDown,
   Mic2,
   Monitor,
-  Briefcase
+  Briefcase,
+  CalendarDays
 } from 'lucide-react';
 import { BallerinaIcon } from '@/components/BallerinaIcon';
 import { UserAvatar } from '@/components/UserAvatar';
@@ -34,6 +35,7 @@ import { doc, getDoc, collection, getDocs, query } from 'firebase/firestore';
 const standardMenuItems = [
   { icon: Users, label: 'Membros', href: '/dashboard/members' },
   { icon: UserCheck, label: 'Visitantes', href: '/dashboard/visitors' },
+  { icon: CalendarDays, label: 'Agenda', href: '/dashboard/agenda' },
   { icon: BookHeart, label: 'Atendimentos', href: '/dashboard/appointments' },
   { icon: Calendar, label: 'Escalas', href: '/dashboard/schedules' },
   { icon: Music, label: 'Repertório', href: '/dashboard/songs' },

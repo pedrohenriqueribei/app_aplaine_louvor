@@ -73,7 +73,14 @@
         "followupStatus": { "type": "string", "enum": ["pending", "contacted", "member"] },
         "churchId": { "type": "string" },
         "notes": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "source": { "type": "string" },
+        "howMet": { "type": "string" },
+        "invitedBy": { "type": "string" },
+        "ageGroup": { "type": "string" },
+        "maritalStatus": { "type": "string" },
+        "hasChildren": { "type": "string" },
+        "prayerRequest": { "type": "string" }
       },
       "required": ["id", "name", "churchId", "followupStatus"]
     },
@@ -410,6 +417,7 @@
     "services/{serviceId}": { "schema": "Service", "description": "Cultos e celebrações da congregação" },
     "visitors/{visitorId}": { "schema": "Visitor", "description": "Visitantes" },
     "appointments/{appointmentId}": { "schema": "Appointment", "description": "Atendimentos" },
+    "events/{eventId}": { "schema": "Event", "description": "Agenda e eventos da congregação" },
     "songs/{songId}": { "schema": "Song", "description": "Repertório musical" },
     "schedules/{scheduleId}": { "schema": "Schedule", "description": "Escalas de louvor" },
     "availability/{availableId}": { "schema": "Availability", "description": "Disponibilidade dos membros" },

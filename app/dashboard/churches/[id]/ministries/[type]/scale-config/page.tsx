@@ -27,6 +27,8 @@ import {
   Sparkles,
   Tag,
   Users,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
 
@@ -167,13 +169,7 @@ const DEFAULT_ROLES_CONFIG: Record<string, Record<string, RoleConfig>> = {
     baritone: { enabled: false, count: 0 },
     mezzoSoprano: { enabled: false, count: 0 },
   },
-  danca: {
-    danceLeader: { enabled: true, count: 1 },
-    choreographer: { enabled: true, count: 1 },
-    costume: { enabled: true, count: 1 },
-    dancers: { enabled: true, count: 4 },
-    rehearsalDirector: { enabled: false, count: 0 },
-  },
+  danca: {},
 };
 
 const ROLE_METADATA: Record<
@@ -259,33 +255,7 @@ const ROLE_METADATA: Record<
       icon: Mic2,
     },
   },
-  danca: {
-    danceLeader: {
-      label: "Líder de Dança",
-      desc: "Lidera os ensaios, ministrações e conduz o ministério de dança no altar.",
-      icon: BallerinaIcon,
-    },
-    choreographer: {
-      label: "Coreógrafo(a)",
-      desc: "Responsável pela criação, dinâmica, sequências e ensaios das coreografias.",
-      icon: Sparkles,
-    },
-    costume: {
-      label: "Figurinista",
-      desc: "Responsável pelas vestimentas, túnicas, tecidos, paleta de cores e adereços de dança.",
-      icon: Tag,
-    },
-    dancers: {
-      label: "Bailarinos(as)",
-      desc: "Integrantes que executam a dança e ministração no altar ou apresentações.",
-      icon: Users,
-    },
-    rehearsalDirector: {
-      label: "Diretor(a) de Ensaio",
-      desc: "Coordena a pontualidade, repetições e organização dos ensaios de dança.",
-      icon: Clock,
-    },
-  },
+  danca: {},
 };
 
 export default function ScaleConfigPage() {
@@ -323,6 +293,11 @@ export default function ScaleConfigPage() {
   const [availableInstruments, setAvailableInstruments] = useState<string[]>([]);
   const [newInstrumentName, setNewInstrumentName] = useState("");
   const [isAddingInstrument, setIsAddingInstrument] = useState(false);
+
+  // States for in-app deletion confirmation modals (avoids native window.confirm blocked by iframes)
+  const [roleToDelete, setRoleToDelete] = useState<{ slug: string; name: string } | null>(null);
+  const [isDeletingRole, setIsDeletingRole] = useState(false);
+  const [profileToDelete, setProfileToDelete] = useState<ScaleProfile | null>(null);
 
   // Interfaces and states for Services Playlist config selection
   interface ServiceMoment {
@@ -371,6 +346,10 @@ export default function ScaleConfigPage() {
           const data = snap.data();
 
           const loadedCustomMetadata = data.customRoleMetadata || {};
+          if (isDance) {
+            delete loadedCustomMetadata.danceLeader;
+            delete loadedCustomMetadata.rehearsalDirector;
+          }
           setCustomMetadata(loadedCustomMetadata);
 
           const combinedDefaultRoles = { ...defaultRoles };
@@ -378,7 +357,12 @@ export default function ScaleConfigPage() {
             combinedDefaultRoles[key] = { enabled: false, count: 0 };
           });
 
-          const loadedAvailable = data.availableInstruments || Object.keys(combinedDefaultRoles);
+          let loadedAvailable = data.availableInstruments || Object.keys(combinedDefaultRoles);
+          if (isDance) {
+            loadedAvailable = loadedAvailable.filter(
+              (k: string) => k !== "danceLeader" && k !== "rehearsalDirector"
+            );
+          }
           setAvailableInstruments(loadedAvailable);
 
           let loadedProfiles: ScaleProfile[] = [];
@@ -393,14 +377,48 @@ export default function ScaleConfigPage() {
             }));
           }
 
+          if (isDance) {
+            loadedProfiles = loadedProfiles.map((p) => {
+              const cleanedRoles = { ...(p.roles || {}) };
+              delete cleanedRoles.danceLeader;
+              delete cleanedRoles.rehearsalDirector;
+              // Clean any role not in loadedAvailable
+              Object.keys(cleanedRoles).forEach((k) => {
+                if (!loadedAvailable.includes(k)) {
+                  cleanedRoles[k] = { enabled: false, count: 0 };
+                }
+              });
+              return { ...p, roles: cleanedRoles };
+            });
+          }
+
           if (loadedProfiles.length === 0) {
+            const initialRoles = { ...combinedDefaultRoles };
+            if (isDance) {
+              delete initialRoles.danceLeader;
+              delete initialRoles.rehearsalDirector;
+              Object.keys(initialRoles).forEach((k) => {
+                if (!loadedAvailable.includes(k)) {
+                  initialRoles[k] = { enabled: false, count: 0 };
+                }
+              });
+            }
             loadedProfiles = [
               {
                 id: "padrao",
                 name: "Padrão",
-                roles: data.roles || combinedDefaultRoles,
+                roles: data.roles ? { ...data.roles } : initialRoles,
               },
             ];
+            if (isDance && loadedProfiles[0].roles) {
+              delete loadedProfiles[0].roles.danceLeader;
+              delete loadedProfiles[0].roles.rehearsalDirector;
+              Object.keys(loadedProfiles[0].roles).forEach((k) => {
+                if (!loadedAvailable.includes(k)) {
+                  loadedProfiles[0].roles[k] = { enabled: false, count: 0 };
+                }
+              });
+            }
           }
 
           setProfiles(loadedProfiles);
@@ -415,24 +433,33 @@ export default function ScaleConfigPage() {
               mergedRoles[key] = activeProfile.roles[key];
             }
           });
+          if (isDance) {
+            delete mergedRoles.danceLeader;
+            delete mergedRoles.rehearsalDirector;
+            Object.keys(mergedRoles).forEach((k) => {
+              if (!loadedAvailable.includes(k)) {
+                mergedRoles[k] = { enabled: false, count: 0 };
+              }
+            });
+          }
           setRoles(mergedRoles);
 
           if (data.createdAt) setCreatedAtData(data.createdAt);
           if (data.createdBy) setCreatedByData(data.createdBy);
         } else {
-          setAvailableInstruments(Object.keys(defaultRoles));
+          setAvailableInstruments(isDance ? [] : Object.keys(defaultRoles));
           setCustomMetadata({});
 
           const initialProfiles: ScaleProfile[] = [
             {
               id: "padrao",
               name: "Padrão",
-              roles: defaultRoles,
+              roles: isDance ? {} : defaultRoles,
             }
           ];
           setProfiles(initialProfiles);
           setActiveProfileId("padrao");
-          setRoles(defaultRoles);
+          setRoles(isDance ? {} : defaultRoles);
         }
 
         // Fetch direct department member subroles for the authenticated user
@@ -603,8 +630,10 @@ export default function ScaleConfigPage() {
   }
 
   const getRoleMetadata = (key: string) => {
-    const standard = ROLE_METADATA[activeType]?.[key];
-    if (standard) return standard;
+    if (!isDance) {
+      const standard = ROLE_METADATA[activeType]?.[key];
+      if (standard) return standard;
+    }
 
     const custom = customMetadata[key];
     if (custom) {
@@ -641,10 +670,11 @@ export default function ScaleConfigPage() {
     // 2. Add to available list
     setAvailableInstruments((prev) => [...prev, slug]);
 
-    // 3. Initialize in roles: starts at 0, as explicitly requested!
+    // 3. Initialize in roles: starts with 1 slot active for dance, or 0 for worship/multimedia
+    const initialRoleConfig = isDance ? { enabled: true, count: 1 } : { enabled: false, count: 0 };
     setRoles((prev) => ({
       ...prev,
-      [slug]: { enabled: false, count: 0 }
+      [slug]: initialRoleConfig,
     }));
 
     // 4. Update all profiles in profiles array
@@ -653,7 +683,7 @@ export default function ScaleConfigPage() {
         ...p,
         roles: {
           ...p.roles,
-          [slug]: { enabled: false, count: 0 }
+          [slug]: initialRoleConfig,
         }
       }))
     );
@@ -662,41 +692,98 @@ export default function ScaleConfigPage() {
     setIsAddingInstrument(false);
   };
 
-  const handleDeleteCustomInstrument = (slug: string) => {
-    if (!confirm("Deseja realmente remover este instrumento do ministério? Esta ação removerá o instrumento de todos os perfis.")) {
-      return;
+  const handleConfirmDeleteCustomInstrument = async () => {
+    if (!roleToDelete) return;
+    const { slug } = roleToDelete;
+    setIsDeletingRole(true);
+
+    try {
+      const updatedCustom = { ...customMetadata };
+      delete updatedCustom[slug];
+      setCustomMetadata(updatedCustom);
+
+      const updatedAvailable = availableInstruments.filter((k) => k !== slug);
+      setAvailableInstruments(updatedAvailable);
+
+      const updatedRoles = { ...roles };
+      delete updatedRoles[slug];
+      setRoles(updatedRoles);
+
+      const updatedProfiles = profiles.map((p) => {
+        const pRoles = { ...p.roles };
+        delete pRoles[slug];
+        return { ...p, roles: pRoles };
+      });
+      setProfiles(updatedProfiles);
+
+      if (churchId) {
+        const userUid = userData?.uid || user?.uid || "system";
+        const configDocId = isDance
+          ? `dance_scale_config_${churchId}`
+          : isWorship
+          ? `worship_scale_config_${churchId}`
+          : `multimedia_scale_config_${churchId}`;
+
+        const docRef = doc(db, "services", configDocId);
+        const activeProfile = updatedProfiles.find((p) => p.id === activeProfileId) || { roles: updatedRoles };
+
+        await setDoc(
+          docRef,
+          {
+            churchId: churchId as string,
+            activeProfileId: activeProfileId,
+            profiles: updatedProfiles,
+            roles: activeProfile.roles,
+            availableInstruments: updatedAvailable,
+            customRoleMetadata: updatedCustom,
+            updatedAt: serverTimestamp(),
+            updatedBy: userUid,
+          },
+          { merge: true }
+        );
+      }
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error("Error auto-saving deleted custom role:", err);
+    } finally {
+      setIsDeletingRole(false);
+      setRoleToDelete(null);
     }
-
-    setCustomMetadata((prev) => {
-      const updated = { ...prev };
-      delete updated[slug];
-      return updated;
-    });
-
-    setAvailableInstruments((prev) => prev.filter((k) => k !== slug));
-
-    setRoles((prev) => {
-      const updated = { ...prev };
-      delete updated[slug];
-      return updated;
-    });
-
-    setProfiles((prev) =>
-      prev.map((p) => {
-        const updatedRoles = { ...p.roles };
-        delete updatedRoles[slug];
-        return { ...p, roles: updatedRoles };
-      })
-    );
   };
 
   const handleToggleAvailable = (key: string) => {
     setAvailableInstruments((prev) => {
-      if (prev.includes(key)) {
-        return prev.filter((k) => k !== key);
-      } else {
-        return [...prev, key];
-      }
+      const isCurrentlyAvailable = prev.includes(key);
+      const nextAvailable = isCurrentlyAvailable
+        ? prev.filter((k) => k !== key)
+        : [...prev, key];
+
+      // Synchronize roles state immediately
+      setRoles((prevRoles) => ({
+        ...prevRoles,
+        [key]: {
+          enabled: !isCurrentlyAvailable,
+          count: !isCurrentlyAvailable ? ((prevRoles[key]?.count ?? 0) > 0 ? prevRoles[key].count : 1) : 0,
+        },
+      }));
+
+      // Synchronize all profiles immediately
+      setProfiles((prevProfiles) =>
+        prevProfiles.map((p) => ({
+          ...p,
+          roles: {
+            ...p.roles,
+            [key]: {
+              enabled: !isCurrentlyAvailable,
+              count: !isCurrentlyAvailable ? ((p.roles?.[key]?.count ?? 0) > 0 ? p.roles[key].count : 1) : 0,
+            },
+          },
+        }))
+      );
+
+      return nextAvailable;
     });
   };
 
@@ -729,6 +816,15 @@ export default function ScaleConfigPage() {
           mergedRoles[key] = targetProfile.roles[key];
         }
       });
+      if (isDance) {
+        delete mergedRoles.danceLeader;
+        delete mergedRoles.rehearsalDirector;
+        Object.keys(mergedRoles).forEach((k) => {
+          if (!availableInstruments.includes(k)) {
+            mergedRoles[k] = { enabled: false, count: 0 };
+          }
+        });
+      }
       setRoles(mergedRoles);
     }
   };
@@ -758,21 +854,21 @@ export default function ScaleConfigPage() {
     setIsAddingProfile(false);
   };
 
-  const handleDeleteProfile = (profileId: string) => {
-    if (profileId === "padrao") return;
+  const handleConfirmDeleteProfile = () => {
+    if (!profileToDelete || profileToDelete.id === "padrao") return;
+    const profileId = profileToDelete.id;
 
-    if (confirm("Deseja realmente remover este perfil de escala?")) {
-      const filtered = profiles.filter((p) => p.id !== profileId);
-      setProfiles(filtered);
+    const filtered = profiles.filter((p) => p.id !== profileId);
+    setProfiles(filtered);
 
-      if (activeProfileId === profileId) {
-        setActiveProfileId("padrao");
-        const defaultProf = filtered.find((p) => p.id === "padrao") || filtered[0];
-        if (defaultProf) {
-          setRoles({ ...defaultProf.roles });
-        }
+    if (activeProfileId === profileId) {
+      setActiveProfileId("padrao");
+      const defaultProf = filtered.find((p) => p.id === "padrao") || filtered[0];
+      if (defaultProf) {
+        setRoles({ ...defaultProf.roles });
       }
     }
+    setProfileToDelete(null);
   };
 
   const handleToggle = (key: string) => {
@@ -818,15 +914,27 @@ export default function ScaleConfigPage() {
 
       const docRef = doc(db, "services", configDocId);
 
-      // Save locally accumulated roles to current profile
+      // Save locally accumulated roles to current profile, enforcing availableInstruments
       const updatedProfiles = profiles.map((p) => {
-        if (p.id === activeProfileId) {
-          return { ...p, roles: { ...roles } };
-        }
-        return p;
+        const baseRoles = p.id === activeProfileId ? { ...roles } : { ...(p.roles || {}) };
+        
+        // Enforce: Any role not in availableInstruments MUST be disabled with count 0
+        const sanitizedProfileRoles: Record<string, RoleConfig> = {};
+        Object.entries(baseRoles).forEach(([rKey, rVal]) => {
+          if (!availableInstruments.includes(rKey)) {
+            sanitizedProfileRoles[rKey] = { enabled: false, count: 0 };
+          } else {
+            sanitizedProfileRoles[rKey] = {
+              enabled: Boolean(rVal?.enabled),
+              count: Boolean(rVal?.enabled) ? (Number(rVal?.count) || 0) : 0,
+            };
+          }
+        });
+
+        return { ...p, roles: sanitizedProfileRoles };
       });
 
-      const activeProfile = updatedProfiles.find((p) => p.id === activeProfileId) || { roles };
+      const activeProfile = updatedProfiles.find((p) => p.id === activeProfileId) || updatedProfiles[0];
 
       const savedData = {
         churchId: churchId as string,
@@ -844,6 +952,7 @@ export default function ScaleConfigPage() {
 
       await setDoc(docRef, savedData, { merge: true });
       setProfiles(updatedProfiles);
+      setRoles(activeProfile.roles);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err) {
@@ -926,7 +1035,9 @@ export default function ScaleConfigPage() {
               Configurar Escala de {isDance ? "Dança" : isWorship ? "Louvor" : "Multimídia"}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 font-medium text-base max-w-2xl">
-              Defina os papéis que fazem parte da sua escala semanal de {isDance ? "dança" : isWorship ? "louvor" : "multimídia"} e o número necessário de integrantes por função (líderes, coreógrafos, figurinistas e bailarinos).
+              {isDance
+                ? "Defina os papéis que fazem parte da sua escala semanal de dança utilizando exclusivamente funções personalizadas e o número necessário de vagas por função."
+                : `Defina os papéis que fazem parte da sua escala semanal de ${isWorship ? "louvor" : "multimídia"} e o número necessário de integrantes por função.`}
             </p>
           </div>
         </div>
@@ -1065,9 +1176,9 @@ export default function ScaleConfigPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDeleteProfile(p.id);
+                              setProfileToDelete(p);
                             }}
-                            className={`opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-1.5 rounded-xl ${
+                            className={`opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-1.5 rounded-xl cursor-pointer ${
                               isActive
                                 ? "hover:bg-white/10 text-white/80 hover:text-rose-300"
                                 : "hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400"
@@ -1219,29 +1330,34 @@ export default function ScaleConfigPage() {
                             <div
                               key={key}
                               onClick={() => handleToggleAvailable(key)}
-                              className={`group flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+                              className={`group flex items-center justify-between gap-3 px-3.5 py-2 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
                                 isSelected
-                                  ? "bg-emerald-50/70 border-emerald-200 text-emerald-800 dark:bg-emerald-950/30 dark:border-emerald-900/40 dark:text-emerald-300"
-                                  : "bg-white border-slate-200 text-slate-400 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-850"
+                                  ? "bg-emerald-50/70 border-emerald-200 text-emerald-800 dark:bg-emerald-950/30 dark:border-emerald-900/40 dark:text-emerald-300 shadow-2xs"
+                                  : "bg-white border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-850"
                               }`}
                             >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                readOnly
-                                className="accent-emerald-600 w-3.5 h-3.5 rounded"
-                              />
-                              <span>{meta.label}</span>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  readOnly
+                                  className="accent-emerald-600 w-3.5 h-3.5 rounded"
+                                />
+                                <span className="truncate">{meta.label}</span>
+                              </div>
 
                               <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDeleteCustomInstrument(key);
+                                  setRoleToDelete({ slug: key, name: meta.label });
                                 }}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 ml-1 rounded-md text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                                title="Remover instrumento permanentemente"
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-red-600 hover:text-white hover:bg-red-600 dark:text-red-400 dark:hover:bg-red-700 transition-all cursor-pointer border border-red-200/90 dark:border-red-900/60 bg-red-50/60 dark:bg-red-950/50 hover:border-transparent text-[11px] font-bold shrink-0 shadow-2xs ml-1"
+                                title={`Excluir "${meta.label}"`}
+                                aria-label={`Excluir ${meta.label}`}
                               >
                                 <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                                <span>Excluir</span>
                               </button>
                             </div>
                           );
@@ -1262,7 +1378,7 @@ export default function ScaleConfigPage() {
                       Cargos e Funções de Dança
                     </h3>
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 leading-normal">
-                      Ative ou desative os cargos disponíveis no ministério de dança da sua igreja (líderes, coreógrafos, figurinistas e bailarinos). Apenas os marcados estarão expostos para configurar vagas e escalar voluntários.
+                      Defina e gerencie as funções personalizadas do ministério de dança da sua igreja. Apenas as funções ativadas estarão expostas para configurar vagas e escalar voluntários.
                     </p>
                   </div>
 
@@ -1273,13 +1389,13 @@ export default function ScaleConfigPage() {
                       className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm bg-rose-50 hover:bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:hover:bg-rose-900/30 dark:text-rose-300 shrink-0 active:scale-95"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      Adicionar Função Customizada
+                      Adicionar Função Personalizada
                     </button>
                   ) : (
                     <div className="flex items-center gap-2 max-w-sm w-full bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
                       <input
                         type="text"
-                        placeholder="Nome da função..."
+                        placeholder="Nome da função (ex: Bailarinas, Coreógrafo)..."
                         value={newInstrumentName}
                         onChange={(e) => setNewInstrumentName(e.target.value)}
                         className="bg-transparent border-0 outline-none text-xs px-2.5 py-1.5 w-full text-slate-800 dark:text-slate-100 font-bold"
@@ -1313,46 +1429,10 @@ export default function ScaleConfigPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {/* Category: Standard Dance Roles */}
-                  <div>
-                    <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 dark:text-slate-500 mb-2.5 block">
-                      Funções Padrão de Dança
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.keys(DEFAULT_ROLES_CONFIG.danca).map((key) => {
-                        const meta = getRoleMetadata(key);
-                        const isSelected = availableInstruments.includes(key);
-                        const isCore = key === "danceLeader";
-
-                        return (
-                          <div
-                            key={key}
-                            onClick={() => !isCore && handleToggleAvailable(key)}
-                            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-2xl border text-xs font-bold transition-all ${
-                              isSelected
-                                ? "bg-rose-50/80 border-rose-200 text-rose-800 dark:bg-rose-950/30 dark:border-rose-900/40 dark:text-rose-300"
-                                : "bg-white border-slate-200 text-slate-400 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-850"
-                            } ${isCore ? "opacity-75 cursor-default" : "cursor-pointer"}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              readOnly
-                              disabled={isCore}
-                              className="accent-rose-600 w-3.5 h-3.5 rounded"
-                            />
-                            <span>{meta.label}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Category: Custom Administered Roles */}
-                  {Object.keys(customMetadata).length > 0 && (
-                    <div className="pt-2">
+                  {Object.keys(customMetadata).length > 0 ? (
+                    <div>
                       <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 dark:text-slate-500 mb-2.5 block">
-                        Funções Personalizadas Adicionadas
+                        Funções Personalizadas Cadastradas
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {Object.keys(customMetadata).map((key) => {
@@ -1363,34 +1443,49 @@ export default function ScaleConfigPage() {
                             <div
                               key={key}
                               onClick={() => handleToggleAvailable(key)}
-                              className={`group flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+                              className={`group flex items-center justify-between gap-3 px-3.5 py-2 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
                                 isSelected
-                                  ? "bg-rose-50/80 border-rose-200 text-rose-800 dark:bg-rose-950/30 dark:border-rose-900/40 dark:text-rose-300"
-                                  : "bg-white border-slate-200 text-slate-400 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-850"
+                                  ? "bg-rose-50/80 border-rose-200 text-rose-800 dark:bg-rose-950/30 dark:border-rose-900/40 dark:text-rose-300 shadow-2xs"
+                                  : "bg-white border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-850"
                               }`}
                             >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                readOnly
-                                className="accent-rose-600 w-3.5 h-3.5 rounded"
-                              />
-                              <span>{meta.label}</span>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  readOnly
+                                  className="accent-rose-600 w-3.5 h-3.5 rounded pointer-events-none"
+                                />
+                                <span className="truncate">{meta.label}</span>
+                              </div>
 
                               <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDeleteCustomInstrument(key);
+                                  setRoleToDelete({ slug: key, name: meta.label });
                                 }}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 ml-1 rounded-md text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                                title="Remover função permanentemente"
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-rose-600 hover:text-white hover:bg-rose-600 dark:text-rose-400 dark:hover:bg-rose-700 transition-all cursor-pointer border border-rose-200/90 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/50 hover:border-transparent text-[11px] font-bold shrink-0 shadow-2xs ml-1"
+                                title={`Excluir função "${meta.label}"`}
+                                aria-label={`Excluir função ${meta.label}`}
                               >
                                 <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                                <span>Excluir</span>
                               </button>
                             </div>
                           );
                         })}
                       </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 px-4 border border-dashed border-rose-200/80 dark:border-rose-900/30 rounded-2xl bg-rose-50/20 dark:bg-rose-950/10">
+                      <BallerinaIcon className="w-9 h-9 text-rose-400 mx-auto mb-2 opacity-80" />
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Nenhuma função personalizada cadastrada ainda
+                      </p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 max-w-md mx-auto">
+                        O ministério de dança utiliza exclusivamente funções personalizadas. Clique em &ldquo;Adicionar Função Personalizada&rdquo; para criar os cargos da sua igreja (ex: Bailarinas, Coreógrafo, Ministrante de Dança, etc.).
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1505,29 +1600,34 @@ export default function ScaleConfigPage() {
                             <div
                               key={key}
                               onClick={() => handleToggleAvailable(key)}
-                              className={`group flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+                              className={`group flex items-center justify-between gap-3 px-3.5 py-2 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
                                 isSelected
-                                  ? "bg-emerald-50/70 border-emerald-200 text-emerald-800 dark:bg-emerald-950/30 dark:border-emerald-900/40 dark:text-emerald-300"
-                                  : "bg-white border-slate-200 text-slate-400 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-850"
+                                  ? "bg-purple-50/80 border-purple-200 text-purple-800 dark:bg-purple-950/30 dark:border-purple-900/40 dark:text-purple-300 shadow-2xs"
+                                  : "bg-white border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-850"
                               }`}
                             >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                readOnly
-                                className="accent-emerald-600 w-3.5 h-3.5 rounded"
-                              />
-                              <span>{meta.label}</span>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  readOnly
+                                  className="accent-purple-600 w-3.5 h-3.5 rounded"
+                                />
+                                <span className="truncate">{meta.label}</span>
+                              </div>
 
                               <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDeleteCustomInstrument(key);
+                                  setRoleToDelete({ slug: key, name: meta.label });
                                 }}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 ml-1 rounded-md text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                                title="Remover cargo permanentemente"
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-red-600 hover:text-white hover:bg-red-600 dark:text-red-400 dark:hover:bg-red-700 transition-all cursor-pointer border border-red-200/90 dark:border-red-900/60 bg-red-50/60 dark:bg-red-950/50 hover:border-transparent text-[11px] font-bold shrink-0 shadow-2xs ml-1"
+                                title={`Excluir cargo "${meta.label}"`}
+                                aria-label={`Excluir ${meta.label}`}
                               >
                                 <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                                <span>Excluir</span>
                               </button>
                             </div>
                           );
@@ -1551,97 +1651,114 @@ export default function ScaleConfigPage() {
             <div className="space-y-6">
               {Object.keys(roles).filter((key) => {
                 return availableInstruments.includes(key);
-              }).map((key) => {
-                const config = roles[key];
-                const meta = getRoleMetadata(key);
-                const IconComponent = meta.icon;
+              }).length === 0 ? (
+                <div className="text-center py-12 px-6 bg-slate-50/50 dark:bg-slate-900/30 border border-dashed border-slate-200 dark:border-slate-800 rounded-3xl">
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                    {isDance
+                      ? "Nenhuma função de dança disponível"
+                      : "Nenhum cargo disponível"}
+                  </p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                    {isDance
+                      ? "Adicione e ative as funções personalizadas no quadro acima para definir as vagas da sua escala."
+                      : "Ative os cargos no painel acima para configurar o número de vagas da sua escala."}
+                  </p>
+                </div>
+              ) : (
+                Object.keys(roles).filter((key) => {
+                  return availableInstruments.includes(key);
+                }).map((key) => {
+                  const config = roles[key];
+                  const meta = getRoleMetadata(key);
+                  const IconComponent = meta.icon;
 
-                return (
-                  <div
-                    key={key}
-                    className={`p-6 rounded-[2rem] border transition-all flex flex-col md:flex-row md:items-center justify-between gap-6 ${
-                      config.enabled
-                        ? isDance
-                          ? "bg-rose-50/20 dark:bg-rose-950/5 border-rose-300 dark:border-rose-850 shadow-md ring-1 ring-rose-500/10"
-                          : isWorship
-                          ? "bg-blue-50/20 dark:bg-blue-950/5 border-blue-350 dark:border-blue-850 shadow-md ring-1 ring-blue-550/10"
-                          : "bg-purple-50/20 dark:bg-purple-950/5 border-purple-350 dark:border-purple-850 shadow-md ring-1 ring-purple-500/10"
-                        : "bg-slate-50/50 dark:bg-slate-900/40 border-slate-100 dark:border-slate-800"
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        onClick={() => handleToggle(key)}
-                        className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold cursor-pointer transition-all ${
-                          config.enabled
-                            ? isDance
-                              ? "bg-rose-600 text-white shadow-lg shadow-rose-600/15"
-                              : isWorship
-                              ? "bg-blue-800 text-white shadow-lg shadow-blue-800/15"
-                              : "bg-purple-800 text-white shadow-lg shadow-purple-800/15"
-                            : "bg-slate-200 dark:bg-slate-800 text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700"
-                        }`}
-                      >
-                        <IconComponent className="w-6 h-6" />
+                  return (
+                    <div
+                      key={key}
+                      className={`p-6 rounded-[2rem] border transition-all flex flex-col md:flex-row md:items-center justify-between gap-6 ${
+                        config.enabled
+                          ? isDance
+                            ? "bg-rose-50/20 dark:bg-rose-950/5 border-rose-300 dark:border-rose-850 shadow-md ring-1 ring-rose-500/10"
+                            : isWorship
+                            ? "bg-blue-50/20 dark:bg-blue-950/5 border-blue-350 dark:border-blue-850 shadow-md ring-1 ring-blue-550/10"
+                            : "bg-purple-50/20 dark:bg-purple-950/5 border-purple-350 dark:border-purple-850 shadow-md ring-1 ring-purple-500/10"
+                          : "bg-slate-50/50 dark:bg-slate-900/40 border-slate-100 dark:border-slate-800"
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div
+                          onClick={() => handleToggle(key)}
+                          className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold cursor-pointer transition-all ${
+                            config.enabled
+                              ? isDance
+                                ? "bg-rose-600 text-white shadow-lg shadow-rose-600/15"
+                                : isWorship
+                                ? "bg-blue-800 text-white shadow-lg shadow-blue-800/15"
+                                : "bg-purple-800 text-white shadow-lg shadow-purple-800/15"
+                              : "bg-slate-200 dark:bg-slate-800 text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700"
+                          }`}
+                        >
+                          <IconComponent className="w-6 h-6" />
+                        </div>
+                        <div
+                          onClick={() => handleToggle(key)}
+                          className="cursor-pointer select-none"
+                        >
+                          <h4 className="font-bold text-slate-800 dark:text-slate-100 text-base flex items-center gap-2">
+                            {meta.label}
+                            {config.enabled && (
+                              <span className={`w-2.5 h-2.5 rounded-full shadow-md transition-all duration-300 ${
+                                config.count === 0
+                                  ? "bg-rose-500 shadow-rose-500/50 ring-2 ring-rose-500/20"
+                                  : "bg-emerald-500 shadow-emerald-500/50 ring-2 ring-emerald-500/20"
+                              }`}></span>
+                            )}
+                          </h4>
+                          <p className="text-xs text-slate-400 dark:text-slate-500">
+                            {meta.desc}
+                          </p>
+                        </div>
                       </div>
-                      <div
-                        onClick={() => handleToggle(key)}
-                        className="cursor-pointer select-none"
-                      >
-                        <h4 className="font-bold text-slate-800 dark:text-slate-100 text-base flex items-center gap-2">
-                          {meta.label}
-                          {config.enabled && (
-                            <span className={`w-2.5 h-2.5 rounded-full shadow-md transition-all duration-300 ${
-                              config.count === 0
-                                ? "bg-rose-500 shadow-rose-500/50 ring-2 ring-rose-500/20"
-                                : "bg-emerald-500 shadow-emerald-500/50 ring-2 ring-emerald-500/20"
-                            }`}></span>
-                          )}
-                        </h4>
-                        <p className="text-xs text-slate-400 dark:text-slate-500">
-                          {meta.desc}
-                        </p>
+
+                      <div className="flex items-center gap-4 self-end md:self-auto">
+                        <div className="text-xs font-bold text-slate-400 dark:text-slate-500">
+                          Número de Vagas:
+                        </div>
+                        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 shadow-sm">
+                          <button
+                            disabled={!config.enabled || config.count <= ((isWorship && key === "mainMinister") ? 1 : 0)}
+                            onClick={() => handleAdjustCount(key, -1)}
+                            className="p-1 px-2.5 rounded-lg font-black hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 disabled:opacity-30 transition-all cursor-pointer"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="font-mono font-bold text-base px-2 text-slate-800 dark:text-slate-150 min-w-[20px] text-center">
+                            {config.count}
+                          </span>
+                          <button
+                            onClick={() => {
+                              if (!config.enabled) {
+                                setRoles((prev) => ({
+                                  ...prev,
+                                  [key]: {
+                                    enabled: true,
+                                    count: 1,
+                                  },
+                                }));
+                              } else {
+                                handleAdjustCount(key, 1);
+                              }
+                            }}
+                            className="p-1 px-2.5 rounded-lg font-black hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 transition-all cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-4 self-end md:self-auto">
-                      <div className="text-xs font-bold text-slate-400 dark:text-slate-500">
-                        Número de Vagas:
-                      </div>
-                      <div className="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 shadow-sm">
-                        <button
-                          disabled={!config.enabled || config.count <= (((isWorship && key === "mainMinister") || (isDance && key === "danceLeader")) ? 1 : 0)}
-                          onClick={() => handleAdjustCount(key, -1)}
-                          className="p-1 px-2.5 rounded-lg font-black hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 disabled:opacity-30 transition-all cursor-pointer"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="font-mono font-bold text-base px-2 text-slate-800 dark:text-slate-150 min-w-[20px] text-center">
-                          {config.count}
-                        </span>
-                        <button
-                          onClick={() => {
-                            if (!config.enabled) {
-                              setRoles((prev) => ({
-                                ...prev,
-                                [key]: {
-                                  enabled: true,
-                                  count: 1,
-                                },
-                              }));
-                            } else {
-                              handleAdjustCount(key, 1);
-                            }
-                          }}
-                          className="p-1 px-2.5 rounded-lg font-black hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 transition-all cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
 
             {/* Action buttons with success feedbacks */}
@@ -1969,6 +2086,116 @@ export default function ScaleConfigPage() {
                 className="bg-blue-800 hover:bg-blue-900 text-white px-8 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-lg shadow-blue-500/10"
               >
                 Salvar Configuração
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Exclusão de Cargo/Função Personalizada */}
+      {roleToDelete && (
+        <div 
+          onClick={() => !isDeletingRole && setRoleToDelete(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-sm animate-fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-[2.5rem] p-7 sm:p-9 max-w-md w-full shadow-2xl space-y-6"
+          >
+            <div className="flex items-start gap-4">
+              <div className={`p-3.5 rounded-2xl shrink-0 ${
+                isDance
+                  ? "bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400"
+                  : "bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-400"
+              }`}>
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-2 flex-1 min-w-0">
+                <h3 className="text-lg font-display font-black text-slate-800 dark:text-slate-100">
+                  Excluir {isDance ? "Função de Dança" : isWorship ? "Instrumento" : "Cargo"}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Deseja realmente excluir <strong className="text-slate-800 dark:text-slate-100 font-bold">&ldquo;{roleToDelete.name}&rdquo;</strong>?
+                  Essa função será removida de todos os perfis e configurações da escala.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingRole}
+                onClick={() => setRoleToDelete(null)}
+                className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingRole}
+                onClick={handleConfirmDeleteCustomInstrument}
+                className={`px-6 py-2.5 rounded-xl text-white font-bold text-xs transition-all cursor-pointer flex items-center gap-2 shadow-md active:scale-95 ${
+                  isDance
+                    ? "bg-rose-600 hover:bg-rose-700 shadow-rose-600/30"
+                    : "bg-red-600 hover:bg-red-700 shadow-red-600/30"
+                }`}
+              >
+                {isDeletingRole ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Excluindo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Sim, Excluir</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Exclusão de Perfil de Escala */}
+      {profileToDelete && (
+        <div 
+          onClick={() => setProfileToDelete(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-sm animate-fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-[2.5rem] p-7 sm:p-9 max-w-md w-full shadow-2xl space-y-6"
+          >
+            <div className="flex items-start gap-4">
+              <div className="p-3.5 rounded-2xl bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-400 shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-2 flex-1 min-w-0">
+                <h3 className="text-lg font-display font-black text-slate-800 dark:text-slate-100">
+                  Excluir Perfil de Escala
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Deseja realmente remover o modelo de perfil <strong className="text-slate-800 dark:text-slate-100 font-bold">&ldquo;{profileToDelete.name}&rdquo;</strong>?
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setProfileToDelete(null)}
+                className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteProfile}
+                className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition-all cursor-pointer flex items-center gap-2 shadow-md active:scale-95 shadow-red-600/30"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Sim, Excluir</span>
               </button>
             </div>
           </div>

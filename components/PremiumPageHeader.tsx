@@ -15,6 +15,8 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserAvatar } from "@/components/UserAvatar";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { QuickSearchModal } from "@/components/QuickSearchModal";
+import { ProfilePhotoCropModal } from "@/components/ProfilePhotoCropModal";
+import { useAuth } from "@/components/AuthProvider";
 
 interface PremiumPageHeaderProps {
   user: any;
@@ -42,7 +44,9 @@ export function PremiumPageHeader({
 }: PremiumPageHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { updateUserProfilePhoto } = useAuth();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
   // Global shortcut Cmd+K / Ctrl+K
   useEffect(() => {
@@ -128,6 +132,13 @@ export function PremiumPageHeader({
         category: "Integração",
         title: "Visitantes & Novos Convertidos",
         subtitle: "Acompanhe e acolha novas vidas integrando-as à vida da comunidade.",
+      };
+    }
+    if (pathname.includes("/agenda")) {
+      return {
+        category: "Comunidade",
+        title: "Agenda Geral da Igreja",
+        subtitle: "Calendário interativo de eventos oficiais, programações e aniversariantes do mês.",
       };
     }
     if (pathname.includes("/appointments")) {
@@ -278,17 +289,20 @@ export function PremiumPageHeader({
             </button>
 
             {/* Avatar do Usuário */}
-            <Link
-              href={profileHref}
-              className="p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-500/50 transition-all active:scale-95"
-              title="Meu Perfil"
+            <button
+              type="button"
+              onClick={() => setIsPhotoModalOpen(true)}
+              className="p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-500/50 hover:ring-2 hover:ring-blue-500/20 transition-all active:scale-95 cursor-pointer relative group"
+              title="Clique para alterar a foto de perfil"
+              aria-label="Clique para alterar a foto de perfil"
             >
               <UserAvatar
                 photoURL={userData?.photoURL || user?.photoURL}
                 name={userData?.name || user?.displayName || "Usuário"}
                 size="sm"
+                editable={false}
               />
-            </Link>
+            </button>
           </div>
         </div>
 
@@ -376,19 +390,28 @@ export function PremiumPageHeader({
             <div className="h-8 w-[1px] bg-slate-200/80 dark:bg-slate-800 mx-1 shrink-0" />
 
             {/* Cápsula de Perfil Executivo */}
-            <Link
-              href={profileHref}
-              className="flex items-center gap-3 py-1.5 pl-2 pr-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs shrink-0 hover:border-blue-500/40 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-all cursor-pointer group"
-              title="Acessar meu perfil completo"
-            >
-              <UserAvatar
-                photoURL={userData?.photoURL || user?.photoURL}
-                name={userData?.name || user?.displayName || "Usuário"}
-                size="md"
-              />
-              <div className="text-left">
+            <div className="flex items-center gap-3 py-1.5 pl-2 pr-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs shrink-0 hover:border-blue-500/40 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-all">
+              <button
+                type="button"
+                onClick={() => setIsPhotoModalOpen(true)}
+                className="p-0.5 rounded-xl hover:ring-2 hover:ring-blue-500/40 transition-all cursor-pointer relative group shrink-0 active:scale-95"
+                title="Clique na foto para alterar ou recortar sua foto de perfil"
+                aria-label="Alterar foto de perfil"
+              >
+                <UserAvatar
+                  photoURL={userData?.photoURL || user?.photoURL}
+                  name={userData?.name || user?.displayName || "Usuário"}
+                  size="md"
+                  editable={false}
+                />
+              </button>
+              <Link
+                href={profileHref}
+                className="text-left cursor-pointer group/name"
+                title="Acessar meu perfil completo"
+              >
                 <div className="flex items-center gap-1.5">
-                  <p className="text-xs font-extrabold text-slate-800 dark:text-slate-200 leading-tight group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">
+                  <p className="text-xs font-extrabold text-slate-800 dark:text-slate-200 leading-tight group-hover/name:text-blue-700 dark:group-hover/name:text-blue-400 transition-colors">
                     {userData?.name || user?.displayName || "Usuário"}
                   </p>
                   <VerifiedBadge
@@ -403,8 +426,8 @@ export function PremiumPageHeader({
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider leading-none mt-1">
                   {userRoleTitle}
                 </p>
-              </div>
-            </Link>
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -419,6 +442,19 @@ export function PremiumPageHeader({
         churchId={userData?.churchId}
         userUid={userData?.uid || user?.uid}
       />
+
+      {/* Modal de Foto de Perfil */}
+      {user && (
+        <ProfilePhotoCropModal
+          isOpen={isPhotoModalOpen}
+          onClose={() => setIsPhotoModalOpen(false)}
+          currentPhotoURL={userData?.photoURL || user?.photoURL}
+          userName={userData?.name || user?.displayName || "Meu Perfil"}
+          onSavePhoto={async (newPhotoURL) => {
+            await updateUserProfilePhoto(newPhotoURL);
+          }}
+        />
+      )}
     </>
   );
 }

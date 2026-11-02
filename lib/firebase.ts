@@ -1,21 +1,50 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { initializeFirestore, getFirestore } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  getFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager, 
+  memoryLocalCache,
+  doc,
+  getDocFromServer
+} from 'firebase/firestore';
 import { getMessaging, isSupported } from 'firebase/messaging';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
 const dbInstance = (() => {
+  const dbId = (firebaseConfig as any).firestoreDatabaseId || undefined;
+
+  // If already initialized for this databaseId, re-use the existing instance
+  try {
+    const existing = getFirestore(app, dbId);
+    if (existing) return existing;
+  } catch {
+    // Proceed to initialize below
+  }
+
+  const isBrowser = typeof window !== 'undefined';
+  let localCacheSetting: any = memoryLocalCache();
+
+  if (isBrowser && typeof window.indexedDB !== 'undefined') {
+    try {
+      localCacheSetting = persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      });
+    } catch {
+      localCacheSetting = memoryLocalCache();
+    }
+  }
+
   try {
     return initializeFirestore(app, {
-      experimentalForceLongPolling: true,
-      experimentalLongPollingOptions: {
-        timeoutSeconds: 20,
-      },
-    }, (firebaseConfig as any).firestoreDatabaseId);
+      localCache: localCacheSetting,
+      experimentalAutoDetectLongPolling: true,
+    }, dbId);
   } catch {
-    return getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+    return getFirestore(app, dbId);
   }
 })();
 
@@ -29,6 +58,20 @@ export const messaging = typeof window !== 'undefined'
       return supported ? getMessaging(app) : null;
     }
   : null;
+
+// Validate Connection to Firestore on startup as specified in the Firebase skill
+if (typeof window !== 'undefined') {
+  (async () => {
+    try {
+      await getDocFromServer(doc(db, 'test', 'connection'));
+    } catch (error: any) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('offline') || error?.code === 'unavailable') {
+        console.warn('Firestore is running in offline/cached mode until backend reconnects.');
+      }
+    }
+  })();
+}
 
 export enum OperationType {
   CREATE = 'create',
@@ -53,12 +96,15 @@ export interface FirestoreErrorInfo {
       providerId?: string | null;
       email?: string | null;
     }[];
-  }
+  };
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  const errCode = (error as any)?.code || '';
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -72,11 +118,23 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     },
     operationType,
     path
+  };
+
+  const isOfflineOrUnavailable =
+    errCode === 'unavailable' ||
+    errMsg.includes('unavailable') ||
+    errMsg.includes('offline') ||
+    errMsg.includes('The operation could not be completed') ||
+    errMsg.includes('client is offline');
+
+  // If transient network unavailable or offline, log warning and do not crash the React component
+  if (isOfflineOrUnavailable) {
+    console.warn('Firestore is temporarily unavailable or offline. Operating in offline/cached mode:', errMsg);
+    return;
   }
+
   console.error('Firestore Error: ', JSON.stringify(errInfo));
-  if (errInfo.error.includes('offline')) {
-    console.error('CRITICAL: Firestore is offline. Check databaseId and network.');
-  }
   throw new Error(JSON.stringify(errInfo));
 }
+
 

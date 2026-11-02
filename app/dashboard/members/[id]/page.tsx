@@ -56,6 +56,14 @@ import {
   Sparkles,
   Cake,
   Camera,
+  Copy,
+  ExternalLink,
+  Church,
+  Award,
+  MessageSquare,
+  Clock,
+  Layers,
+  Heart,
 } from "lucide-react";
 
 interface Musician {
@@ -117,6 +125,19 @@ export default function MusicianProfilePage() {
     type: "success" | "error";
     message: string;
   } | null>(null);
+
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = (text: string, key: string) => {
+    if (!text) return;
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    } catch {
+      // ignore
+    }
+  };
 
   // Unlink Church State
   const [isUnlinkModalOpen, setIsUnlinkModalOpen] = useState(false);
@@ -615,95 +636,201 @@ export default function MusicianProfilePage() {
     shieldColor = "text-pink-500";
   }
 
-  return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-20 px-4">
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-2 text-slate-500 hover:text-blue-800 font-bold transition-all group"
-      >
-        <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-        <span>Voltar para Listagem</span>
-      </button>
+  const hasWorship = Boolean(
+    (musician.roles?.worship && musician.roles.worship.length > 0) ||
+    (musician.instruments && musician.instruments.length > 0) ||
+    (musician.vocalRange && musician.vocalRange.trim().length > 0)
+  );
+  const hasDance = Boolean(
+    (musician.roles?.dance && musician.roles.dance.length > 0) ||
+    (musician.danceStyles && musician.danceStyles.length > 0)
+  );
+  const hasMultimedia = Boolean(
+    musician.roles?.multimedia && musician.roles.multimedia.length > 0
+  );
+  const hasSecretariat = Boolean(
+    musician.roles?.secretariat && musician.roles.secretariat.length > 0
+  );
 
+  const cleanPhone = musician.phone ? musician.phone.replace(/\D/g, "") : "";
+  const whatsappUrl =
+    cleanPhone.length >= 10
+      ? `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(
+          `Olá, ${musician.name}! Tudo bem?`
+        )}`
+      : null;
+
+  const memberSinceFormatted = musician.createdAt?.toDate
+    ? musician.createdAt.toDate().toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : typeof musician.createdAt === "string"
+    ? musician.createdAt
+    : "---";
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-8 pb-24 px-4 sm:px-6 font-sans">
+      {/* Top Header Breadcrumb & Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+        <button
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-800/80 shadow-xs transition-all text-xs font-bold group cursor-pointer active:scale-95 w-fit"
+        >
+          <ArrowLeft className="w-4 h-4 text-slate-400 group-hover:text-blue-700 dark:group-hover:text-blue-400 group-hover:-translate-x-0.5 transition-transform" />
+          <span>Voltar para Integrantes</span>
+        </button>
+
+        {/* Status Indicator */}
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs w-fit text-xs font-bold text-slate-600 dark:text-slate-300">
+          <span
+            className={`w-2 h-2 rounded-full ${
+              musician.status === "active"
+                ? "bg-emerald-500 shadow-sm shadow-emerald-500/50 animate-pulse"
+                : "bg-slate-300 dark:bg-slate-600"
+            }`}
+          />
+          <span>{musician.status === "active" ? "Membro Ativo" : "Membro Inativo"}</span>
+        </div>
+      </div>
+
+      {/* Main Profile Cover & Hero Card */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden"
+        transition={{ duration: 0.3 }}
+        className="relative bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200/90 dark:border-slate-800 shadow-xl overflow-hidden"
       >
-        {/* Header/Cover */}
-        <div className="h-48 bg-gradient-to-r from-blue-800 to-indigo-900 relative">
-          <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,#ffffff_0,transparent_70%)]" />
+        {/* Architectural Cover Header */}
+        <div className="relative h-44 sm:h-52 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 overflow-hidden">
+          {/* Subtle Ambient Lights */}
+          <div className="absolute top-0 right-1/4 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-10 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute top-0 left-0 w-64 h-64 bg-slate-800/20 rounded-full blur-2xl pointer-events-none" />
+
+          {/* Micro Grid Overlay */}
+          <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:18px_18px] opacity-60" />
+
+          {/* Top Right Church Watermark */}
+          <div className="absolute top-5 right-6 flex items-center gap-2 bg-white/10 dark:bg-black/20 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/10 text-white/90 text-[11px] font-bold">
+            <Church className="w-3.5 h-3.5 text-blue-300" />
+            <span className="truncate max-w-[200px]">{musician.churchId ? churchName : "Sem Congregação"}</span>
+          </div>
         </div>
 
-        {/* Profile Content */}
-        <div className="relative px-8 md:px-12 pb-12">
-          {/* Avatar Area */}
-          <div className="flex flex-col md:flex-row md:items-end gap-6 -mt-16 mb-10">
-            <div className="w-32 h-32 bg-white dark:bg-slate-900 rounded-[2.5rem] p-2 shadow-2xl shrink-0 flex items-center justify-center">
-              <UserAvatar
-                photoURL={musician.photoURL || (id === user?.uid ? (userData?.photoURL || user?.photoURL) : null)}
-                name={musician.name}
-                size="2xl"
-                className="w-full h-full"
-                editable={Boolean(id === user?.uid || isSuperAdmin || isCurrentUserLeader)}
-                onEditClick={() => setIsPhotoModalOpen(true)}
-                onClick={() => (id === user?.uid || isSuperAdmin || isCurrentUserLeader) && setIsPhotoModalOpen(true)}
-                title={id === user?.uid || isSuperAdmin || isCurrentUserLeader ? "Clique para alterar a foto de perfil" : musician.name}
-              />
-            </div>
-            <div className="pb-4">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-3xl sm:text-4xl font-display font-black text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-2.5">
-                  <span>{musician.name}</span>
-                  <VerifiedBadge
-                    verified={Boolean(
-                      (musician as any).emailVerified ||
-                      (musician as any).email_verified ||
-                      (user?.uid === id && (userData?.emailVerified || userData?.email_verified || user?.emailVerified))
-                    )}
-                    size="md"
-                  />
-                  {musician.status === "active" ? (
-                    <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-                  ) : (
-                    <XCircle className="w-6 h-6 text-slate-300 dark:text-slate-700" />
-                  )}
-                </h1>
+        {/* Identity & Main Controls Strip */}
+        <div className="relative px-6 sm:px-10 pb-8 sm:pb-10">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 -mt-16 sm:-mt-20 mb-6">
+            {/* Avatar & Title Block */}
+            <div className="flex flex-col sm:flex-row sm:items-end gap-5">
+              {/* Elevated Avatar */}
+              <div className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-[2rem] p-1.5 bg-white dark:bg-slate-900 shadow-2xl ring-4 ring-white dark:ring-slate-900 shrink-0 flex items-center justify-center group">
+                <UserAvatar
+                  photoURL={
+                    musician.photoURL ||
+                    (id === user?.uid ? userData?.photoURL || user?.photoURL : null)
+                  }
+                  name={musician.name}
+                  size="2xl"
+                  className="w-full h-full rounded-[1.6rem]"
+                  editable={Boolean(id === user?.uid || isSuperAdmin || isCurrentUserLeader)}
+                  onEditClick={() => setIsPhotoModalOpen(true)}
+                  onClick={() =>
+                    (id === user?.uid || isSuperAdmin || isCurrentUserLeader) &&
+                    setIsPhotoModalOpen(true)
+                  }
+                  title={
+                    id === user?.uid || isSuperAdmin || isCurrentUserLeader
+                      ? "Clique para alterar a foto de perfil"
+                      : musician.name
+                  }
+                />
+
+                {Boolean(id === user?.uid || isSuperAdmin || isCurrentUserLeader) && (
+                  <button
+                    type="button"
+                    onClick={() => setIsPhotoModalOpen(true)}
+                    className="absolute inset-1.5 rounded-[1.6rem] bg-slate-950/50 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-bold gap-1 cursor-pointer"
+                  >
+                    <Camera className="w-5 h-5 text-white" />
+                    <span>Trocar Foto</span>
+                  </button>
+                )}
               </div>
 
-              <div className="flex items-center gap-3 flex-wrap mt-1">
-                <p className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2">
-                  <Shield className={`w-4 h-4 ${shieldColor}`} />
-                  {displayRole}
-                </p>
+              {/* Name & Role Tagline */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h1 className="text-2xl sm:text-3xl font-display font-black text-slate-900 dark:text-slate-50 tracking-tight flex items-center gap-2">
+                    <span>{musician.name}</span>
+                    <VerifiedBadge
+                      verified={Boolean(
+                        (musician as any).emailVerified ||
+                          (musician as any).email_verified ||
+                          (user?.uid === id &&
+                            (userData?.emailVerified ||
+                              userData?.email_verified ||
+                              user?.emailVerified))
+                      )}
+                      size="md"
+                    />
+                  </h1>
+                </div>
 
-                {user?.uid === id &&
-                  !Boolean(
-                    (musician as any).emailVerified ||
-                    (musician as any).email_verified ||
-                    userData?.emailVerified ||
-                    userData?.email_verified ||
-                    user?.emailVerified
-                  ) && (
-                    <Link
-                      href={`/verify-email?email=${encodeURIComponent(musician.email || user?.email || "")}&userId=${user?.uid || id}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 transition-colors"
-                    >
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                      <span>E-mail não verificado • Validar agora</span>
-                    </Link>
+                <div className="flex items-center gap-2.5 flex-wrap text-sm">
+                  <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                    <Shield className={`w-4 h-4 ${shieldColor}`} />
+                    <span>{displayRole}</span>
+                  </span>
+
+                  <span className="text-slate-300 dark:text-slate-700">·</span>
+
+                  <span className="text-slate-500 dark:text-slate-400 text-xs font-medium">
+                    {musician.churchId ? churchName : "Sem igreja vinculada"}
+                  </span>
+                </div>
+
+                {/* Active Department Tags */}
+                <div className="flex items-center gap-2 flex-wrap pt-1">
+                  {hasWorship && (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-900/40">
+                      <Music className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                      Louvor
+                    </span>
                   )}
+                  {hasDance && (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-900/40">
+                      <BallerinaIcon className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+                      Dança
+                    </span>
+                  )}
+                  {hasMultimedia && (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-xl bg-purple-50/80 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-900/40">
+                      <Waves className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                      Multimídia
+                    </span>
+                  )}
+                  {hasSecretariat && (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200/60 dark:border-amber-900/40">
+                      <Award className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                      Secretaria
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="md:ml-auto pb-4 flex flex-wrap items-center gap-3">
+
+            {/* Action Buttons Toolbar */}
+            <div className="flex items-center gap-2.5 flex-wrap">
               {Boolean(id === user?.uid || isSuperAdmin || isCurrentUserLeader) && (
                 <button
                   type="button"
                   onClick={() => setIsPhotoModalOpen(true)}
-                  className="bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 px-4 py-3 rounded-2xl font-bold flex items-center gap-2 transition-all active:scale-95 cursor-pointer shadow-sm text-sm"
-                  title="Alterar ou remover foto de perfil"
+                  className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-2xl font-bold flex items-center gap-2 transition-all active:scale-95 cursor-pointer shadow-xs text-xs"
+                  title="Alterar ou recortar foto de perfil"
                 >
-                  <Camera className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <Camera className="w-3.5 h-3.5 text-slate-500" />
                   <span>Foto</span>
                 </button>
               )}
@@ -711,10 +838,10 @@ export default function MusicianProfilePage() {
               <button
                 id="edit-profile-btn"
                 onClick={handleOpenEdit}
-                className="bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-blue-800 dark:hover:text-blue-400 px-6 py-3 rounded-2xl font-bold flex items-center gap-2 transition-all active:scale-95 cursor-pointer shadow-sm border border-slate-200 dark:border-slate-700 text-sm"
+                className="bg-blue-800 hover:bg-blue-900 text-white px-5 py-2.5 rounded-2xl font-bold flex items-center gap-2 transition-all active:scale-95 cursor-pointer shadow-md shadow-blue-800/20 text-xs"
               >
-                <Edit2 className="w-4 h-4 text-blue-800 dark:text-blue-400" />
-                Editar Perfil
+                <Edit2 className="w-3.5 h-3.5" />
+                <span>Editar Perfil</span>
               </button>
 
               {isCurrentUserLeader && (
@@ -722,9 +849,9 @@ export default function MusicianProfilePage() {
                   id="unlink-church-btn"
                   onClick={() => setIsUnlinkModalOpen(true)}
                   disabled={!musician.churchId}
-                  className={`px-6 py-3 rounded-2xl font-bold flex items-center gap-2 transition-all active:scale-95 text-sm shadow-sm border ${
+                  className={`px-4 py-2.5 rounded-2xl font-bold flex items-center gap-2 transition-all active:scale-95 text-xs border ${
                     musician.churchId
-                      ? "bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900/50 cursor-pointer"
+                      ? "bg-rose-50/70 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900/50 cursor-pointer"
                       : "bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-800 cursor-not-allowed opacity-60"
                   }`}
                   title={
@@ -733,19 +860,54 @@ export default function MusicianProfilePage() {
                       : "Este integrante não possui igreja vinculada"
                   }
                 >
-                  <UserMinus className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                  Desvincular da Igreja
+                  <UserMinus className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Desvincular</span>
                 </button>
               )}
             </div>
           </div>
+
+          {/* Email Verification Banner */}
+          {user?.uid === id &&
+            !Boolean(
+              (musician as any).emailVerified ||
+                (musician as any).email_verified ||
+                userData?.emailVerified ||
+                userData?.email_verified ||
+                user?.emailVerified
+            )}
+          {user?.uid === id &&
+            !Boolean(
+              (musician as any).emailVerified ||
+                (musician as any).email_verified ||
+                userData?.emailVerified ||
+                userData?.email_verified ||
+                user?.emailVerified
+            ) && (
+              <div className="mb-6 p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5 text-amber-900 dark:text-amber-200 font-medium">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    Seu endereço de e-mail ainda não foi validado. Mantenha sua conta protegida confirmando o código.
+                  </span>
+                </div>
+                <Link
+                  href={`/verify-email?email=${encodeURIComponent(
+                    musician.email || user?.email || ""
+                  )}&userId=${user?.uid || id}`}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition-all text-center shrink-0 w-fit"
+                >
+                  Confirmar E-mail
+                </Link>
+              </div>
+            )}
 
           {/* Feedback Alert for Profile Actions */}
           {feedback && !isEditModalOpen && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`mb-8 p-4 rounded-2xl text-sm font-bold flex items-center justify-between gap-3 ${
+              className={`mb-6 p-4 rounded-2xl text-xs font-bold flex items-center justify-between gap-3 ${
                 feedback.type === "success"
                   ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
                   : "bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
@@ -753,9 +915,9 @@ export default function MusicianProfilePage() {
             >
               <div className="flex items-center gap-2">
                 {feedback.type === "success" ? (
-                  <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
                 ) : (
-                  <XCircle className="w-5 h-5 flex-shrink-0" />
+                  <XCircle className="w-4 h-4 shrink-0" />
                 )}
                 <span>{feedback.message}</span>
               </div>
@@ -769,344 +931,488 @@ export default function MusicianProfilePage() {
             </motion.div>
           )}
 
-          {/* Tabs */}
-          <div className="flex gap-8 border-b border-slate-100 dark:border-slate-800 mb-12">
-            <button
-              onClick={() => setActiveTab("info")}
-              className={`pb-4 text-sm font-black uppercase tracking-widest transition-all relative ${
-                activeTab === "info"
-                  ? "text-blue-800 dark:text-blue-400"
-                  : "text-slate-300 dark:text-slate-700"
-              }`}
-            >
-              Informações
-              {activeTab === "info" && (
-                <motion.div
-                  layoutId="tab"
-                  className="absolute bottom-0 left-0 right-0 h-1 bg-blue-800 dark:bg-blue-400 rounded-full"
-                />
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("songs")}
-              className={`pb-4 text-sm font-black uppercase tracking-widest transition-all relative flex items-center gap-2 ${
-                activeTab === "songs"
-                  ? "text-blue-800 dark:text-blue-400"
-                  : "text-slate-300 dark:text-slate-700"
-              }`}
-            >
-              Músicas
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] ${
-                  activeTab === "songs"
-                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-400"
-                }`}
-              >
-                {songs.length}
+          {/* Metrics & Vitals Ribbon */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 border-t border-slate-100 dark:border-slate-800/80">
+            <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1 flex items-center gap-1.5">
+                <Church className="w-3 h-3 text-blue-600" />
+                Congregação
               </span>
-              {activeTab === "songs" && (
-                <motion.div
-                  layoutId="tab"
-                  className="absolute bottom-0 left-0 right-0 h-1 bg-blue-800 dark:bg-blue-400 rounded-full"
-                />
-              )}
-            </button>
+              <p className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 truncate">
+                {musician.churchId ? churchName : "Sem igreja"}
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1 flex items-center gap-1.5">
+                <Award className="w-3 h-3 text-amber-500" />
+                Nível Técnico
+              </span>
+              <p className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 capitalize">
+                {musician.level || "Integrado"}
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1 flex items-center gap-1.5">
+                <Calendar className="w-3 h-3 text-rose-500" />
+                Última Escala
+              </span>
+              <p className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 truncate">
+                {lastScheduleDate || "Sem registros"}
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1 flex items-center gap-1.5">
+                <Music className="w-3 h-3 text-indigo-500" />
+                Repertório Pessoal
+              </span>
+              <p className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">
+                {songs.length} {songs.length === 1 ? "música" : "músicas"}
+              </p>
+            </div>
           </div>
+        </div>
+      </motion.div>
 
-          {activeTab === "info" ? (
-            /* Grid Information */
-            <div className="grid md:grid-cols-2 gap-12">
-              <div className="space-y-8">
-                <section>
-                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">
-                    Contatos
-                  </h3>
-                  <div className="space-y-4">
-                    <InfoItem
-                      icon={Mail}
-                      label="E-mail"
-                      value={musician.email || "Não informado"}
-                    />
-                    <InfoItem
-                      icon={Phone}
-                      label="Telefone"
-                      value={musician.phone ? formatPhone(musician.phone) : "Não informado"}
-                    />
-                    <InfoItem
-                      icon={Cake}
-                      label="Data de Nascimento"
-                      value={musician.dataNascimento ? formatBirthDate(musician.dataNascimento) : "Não informada"}
-                    />
-                  </div>
-                </section>
+      {/* Segmented Tab Navigation */}
+      <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl w-fit border border-slate-200/60 dark:border-slate-700/60">
+        <button
+          onClick={() => setActiveTab("info")}
+          className={`px-4 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === "info"
+              ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+          }`}
+        >
+          <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          <span>Informações & Competências</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("songs")}
+          className={`px-4 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === "songs"
+              ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+          }`}
+        >
+          <Music className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <span>Repertório de Músicas</span>
+          <span
+            className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
+              activeTab === "songs"
+                ? "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300"
+                : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
+            }`}
+          >
+            {songs.length}
+          </span>
+        </button>
+      </div>
 
-                <section>
-                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">
-                    Ministério
-                  </h3>
-                  <div className="space-y-4">
-                    <InfoItem
-                      icon={User}
-                      label="Função"
-                      value={displayRoleShort}
-                    />
-                    <InfoItem
-                      icon={Waves}
-                      label="Ministério"
-                      value={musician.churchId ? churchName : "Sem igreja vinculada"}
-                    />
-                    <InfoItem
-                      icon={Calendar}
-                      label="Última escala"
-                      value={lastScheduleDate || "Nenhuma escala registrada"}
-                    />
-                    <InfoItem
-                      icon={Calendar}
-                      label="Membro desde"
-                      value={
-                        musician.createdAt?.toDate
-                          ? musician.createdAt.toDate().toLocaleDateString("pt-BR")
-                          : typeof musician.createdAt === "string"
-                            ? musician.createdAt
-                            : "---"
-                      }
-                    />
-                  </div>
-                </section>
-
-                {bands.length > 0 && (
-                  <section>
-                    <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">
-                      Bandas / Grupos
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {bands.map((band) => (
-                        <div
-                          key={band.id}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl"
-                        >
-                          <Music className="w-3.5 h-3.5 text-blue-600" />
-                          <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                            {band.name}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                )}
+      {/* Tab Panels */}
+      {activeTab === "info" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column: Personal Data & Contacts (1 col) */}
+          <div className="space-y-6 lg:col-span-1">
+            {/* Contact Card */}
+            <div className="p-6 sm:p-7 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-6">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                  <Mail className="w-3.5 h-3.5 text-blue-600" />
+                  Contato & Dados
+                </h3>
               </div>
 
-              <div className="space-y-8">
-                {musician.roles?.multimedia &&
-                  musician.roles.multimedia.filter((s) => s !== "leader").length >
-                    0 && (
-                    <section>
-                      <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">
-                        Habilidades de Multimídia
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        {musician.roles.multimedia
-                          .filter((s) => s !== "leader")
-                          .map((skill) => {
-                            const translated =
-                              skill === "audio_operator" ||
-                              skill === "audio" ||
-                              skill === "sound"
-                                ? "Operador de Áudio"
-                                : skill === "pc_operator" ||
-                                    skill === "projection"
-                                  ? "Operador de PC / Projeção"
-                                  : skill === "social_media_operator" ||
-                                      skill === "social_media_manager"
-                                    ? "Redes Sociais"
-                                    : skill === "camera_operator" ||
-                                        skill === "camera" ||
-                                        skill === "video"
-                                      ? "Operador de Câmera"
-                                      : skill === "photography_operator" ||
-                                          skill === "photography"
-                                        ? "Fotografia"
-                                        : skill === "lights" ||
-                                            skill === "illumination"
-                                          ? "Iluminação"
-                                          : skill === "multimedia_leader"
-                                            ? "Líder de Multimídia"
-                                            : skill.charAt(0).toUpperCase() +
-                                              skill.slice(1);
-                            return (
-                              <span
-                                key={skill}
-                                className="px-4 py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-xl text-xs font-bold border border-purple-100 dark:border-purple-800 uppercase"
-                              >
-                                {translated}
-                              </span>
-                            );
-                          })}
-                      </div>
-                    </section>
-                  )}
+              <div className="space-y-4">
+                {/* Email Item */}
+                <InfoItem
+                  icon={Mail}
+                  label="E-mail"
+                  value={musician.email || "Não informado"}
+                  copyValue={musician.email || undefined}
+                  onCopy={() => handleCopy(musician.email || "", "email")}
+                  copied={copiedKey === "email"}
+                />
 
-                {((musician.roles?.dance && musician.roles.dance.length > 0) ||
-                  (musician.danceStyles && musician.danceStyles.length > 0)) && (
-                  <section>
-                    <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-1.5">
-                      <BallerinaIcon className="w-4 h-4 text-rose-600" />
-                      <span>Ministério de Dança</span>
-                    </h3>
-                    <div className="space-y-4">
-                      {musician.roles?.dance && musician.roles.dance.length > 0 && (
-                        <div className="space-y-2">
-                          <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                            Funções e Cargos
-                          </label>
-                          <div className="flex flex-wrap gap-2">
-                            {musician.roles.dance.map((roleId) => {
-                              const found = danceRolesList.find((r) => r.id === roleId);
-                              const label = found ? found.label : (roleId === "leader" ? "Líder de Dança" : roleId);
-                              return (
-                                <span
-                                  key={roleId}
-                                  className="px-4 py-2 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 rounded-xl text-xs font-bold border border-rose-100 dark:border-rose-900/50 uppercase"
-                                >
-                                  {label}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
+                {/* Phone Item */}
+                <InfoItem
+                  icon={Phone}
+                  label="Telefone / WhatsApp"
+                  value={musician.phone ? formatPhone(musician.phone) : "Não informado"}
+                  copyValue={musician.phone || undefined}
+                  onCopy={() => handleCopy(musician.phone || "", "phone")}
+                  copied={copiedKey === "phone"}
+                  action={
+                    whatsappUrl
+                      ? () => window.open(whatsappUrl, "_blank", "noopener,noreferrer")
+                      : undefined
+                  }
+                  actionIcon={MessageSquare}
+                  actionTooltip="Conversar no WhatsApp"
+                />
 
-                      {musician.danceStyles && musician.danceStyles.length > 0 && (
-                        <div className="space-y-2">
-                          <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1">
-                            <Sparkles className="w-3.5 h-3.5 text-rose-500" />
-                            <span>Estilos Praticados</span>
-                          </label>
-                          <div className="flex flex-wrap gap-2">
-                            {musician.danceStyles.map((style) => (
-                              <span
-                                key={style}
-                                className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700"
-                              >
-                                {style}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                )}
+                {/* Birthdate Item */}
+                <InfoItem
+                  icon={Cake}
+                  label="Data de Nascimento"
+                  value={
+                    musician.dataNascimento
+                      ? `${formatBirthDate(musician.dataNascimento)} (Aniversário)`
+                      : "Não informada"
+                  }
+                />
 
-                {((musician.instruments && musician.instruments.length > 0) ||
-                  musician.vocalRange ||
-                  musician.level) && (
-                  <section>
-                    <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">
-                      Habilidades Musicais
-                    </h3>
-                    <div className="space-y-6">
-                      {musician.instruments &&
-                        musician.instruments.length > 0 && (
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-2 text-slate-500">
-                              <Music className="w-4 h-4 text-blue-600" />
-                              <span className="text-sm font-bold">
-                                Instrumentos
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {musician.instruments.map((inst) => (
-                                <span
-                                  key={inst}
-                                  className="px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-xl text-xs font-bold border border-blue-100 dark:border-blue-800 italic"
-                                >
-                                  {inst}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                      {musician.vocalRange && (
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2 text-slate-500">
-                            <Mic2 className="w-4 h-4 text-indigo-600" />
-                            <span className="text-sm font-bold">Vocal</span>
-                          </div>
-                          <span className="inline-block px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-xl text-xs font-bold border border-indigo-100 dark:border-indigo-800">
-                            {musician.vocalRange}
-                          </span>
-                        </div>
-                      )}
-
-                      {musician.level && (
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2 text-slate-500">
-                            <Shield className="w-4 h-4 text-emerald-600" />
-                            <span className="text-sm font-bold">Nível</span>
-                          </div>
-                          <span className="inline-block px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-xl text-xs font-bold border border-emerald-100 dark:border-emerald-800 capitalize">
-                            {musician.level}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                )}
+                {/* Member Since Item */}
+                <InfoItem
+                  icon={Clock}
+                  label="Membro Desde"
+                  value={memberSinceFormatted}
+                />
               </div>
             </div>
-          ) : (
-            /* Songs Tab */
-            <div className="space-y-6">
-              {songs.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {songs.map((song) => (
+
+            {/* Bands & Ensembles Card */}
+            {bands.length > 0 && (
+              <div className="p-6 sm:p-7 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+                <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                  <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                  Bandas & Equipes
+                </h3>
+                <div className="space-y-2">
+                  {bands.map((band) => (
                     <div
-                      key={song.id}
-                      className="p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 group hover:border-blue-200 transition-all"
+                      key={band.id}
+                      className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800"
                     >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="w-10 h-10 bg-white dark:bg-slate-900 rounded-xl flex items-center justify-center text-blue-800 shadow-sm">
-                          <Music size={20} />
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 flex items-center justify-center shrink-0">
+                          <Music className="w-4 h-4" />
                         </div>
-                        <a
-                          href={song.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-2 text-slate-300 dark:text-slate-600 hover:text-blue-800 transition-colors"
-                        >
-                          <Youtube size={18} />
-                        </a>
-                      </div>
-                      <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-1">
-                        {song.title}
-                      </h4>
-                      <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mb-4">
-                        {song.artist}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black text-blue-800 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded-lg">
-                          Tom: {song.key}
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                          {band.name}
                         </span>
-                        <ChevronRight className="w-4 h-4 text-slate-200 dark:text-slate-700 group-hover:text-blue-800 transition-colors" />
                       </div>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">
+                        Integrante
+                      </span>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div className="text-center py-20 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
-                  <Music className="w-12 h-12 text-slate-200 dark:text-slate-800 mx-auto mb-4" />
-                  <p className="text-slate-500 dark:text-slate-400 font-medium">
-                    Nenhuma música cadastrada ainda.
-                  </p>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Ministry Capabilities & Skills (2 cols) */}
+          <div className="space-y-6 lg:col-span-2">
+            {/* Worship & Music Capabilities */}
+            {hasWorship && (
+              <div className="p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-6">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                    <Music className="w-4 h-4 text-blue-600" />
+                    Ministério de Louvor & Música
+                  </h3>
+                  {musician.level && (
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40">
+                      Nível {musician.level}
+                    </span>
+                  )}
                 </div>
-              )}
+
+                {/* Instruments */}
+                {musician.instruments && musician.instruments.length > 0 && (
+                  <div className="space-y-3">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                      Instrumentos que Toca
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {musician.instruments.map((inst) => (
+                        <div
+                          key={inst}
+                          className="flex items-center gap-2 px-3.5 py-2 bg-blue-50/60 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 rounded-xl text-xs font-bold border border-blue-100 dark:border-blue-900/40 shadow-2xs"
+                        >
+                          <Music className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                          <span>{inst}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Vocal Range */}
+                {musician.vocalRange && (
+                  <div className="space-y-2 pt-2">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                      Extensão Vocal
+                    </span>
+                    <div className="inline-flex items-center gap-2.5 px-4 py-2.5 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 rounded-2xl text-xs font-bold border border-indigo-100 dark:border-indigo-900/40">
+                      <Mic2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <span>{musician.vocalRange}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Worship Roles */}
+                {musician.roles?.worship && musician.roles.worship.length > 0 && (
+                  <div className="space-y-2 pt-2">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                      Funções Cadastradas no Louvor
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {musician.roles.worship.map((roleId) => {
+                        const found = worshipRolesList.find((r) => r.id === roleId);
+                        const label = found ? found.label : roleId;
+                        return (
+                          <span
+                            key={roleId}
+                            className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200/80 dark:border-slate-700"
+                          >
+                            {label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Dance Ministry Capabilities */}
+            {hasDance && (
+              <div className="p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-6">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                    <BallerinaIcon className="w-4 h-4 text-rose-600" />
+                    Ministério de Dança
+                  </h3>
+                </div>
+
+                {/* Dance Roles */}
+                {musician.roles?.dance && musician.roles.dance.length > 0 && (
+                  <div className="space-y-3">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                      Cargos e Atuações
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {musician.roles.dance.map((roleId) => {
+                        const found = danceRolesList.find((r) => r.id === roleId);
+                        const label = found
+                          ? found.label
+                          : roleId === "leader"
+                          ? "Líder de Dança"
+                          : roleId;
+                        return (
+                          <div
+                            key={roleId}
+                            className="flex items-center gap-2 px-3.5 py-2 bg-rose-50/70 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 rounded-xl text-xs font-bold border border-rose-100 dark:border-rose-900/40"
+                          >
+                            <BallerinaIcon className="w-3.5 h-3.5 text-rose-500" />
+                            <span>{label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Dance Styles */}
+                {musician.danceStyles && musician.danceStyles.length > 0 && (
+                  <div className="space-y-3 pt-2">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-rose-500" />
+                      <span>Estilos Praticados</span>
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {musician.danceStyles.map((style) => (
+                        <span
+                          key={style}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700"
+                        >
+                          {style}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Multimedia Ministry Capabilities */}
+            {hasMultimedia && (
+              <div className="p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-6">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                    <Waves className="w-4 h-4 text-purple-600" />
+                    Multimídia & Transmissão
+                  </h3>
+                </div>
+
+                <div className="space-y-3">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                    Competências Operacionais
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {musician.roles?.multimedia?.map((skill) => {
+                      const translated =
+                        skill === "audio_operator" || skill === "audio"
+                          ? "Operador de Áudio"
+                          : skill === "pc_operator" || skill === "projection"
+                          ? "Operador de PC / Projeção"
+                          : skill === "social_media_operator" || skill === "social_media_manager"
+                          ? "Redes Sociais"
+                          : skill === "camera_operator" || skill === "camera" || skill === "video"
+                          ? "Operador de Câmera"
+                          : skill === "photography_operator" || skill === "photography"
+                          ? "Fotografia"
+                          : skill === "multimedia_leader"
+                          ? "Líder de Multimídia"
+                          : skill.charAt(0).toUpperCase() + skill.slice(1);
+
+                      return (
+                        <div
+                          key={skill}
+                          className="flex items-center gap-2 px-3.5 py-2 bg-purple-50/70 dark:bg-purple-950/30 text-purple-800 dark:text-purple-300 rounded-xl text-xs font-bold border border-purple-100 dark:border-purple-900/40"
+                        >
+                          <Waves className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                          <span>{translated}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Secretariat Capabilities */}
+            {hasSecretariat && (
+              <div className="p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+                <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                  <Award className="w-4 h-4 text-amber-600" />
+                  Secretaria & Administração
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {musician.roles?.secretariat?.map((roleId) => (
+                    <span
+                      key={roleId}
+                      className="px-3.5 py-2 bg-amber-50/80 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 rounded-xl text-xs font-bold border border-amber-200/80 dark:border-amber-900/40"
+                    >
+                      {roleId === "admin" ? "Secretário / Administrador" : roleId}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty state if no ministries registered */}
+            {!hasWorship && !hasDance && !hasMultimedia && !hasSecretariat && (
+              <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-[2rem] border border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+                <User className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
+                <h4 className="font-bold text-slate-700 dark:text-slate-300 text-sm">
+                  Nenhuma atribuição ministerial cadastrada
+                </h4>
+                <p className="text-xs text-slate-400 dark:text-slate-500 max-w-sm mx-auto">
+                  Clique em &ldquo;Editar Perfil&rdquo; acima para definir os departamentos, instrumentos e competências deste integrante.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenEdit}
+                  className="mt-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 dark:text-blue-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Adicionar Competências
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Tab 2: Songs / Repertoire */
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-display font-black text-slate-900 dark:text-slate-100">
+                Repertório Individual
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Músicas cadastradas ou sugeridas por {musician.name}
+              </p>
+            </div>
+            <span className="text-xs font-bold px-3 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-900/40">
+              Total: {songs.length}
+            </span>
+          </div>
+
+          {songs.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+              {songs.map((song) => (
+                <div
+                  key={song.id}
+                  className="p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-800 hover:shadow-lg transition-all group flex flex-col justify-between gap-4"
+                >
+                  <div className="flex justify-between items-start gap-4">
+                    <div className="flex items-start gap-3.5 min-w-0">
+                      <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-100 dark:border-blue-900/40">
+                        <Music className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm truncate group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">
+                          {song.title}
+                        </h4>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 truncate mt-0.5 font-medium">
+                          {song.artist}
+                        </p>
+                      </div>
+                    </div>
+
+                    {song.link && (
+                      <a
+                        href={song.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-all shrink-0 hover:bg-red-50 dark:hover:bg-red-950/30 border border-slate-200/60 dark:border-slate-700"
+                        title="Ouvir no YouTube"
+                      >
+                        <Youtube className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                    <span className="text-[11px] font-mono font-bold text-blue-800 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2.5 py-1 rounded-lg border border-blue-100 dark:border-blue-900/30">
+                      Tom: {song.key}
+                    </span>
+
+                    {song.link && (
+                      <a
+                        href={song.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-blue-700 dark:hover:text-blue-400 transition-colors"
+                      >
+                        <span>Acessar</span>
+                        <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 mx-auto">
+                <Music className="w-6 h-6" />
+              </div>
+              <h4 className="font-bold text-slate-700 dark:text-slate-300 text-sm">
+                Nenhuma música associada a este integrante
+              </h4>
+              <p className="text-xs text-slate-400 dark:text-slate-500 max-w-sm mx-auto">
+                As músicas adicionadas pelo integrante através do módulo de Repertório aparecerão listadas aqui.
+              </p>
             </div>
           )}
         </div>
-      </motion.div>
+      )}
 
       {/* Edit Profile Modal */}
       <AnimatePresence>
@@ -1677,21 +1983,65 @@ function InfoItem({
   icon: Icon,
   label,
   value,
+  copyValue,
+  onCopy,
+  copied,
+  action,
+  actionIcon: ActionIcon,
+  actionTooltip,
 }: {
   icon: any;
   label: string;
   value: string;
+  copyValue?: string;
+  onCopy?: () => void;
+  copied?: boolean;
+  action?: () => void;
+  actionIcon?: any;
+  actionTooltip?: string;
 }) {
   return (
-    <div className="flex items-start gap-4">
-      <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 dark:text-slate-500 flex-shrink-0">
-        <Icon className="w-5 h-5" />
+    <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/70 hover:bg-slate-50 dark:hover:bg-slate-800/70 transition-all group">
+      <div className="flex items-center gap-3.5 min-w-0 pr-2">
+        <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 text-blue-700 dark:text-blue-400 border border-slate-200/60 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+          <Icon className="w-4 h-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mb-1">
+            {label}
+          </p>
+          <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+            {value}
+          </p>
+        </div>
       </div>
-      <div>
-        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-          {label}
-        </p>
-        <p className="text-slate-800 dark:text-slate-100 font-bold">{value}</p>
+
+      <div className="flex items-center gap-1.5 shrink-0">
+        {action && ActionIcon && (
+          <button
+            type="button"
+            onClick={action}
+            title={actionTooltip || "Acessar"}
+            className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-all active:scale-95 cursor-pointer"
+          >
+            <ActionIcon className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {copyValue && onCopy && (
+          <button
+            type="button"
+            onClick={onCopy}
+            title={copied ? "Copiado!" : "Copiar"}
+            className={`p-1.5 rounded-lg transition-all active:scale-95 cursor-pointer ${
+              copied
+                ? "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300"
+                : "bg-white dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 border border-slate-200/60 dark:border-slate-700 shadow-2xs"
+            }`}
+          >
+            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+        )}
       </div>
     </div>
   );

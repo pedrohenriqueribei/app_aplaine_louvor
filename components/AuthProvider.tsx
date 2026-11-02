@@ -20,6 +20,28 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function saveUserCache(uid: string, data: any) {
+  if (typeof window === 'undefined' || !uid || !data) return;
+  try {
+    localStorage.setItem(`applaine_cached_user_${uid}`, JSON.stringify(data));
+  } catch {
+    // ignore quota/security storage errors
+  }
+}
+
+function loadUserCache(uid: string): any | null {
+  if (typeof window === 'undefined' || !uid) return null;
+  try {
+    const raw = localStorage.getItem(`applaine_cached_user_${uid}`);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch {
+    // ignore parse error
+  }
+  return null;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<any>(null);
@@ -32,32 +54,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
       if (snap.exists()) {
-        setUserData(snap.data());
+        const data = snap.data();
+        setUserData(data);
+        saveUserCache(auth.currentUser.uid, data);
       }
-    } catch (e) {
-      console.warn('Could not refresh userData:', e);
+    } catch (e: any) {
+      console.warn('Could not refresh userData (possibly offline/network issue):', e?.message || e);
     }
   };
 
   const markEmailVerified = () => {
-    setUserData((prev: any) =>
-      prev ? { ...prev, emailVerified: true, email_verified: true } : prev
-    );
+    setUserData((prev: any) => {
+      const updated = prev ? { ...prev, emailVerified: true, email_verified: true } : prev;
+      if (updated && auth.currentUser) {
+        saveUserCache(auth.currentUser.uid, updated);
+      }
+      return updated;
+    });
   };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       if (user) {
+        // Optimistic hydration from cache to prevent blank screens or permission flickering during network latency
+        const cached = loadUserCache(user.uid);
+        if (cached) {
+          setUserData(cached);
+          if (cached.role === 'super_admin' || cached.super_admin === true || user.email === 'pedrohenriqueribei@gmail.com') {
+            setIsSuperAdmin(true);
+          }
+        }
+
         try {
-          const tokenResult = await user.getIdTokenResult();
+          // Resilient token retrieval: do not force refresh and catch transient network errors
+          let tokenResult: any = null;
+          try {
+            tokenResult = await user.getIdTokenResult(false);
+          } catch (tokenErr: any) {
+            console.warn('Auth token result refresh non-fatal network error:', tokenErr?.message || tokenErr);
+          }
+
           const isUserEmailAdmin = user.email === 'pedrohenriqueribei@gmail.com';
-          const superAdmin = Boolean(tokenResult.claims.super_admin === true || isUserEmailAdmin);
+          const superAdmin = Boolean(tokenResult?.claims?.super_admin === true || isUserEmailAdmin);
           setIsSuperAdmin(superAdmin);
 
           let userDoc = null;
           let retries = 0;
-          const maxRetries = 10;
+          const maxRetries = 5;
           
           while (retries < maxRetries) {
             try {
@@ -66,12 +110,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 break;
               }
             } catch (e: any) {
+              const isNetworkError = e?.code === 'unavailable' || 
+                                     e?.code === 'auth/network-request-failed' || 
+                                     e?.message?.includes('network-request-failed') ||
+                                     e?.message?.includes('offline');
+              if (isNetworkError) {
+                console.warn('Firestore network request unavailable; proceeding with cached/offline data:', e?.message || e);
+                break;
+              }
               if (retries === maxRetries - 1) {
                 console.warn('Auth User Data getDoc final attempt:', e?.message || e);
               }
             }
             retries++;
-            await new Promise((resolve) => setTimeout(resolve, Math.min(300 * Math.pow(1.25, retries), 1500)));
+            await new Promise((resolve) => setTimeout(resolve, Math.min(250 * Math.pow(1.25, retries), 1000)));
           }
 
           if (userDoc && userDoc.exists()) {
@@ -121,6 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
 
             setUserData(currentData);
+            saveUserCache(user.uid, currentData);
           } else if (userDoc && !userDoc.exists()) {
             let existingPreCreatedUser = null;
             let existingPreCreatedDocId = null;
@@ -154,6 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 console.warn('Auth User Data Error on merging user profiles:', e);
               }
               setUserData(mergedUserData);
+              saveUserCache(user.uid, mergedUserData);
             } else {
               const newUserData = {
                 uid: user.uid,
@@ -172,25 +226,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               } catch (e) {
                 console.warn('Auth User Data Error on setDoc:', e);
               }
-              setUserData({ ...newUserData, createdAt: new Date().toISOString() });
+              const stateData = { ...newUserData, createdAt: new Date().toISOString() };
+              setUserData(stateData);
+              saveUserCache(user.uid, stateData);
             }
           } else {
-            // Firestore is offline or still connecting; use safe fallback so user is not blocked
-            setUserData({
-              uid: user.uid,
-              name: user.displayName || user.email?.split('@')[0] || 'Novo Integrante',
-              email: user.email,
-              phone: '',
-              instruments: [],
-              vocalRange: '',
-              churchId: '',
-              status: 'active',
-              roles: { worship: [], multimedia: [], secretariat: [], dance: [] },
-            });
+            // Firestore is offline or still connecting; use safe fallback/cached data so user is not blocked
+            if (!cached) {
+              const fallback = {
+                uid: user.uid,
+                name: user.displayName || user.email?.split('@')[0] || 'Novo Integrante',
+                email: user.email,
+                phone: '',
+                instruments: [],
+                vocalRange: '',
+                churchId: '',
+                status: 'active',
+                roles: { worship: [], multimedia: [], secretariat: [], dance: [] },
+              };
+              setUserData(fallback);
+              saveUserCache(user.uid, fallback);
+            }
           }
-        } catch (error) {
-          console.error('Auth User Data Error (general):', error);
-          setUserData(null);
+        } catch (error: any) {
+          const isNetErr = error?.code === 'auth/network-request-failed' ||
+                           error?.message?.includes('network-request-failed') ||
+                           error?.code === 'unavailable';
+          if (isNetErr) {
+            console.warn('Auth User Data network request failed; falling back to cached session:', error?.message || error);
+          } else {
+            console.error('Auth User Data Error (general):', error);
+          }
+
+          // Resilient fallback: ensure user session is maintained from cache or basic profile
+          const fallbackData = loadUserCache(user.uid) || {
+            uid: user.uid,
+            name: user.displayName || user.email?.split('@')[0] || 'Novo Integrante',
+            email: user.email,
+            phone: '',
+            instruments: [],
+            vocalRange: '',
+            churchId: '',
+            status: 'active',
+            roles: { worship: [], multimedia: [], secretariat: [], dance: [] },
+          };
+          setUserData(fallbackData);
         } finally {
           setLoading(false);
         }
@@ -201,7 +281,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    return () => unsubscribe();
+    const handleOnline = () => {
+      if (auth.currentUser) {
+        refreshUserData();
+      }
+    };
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('online', handleOnline);
+    };
   }, []);
 
   const signInWithGoogle = async () => {

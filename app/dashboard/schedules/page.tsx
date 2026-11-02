@@ -362,42 +362,62 @@ export default function SchedulesPage() {
   const [danceNotes, setDanceNotes] = useState("");
   const [danceDateError, setDanceDateError] = useState("");
   const [danceDeptMemberUids, setDanceDeptMemberUids] = useState<string[]>([]);
-  const [danceConfig, setDanceConfig] = useState<Record<string, { enabled: boolean; count: number }>>({
-    danceLeader: { enabled: true, count: 1 },
-    dancers: { enabled: true, count: 4 },
-    choreographer: { enabled: true, count: 1 },
-    costume: { enabled: true, count: 1 },
-    rehearsalDirector: { enabled: true, count: 1 },
-  });
+  const [danceConfig, setDanceConfig] = useState<Record<string, { enabled: boolean; count: number }>>({});
   const [danceProfiles, setDanceProfiles] = useState<any[]>([]);
   const [selectedDanceProfileId, setSelectedDanceProfileId] = useState<string>("padrao");
   const [danceCustomRoleMetadata, setDanceCustomRoleMetadata] = useState<any>({});
-  const [danceRolesForm, setDanceRolesForm] = useState<Record<string, string[]>>({
-    danceLeader: [],
-    dancers: [],
-    choreographer: [],
-    costume: [],
-    rehearsalDirector: [],
-  });
+  const [danceAvailableRoles, setDanceAvailableRoles] = useState<string[]>([]);
+  const [danceRolesForm, setDanceRolesForm] = useState<Record<string, string[]>>({});
+  const [danceActionFeedback, setDanceActionFeedback] = useState<{
+    message: string;
+    type: "success" | "info" | "warning";
+  } | null>(null);
+
+  const sanitizeDanceRoles = (
+    roles?: Record<string, any>,
+    availableRoles?: string[]
+  ) => {
+    if (!roles) return {};
+    const clean: Record<string, { enabled: boolean; count: number }> = {};
+    const hasAvailableFilter = Array.isArray(availableRoles);
+
+    Object.entries(roles).forEach(([key, val]) => {
+      // Exclude hardcoded options Dançarinos, Coreógrafo, Figurino & Acessórios, and danceLeader
+      if (!["dancers", "choreographer", "costume", "danceLeader"].includes(key)) {
+        const isAvailable = !hasAvailableFilter || availableRoles.includes(key);
+        const isEnabled = Boolean(val?.enabled) && isAvailable;
+        const count = isEnabled ? (Number(val?.count) || 0) : 0;
+
+        clean[key] = {
+          enabled: isEnabled && count > 0,
+          count: count,
+        };
+      }
+    });
+    return clean;
+  };
 
   const handleSelectDanceProfile = (profileId: string) => {
     setSelectedDanceProfileId(profileId);
     const targetProfile = danceProfiles.find((p) => p.id === profileId);
     if (targetProfile && targetProfile.roles) {
-      setDanceConfig(targetProfile.roles);
+      const cleanRoles = sanitizeDanceRoles(targetProfile.roles, danceAvailableRoles);
+      setDanceConfig(cleanRoles);
       setDanceRolesForm((prev) => {
-        const resetForm: Record<string, string[]> = { ...prev };
-        Object.keys(targetProfile.roles).forEach((key) => {
-          const targetCount = targetProfile.roles[key]?.count || 0;
-          const currentArr = prev[key] || [];
-          if (currentArr.length > targetCount) {
-            resetForm[key] = currentArr.slice(0, targetCount);
-          } else {
-            const filled = [...currentArr];
-            while (filled.length < targetCount) {
-              filled.push("");
+        const resetForm: Record<string, string[]> = {};
+        Object.keys(cleanRoles).forEach((key) => {
+          if (cleanRoles[key]?.enabled && (cleanRoles[key]?.count ?? 0) > 0) {
+            const targetCount = cleanRoles[key]?.count || 0;
+            const currentArr = prev[key] || [];
+            if (currentArr.length >= targetCount) {
+              resetForm[key] = currentArr.slice(0, targetCount);
+            } else {
+              const filled = [...currentArr];
+              while (filled.length < targetCount) {
+                filled.push("");
+              }
+              resetForm[key] = filled;
             }
-            resetForm[key] = filled;
           }
         });
         return resetForm;
@@ -407,38 +427,34 @@ export default function SchedulesPage() {
 
   const getDanceRolesToDisplay = () => {
     const standardMap: Record<string, { title: string; key: string; icon: any }> = {
-      danceLeader: { title: "Líder / Ministrante de Dança", key: "danceLeader", icon: BallerinaIcon },
-      dancers: { title: "Dançarinos(as) Integrantes", key: "dancers", icon: Users },
-      choreographer: { title: "Coreógrafo(a)", key: "choreographer", icon: Sparkles },
-      costume: { title: "Figurino & Acessórios", key: "costume", icon: Tag },
       rehearsalDirector: { title: "Diretor(a) de Ensaio", key: "rehearsalDirector", icon: Clock },
     };
 
     const rolesList: { title: string; key: string; configKey: string; icon: any }[] = [];
 
-    Object.keys(standardMap).forEach((configKey) => {
-      const cfg = danceConfig[configKey];
-      if (cfg && cfg.enabled) {
-        rolesList.push({
-          title: standardMap[configKey].title,
-          key: standardMap[configKey].key,
-          configKey: configKey,
-          icon: standardMap[configKey].icon,
-        });
-      }
-    });
-
+    // Obey strictly the selected dance scale profile, ignoring dancers, choreographer, costume, and danceLeader
     Object.keys(danceConfig).forEach((configKey) => {
-      if (standardMap[configKey]) return;
+      if (["dancers", "choreographer", "costume", "danceLeader"].includes(configKey)) return;
+      if (danceAvailableRoles.length > 0 && !danceAvailableRoles.includes(configKey)) return;
+
       const cfg = danceConfig[configKey];
-      if (cfg && cfg.enabled) {
-        const meta = danceCustomRoleMetadata[configKey] || { label: configKey };
-        rolesList.push({
-          title: meta.label || configKey,
-          key: configKey,
-          configKey: configKey,
-          icon: Sliders,
-        });
+      if (cfg && cfg.enabled && (cfg.count ?? 0) > 0) {
+        if (standardMap[configKey]) {
+          rolesList.push({
+            title: standardMap[configKey].title,
+            key: standardMap[configKey].key,
+            configKey: configKey,
+            icon: standardMap[configKey].icon,
+          });
+        } else {
+          const meta = danceCustomRoleMetadata[configKey] || { label: configKey };
+          rolesList.push({
+            title: meta.label || configKey,
+            key: configKey,
+            configKey: configKey,
+            icon: BallerinaIcon,
+          });
+        }
       }
     });
 
@@ -459,36 +475,35 @@ export default function SchedulesPage() {
   };
 
   const loadDanceConfig = async () => {
-    if (!userData?.churchId) return;
+    if (!userData?.churchId) return null;
     try {
       const docRef = doc(db, "services", `dance_scale_config_${userData.churchId}`);
       const snap = await getDoc(docRef);
-      const defaultRoles = {
-        danceLeader: { enabled: true, count: 1 },
-        dancers: { enabled: true, count: 4 },
-        choreographer: { enabled: true, count: 1 },
-        costume: { enabled: true, count: 1 },
-        rehearsalDirector: { enabled: true, count: 1 },
-      };
+      const defaultRoles: Record<string, { enabled: boolean; count: number }> = {};
 
       if (snap.exists()) {
         const data = snap.data();
-        setDanceCustomRoleMetadata(data.customRoleMetadata || {});
-
         const loadedCustomMetadata = data.customRoleMetadata || {};
-        const combinedDefaultRoles: Record<string, { enabled: boolean; count: number }> = { ...defaultRoles };
-        Object.keys(loadedCustomMetadata).forEach((key) => {
-          combinedDefaultRoles[key] = { enabled: false, count: 0 };
-        });
+        setDanceCustomRoleMetadata(loadedCustomMetadata);
+
+        const loadedAvailable: string[] = Array.isArray(data.availableInstruments)
+          ? data.availableInstruments.filter(
+              (k: string) => k !== "danceLeader" && k !== "rehearsalDirector"
+            )
+          : Object.keys(loadedCustomMetadata);
+        setDanceAvailableRoles(loadedAvailable);
 
         let loadedProfiles: any[] = [];
         if (data.profiles && Array.isArray(data.profiles)) {
-          loadedProfiles = data.profiles;
+          loadedProfiles = data.profiles.map((p: any) => ({
+            ...p,
+            roles: sanitizeDanceRoles(p.roles, loadedAvailable),
+          }));
         } else if (data.profiles && typeof data.profiles === "object") {
           loadedProfiles = Object.entries(data.profiles).map(([pId, pData]: [string, any]) => ({
             id: pId,
             name: pData.name || pId,
-            roles: pData.roles || combinedDefaultRoles,
+            roles: sanitizeDanceRoles(pData.roles, loadedAvailable),
           }));
         }
 
@@ -497,15 +512,17 @@ export default function SchedulesPage() {
             {
               id: "padrao",
               name: "Padrão",
-              roles: data.roles || combinedDefaultRoles,
+              roles: sanitizeDanceRoles(data.roles || defaultRoles, loadedAvailable),
             },
           ];
         }
 
         setDanceProfiles(loadedProfiles);
-        const pId = selectedDanceProfileId || data.activeProfileId || "padrao";
+        const pId = selectedDanceProfileId || data.activeProfileId || loadedProfiles[0]?.id || "padrao";
         const currentProfile = loadedProfiles.find((p) => p.id === pId) || loadedProfiles[0];
-        setDanceConfig(currentProfile.roles || data.roles || combinedDefaultRoles);
+        const activeRoles = sanitizeDanceRoles(currentProfile.roles || data.roles || defaultRoles, loadedAvailable);
+        setDanceConfig(activeRoles);
+        return { loadedProfiles, activeRoles, activeProfileId: currentProfile?.id || pId, availableRoles: loadedAvailable };
       } else {
         const fallbackProfiles = [
           {
@@ -514,11 +531,14 @@ export default function SchedulesPage() {
             roles: defaultRoles,
           },
         ];
+        setDanceAvailableRoles([]);
         setDanceProfiles(fallbackProfiles);
         setDanceConfig(defaultRoles);
+        return { loadedProfiles: fallbackProfiles, activeRoles: defaultRoles, activeProfileId: "padrao", availableRoles: [] };
       }
     } catch (err) {
       console.error("Error loading dance config:", err);
+      return null;
     }
   };
 
@@ -2235,8 +2255,10 @@ export default function SchedulesPage() {
   };
 
   const handleOpenDanceModal = async (scheduleToEdit: Schedule | null = null) => {
-    await loadDanceConfig();
+    const configResult = await loadDanceConfig();
     fetchDanceDeptMembers();
+
+    const availableRoles = configResult?.availableRoles || danceAvailableRoles;
 
     if (scheduleToEdit) {
       setEditingSchedule(scheduleToEdit);
@@ -2248,43 +2270,19 @@ export default function SchedulesPage() {
       setDanceCostume((scheduleToEdit as any).costume || "");
       setDanceNotes((scheduleToEdit as any).danceNotes || scheduleToEdit.notes || "");
 
-      const pId = (scheduleToEdit as any).danceProfileId || "padrao";
+      const pId = (scheduleToEdit as any).danceProfileId || configResult?.activeProfileId || "padrao";
       setSelectedDanceProfileId(pId);
 
-      const snap = await getDoc(doc(db, "services", `dance_scale_config_${userData?.churchId}`));
-      let activeRolesConfig = {
-        danceLeader: { enabled: true, count: 1 },
-        dancers: { enabled: true, count: 4 },
-        choreographer: { enabled: true, count: 1 },
-        costume: { enabled: true, count: 1 },
-        rehearsalDirector: { enabled: true, count: 1 },
-      };
-      if (snap.exists()) {
-        const data = snap.data();
-        let loadedProfiles: any[] = [];
-        if (data.profiles && Array.isArray(data.profiles)) {
-          loadedProfiles = data.profiles;
-        } else if (data.profiles && typeof data.profiles === "object") {
-          loadedProfiles = Object.entries(data.profiles).map(([profileId, pData]: [string, any]) => ({
-            id: profileId,
-            name: pData.name || profileId,
-            roles: pData.roles,
-          }));
-        }
-        const foundProf = loadedProfiles.find(p => p.id === pId) || loadedProfiles[0];
-        if (foundProf && foundProf.roles) {
-          activeRolesConfig = foundProf.roles;
-        } else if (data.roles) {
-          activeRolesConfig = data.roles;
-        }
-      }
-
+      const foundProf = configResult?.loadedProfiles?.find((p: any) => p.id === pId) || configResult?.loadedProfiles?.[0];
+      const activeRolesConfig = sanitizeDanceRoles(foundProf?.roles || configResult?.activeRoles, availableRoles);
       setDanceConfig(activeRolesConfig);
 
       const initialForm: Record<string, string[]> = {};
       Object.keys(activeRolesConfig).forEach((key) => {
-        const arr = (scheduleToEdit.roles as any)?.[key] || [];
-        initialForm[key] = Array.isArray(arr) ? arr : (arr ? [arr] : []);
+        if (activeRolesConfig[key]?.enabled && (activeRolesConfig[key]?.count ?? 0) > 0) {
+          const arr = (scheduleToEdit.roles as any)?.[key] || [];
+          initialForm[key] = Array.isArray(arr) ? arr : (arr ? [arr] : []);
+        }
       });
       setDanceRolesForm(initialForm);
     } else {
@@ -2296,15 +2294,21 @@ export default function SchedulesPage() {
       setDanceChoreography("");
       setDanceCostume("");
       setDanceNotes("");
-      setSelectedDanceProfileId("padrao");
 
-      const initialForm: Record<string, string[]> = {
-        danceLeader: [],
-        dancers: [],
-        choreographer: [],
-        costume: [],
-        rehearsalDirector: [],
-      };
+      const activeProfileId = configResult?.activeProfileId || "padrao";
+      setSelectedDanceProfileId(activeProfileId);
+
+      const foundProf = configResult?.loadedProfiles?.find((p: any) => p.id === activeProfileId) || configResult?.loadedProfiles?.[0];
+      const activeRolesConfig = sanitizeDanceRoles(foundProf?.roles || configResult?.activeRoles, availableRoles);
+      setDanceConfig(activeRolesConfig);
+
+      const initialForm: Record<string, string[]> = {};
+      Object.keys(activeRolesConfig).forEach((key) => {
+        if (activeRolesConfig[key]?.enabled && (activeRolesConfig[key]?.count ?? 0) > 0) {
+          const count = activeRolesConfig[key]?.count || 1;
+          initialForm[key] = Array(count).fill("");
+        }
+      });
       setDanceRolesForm(initialForm);
     }
     setIsDanceModalOpen(true);
@@ -2316,15 +2320,32 @@ export default function SchedulesPage() {
     memberUid: string
   ) => {
     setDanceRolesForm((prev) => {
-      const arr = [...(prev[roleKey] || [])];
-      while (arr.length <= index) {
-        arr.push("");
+      const next = { ...prev };
+      const currentRoleSlots = [...(next[roleKey] || [])];
+      while (currentRoleSlots.length <= index) {
+        currentRoleSlots.push("");
       }
-      arr[index] = arr[index] === memberUid ? "" : memberUid;
-      return {
-        ...prev,
-        [roleKey]: arr,
-      };
+
+      // If already assigned to this slot, unassign
+      if (currentRoleSlots[index] === memberUid) {
+        currentRoleSlots[index] = "";
+        next[roleKey] = currentRoleSlots;
+        return next;
+      }
+
+      // If member is assigned in another slot, remove from that slot to prevent duplication
+      Object.keys(next).forEach((rKey) => {
+        if (Array.isArray(next[rKey])) {
+          next[rKey] = next[rKey].map((uid, i) => {
+            if (rKey === roleKey && i === index) return uid;
+            return uid === memberUid ? "" : uid;
+          });
+        }
+      });
+
+      currentRoleSlots[index] = memberUid;
+      next[roleKey] = currentRoleSlots;
+      return next;
     });
   };
 
@@ -2552,6 +2573,195 @@ export default function SchedulesPage() {
       return true;
     });
   };
+
+  const isDanceMemberQualifiedForRole = (member: Member, configKey: string) => {
+    const userRoles = member.roles?.dance || [];
+    if (configKey === "danceLeader" || configKey === "leader" || configKey === "dance_leader") {
+      return (
+        userRoles.includes("leader") ||
+        userRoles.includes("dance_leader") ||
+        userRoles.includes("danceLeader") ||
+        Boolean(member.role?.toLowerCase().includes("líder")) ||
+        Boolean(member.role?.toLowerCase().includes("lider"))
+      );
+    }
+    if (configKey === "choreographer") {
+      return (
+        userRoles.includes("choreographer") ||
+        userRoles.includes("coreografo") ||
+        userRoles.includes("leader") ||
+        Boolean(member.role?.toLowerCase().includes("coreógraf")) ||
+        Boolean(member.role?.toLowerCase().includes("coreograf"))
+      );
+    }
+    if (configKey === "costume") {
+      return (
+        userRoles.includes("costume") ||
+        userRoles.includes("figurino")
+      );
+    }
+    if (configKey === "rehearsalDirector") {
+      return (
+        userRoles.includes("rehearsal_director") ||
+        userRoles.includes("rehearsalDirector") ||
+        userRoles.includes("leader")
+      );
+    }
+    if (configKey === "dancers") {
+      return true;
+    }
+    return userRoles.includes(configKey);
+  };
+
+  const getDanceRoleLabel = (roleKey: string) => {
+    const standardMap: Record<string, string> = {
+      danceLeader: "Líder / Ministrante",
+      rehearsalDirector: "Diretor(a) de Ensaio",
+    };
+    if (standardMap[roleKey]) return standardMap[roleKey];
+    if (danceCustomRoleMetadata[roleKey]?.label) return danceCustomRoleMetadata[roleKey].label;
+    return roleKey;
+  };
+
+  const getMemberAllocatedSlot = (memberUid: string) => {
+    for (const [roleKey, uids] of Object.entries(danceRolesForm)) {
+      if (Array.isArray(uids)) {
+        const idx = uids.indexOf(memberUid);
+        if (idx !== -1) {
+          const roleTitle = getDanceRoleLabel(roleKey);
+          return { roleKey, index: idx, roleTitle };
+        }
+      }
+    }
+    return null;
+  };
+
+  const handleClearDanceSlot = (roleKey: string, index: number) => {
+    setDanceRolesForm((prev) => {
+      const arr = [...(prev[roleKey] || [])];
+      if (arr.length > index) {
+        arr[index] = "";
+      }
+      return {
+        ...prev,
+        [roleKey]: arr,
+      };
+    });
+  };
+
+  const handleClearDanceSlots = () => {
+    setDanceRolesForm((prev) => {
+      const cleared: Record<string, string[]> = {};
+      Object.keys(prev).forEach((key) => {
+        cleared[key] = (prev[key] || []).map(() => "");
+      });
+      return cleared;
+    });
+    setDanceActionFeedback({
+      message: "Todas as vagas da escala de dança foram desmarcadas.",
+      type: "info",
+    });
+  };
+
+  const handleAutoAllocateDance = () => {
+    const rolesToDisplay = getDanceRolesToDisplay();
+    if (rolesToDisplay.length === 0) {
+      setDanceActionFeedback({
+        message: "Nenhuma função de dança está habilitada no perfil atual.",
+        type: "warning",
+      });
+      return;
+    }
+
+    const priorityOrder = ["danceLeader", "choreographer", "costume", "rehearsalDirector", "dancers"];
+    const sortedRoles = [...rolesToDisplay].sort((a, b) => {
+      const aIdx = priorityOrder.indexOf(a.configKey);
+      const bIdx = priorityOrder.indexOf(b.configKey);
+      const aVal = aIdx === -1 ? 99 : aIdx;
+      const bVal = bIdx === -1 ? 99 : bIdx;
+      return aVal - bVal;
+    });
+
+    const allocatedUids = new Set<string>();
+    const newForm: Record<string, string[]> = {};
+
+    rolesToDisplay.forEach((r) => {
+      const count = danceConfig[r.configKey]?.count || 1;
+      newForm[r.key] = Array.from({ length: count }, () => "");
+    });
+
+    let totalAllocated = 0;
+
+    sortedRoles.forEach((role) => {
+      const count = danceConfig[role.configKey]?.count || 1;
+      const candidates = getDanceCandidates();
+
+      const sortedCandidates = [...candidates].sort((a, b) => {
+        const aAvail = teamAvailability.includes(a.uid) ? 1 : 0;
+        const bAvail = teamAvailability.includes(b.uid) ? 1 : 0;
+        if (aAvail !== bAvail) return bAvail - aAvail;
+
+        const aQual = isDanceMemberQualifiedForRole(a, role.configKey) ? 1 : 0;
+        const bQual = isDanceMemberQualifiedForRole(b, role.configKey) ? 1 : 0;
+        if (aQual !== bQual) return bQual - aQual;
+
+        return (a.name || "").localeCompare(b.name || "");
+      });
+
+      for (let idx = 0; idx < count; idx++) {
+        const candidate = sortedCandidates.find((c) => !allocatedUids.has(c.uid));
+        if (candidate) {
+          newForm[role.key][idx] = candidate.uid;
+          allocatedUids.add(candidate.uid);
+          totalAllocated++;
+        }
+      }
+    });
+
+    setDanceRolesForm(newForm);
+    setDanceActionFeedback({
+      message: `Alocação automática concluída! ${totalAllocated} integrante${totalAllocated !== 1 ? "s" : ""} alocado${totalAllocated !== 1 ? "s" : ""} de acordo com perfil e disponibilidades.`,
+      type: "success",
+    });
+  };
+
+  const handleSelectDanceService = (serviceId: string) => {
+    setDanceServiceId(serviceId);
+    if (!serviceId) return;
+    const srv = services.find((s) => s.id === serviceId);
+    if (!srv) return;
+
+    const serviceNameLower = srv.name.toLowerCase();
+    const matchingProfile = danceProfiles.find((p) => {
+      const pNameLower = p.name.toLowerCase();
+      return (
+        serviceNameLower.includes(pNameLower) ||
+        pNameLower.includes(serviceNameLower) ||
+        (serviceNameLower.includes("domingo") && pNameLower.includes("domingo")) ||
+        (serviceNameLower.includes("jovem") && (pNameLower.includes("jovem") || pNameLower.includes("jovens"))) ||
+        (serviceNameLower.includes("quarta") && pNameLower.includes("quarta"))
+      );
+    });
+
+    if (matchingProfile && matchingProfile.id !== selectedDanceProfileId) {
+      handleSelectDanceProfile(matchingProfile.id);
+      setDanceActionFeedback({
+        message: `Perfil "${matchingProfile.name}" aplicado automaticamente para o culto selecionado.`,
+        type: "info",
+      });
+    }
+  };
+
+  const totalDanceConfiguredSlots = useMemo(() => {
+    return getDanceRolesToDisplay().reduce((acc, r) => acc + (danceConfig[r.configKey]?.count || 1), 0);
+  }, [danceConfig, danceCustomRoleMetadata, danceAvailableRoles]);
+
+  const totalDanceFilledSlots = useMemo(() => {
+    return Object.values(danceRolesForm).reduce(
+      (acc, arr) => acc + (Array.isArray(arr) ? arr.filter(Boolean).length : 0),
+      0
+    );
+  }, [danceRolesForm]);
 
   const groupedData = groupSchedules();
   const currentWeekRange = getWeekRange(weekOffset);
@@ -2929,7 +3139,7 @@ export default function SchedulesPage() {
       const isKnown = [
         "danceLeader", "dancers", "choreographer", "costume", "rehearsalDirector"
       ].includes(configKey);
-      if (!isKnown) {
+      if (!isKnown && (danceAvailableRoles.length === 0 || danceAvailableRoles.includes(configKey))) {
         const cfg = danceConfig[configKey];
         if (cfg && cfg.enabled) {
           const meta = danceCustomRoleMetadata[configKey] || { label: configKey };
@@ -6796,7 +7006,7 @@ export default function SchedulesPage() {
                             <button
                               key={s.id}
                               type="button"
-                              onClick={() => setDanceServiceId(s.id)}
+                              onClick={() => handleSelectDanceService(s.id)}
                               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border-2 cursor-pointer ${
                                 danceServiceId === s.id
                                   ? "bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-600/20"
@@ -6899,21 +7109,131 @@ export default function SchedulesPage() {
 
               {/* SLOTS ALLOCATION */}
               <div
-                className={`transition-opacity space-y-8 border-t border-slate-100 dark:border-slate-800 pt-8 ${
+                className={`transition-opacity space-y-6 border-t border-slate-100 dark:border-slate-800 pt-8 ${
                   !danceDate ? "opacity-30 pointer-events-none" : "opacity-100"
                 }`}
               >
-                <div>
-                  <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-2">
-                    <BallerinaIcon className="w-4 h-4 text-rose-600" />
-                    Alocação de Integrantes do Ministério de Dança
-                  </h3>
-                  <p className="text-[10px] text-slate-400 font-medium mt-1">
-                    Selecione as pessoas que irão ministrar e dançar nesta escala.
-                  </p>
+                {/* Header Toolbar */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/60 p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <BallerinaIcon className="w-5 h-5 text-rose-600" />
+                      <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">
+                        Alocação de Integrantes do Ministério de Dança
+                      </h3>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 pt-0.5">
+                      {selectedDanceProfileId && (
+                        <span className="text-[11px] font-bold px-2.5 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 rounded-lg border border-rose-200/60 dark:border-rose-900/50">
+                          Perfil: {danceProfiles.find((p) => p.id === selectedDanceProfileId)?.name || "Padrão"}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+                        <span>Vagas:</span>
+                        <span className="font-mono text-slate-800 dark:text-slate-200">
+                          {totalDanceFilledSlots} / {totalDanceConfiguredSlots}
+                        </span>
+                        <div className="w-24 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden inline-block align-middle">
+                          <div
+                            className="h-full bg-rose-600 transition-all rounded-full"
+                            style={{
+                              width: `${
+                                totalDanceConfiguredSlots > 0
+                                  ? Math.min(100, Math.round((totalDanceFilledSlots / totalDanceConfiguredSlots) * 100))
+                                  : 0
+                              }%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAutoAllocateDance}
+                      className="px-3.5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      title="Preenche as vagas automaticamente respeitando disponibilidade na data e perfil"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Alocar Automaticamente
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleClearDanceSlots}
+                      className="px-3 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      title="Desmarca todas as vagas alocadas"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Limpar Vagas
+                    </button>
+
+                    {userData?.churchId && (
+                      <Link
+                        href={`/dashboard/churches/${userData.churchId}/ministries/dance/scale-config`}
+                        target="_blank"
+                        className="px-3 py-2.5 border border-slate-200 dark:border-slate-800 hover:border-rose-400 text-slate-600 dark:text-slate-400 hover:text-rose-600 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-white dark:bg-slate-900"
+                        title="Abrir configurações de perfis, funções e vagas de dança"
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-rose-500" />
+                        Configurar Escala
+                        <ExternalLink className="w-3 h-3 opacity-60" />
+                      </Link>
+                    )}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Visual Feedback Banner */}
+                {danceActionFeedback && (
+                  <div
+                    className={cn(
+                      "p-3.5 rounded-2xl flex items-center justify-between gap-3 text-xs font-bold shadow-sm transition-all animate-fadeIn",
+                      danceActionFeedback.type === "success" &&
+                        "bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300",
+                      danceActionFeedback.type === "info" &&
+                        "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/40 text-blue-800 dark:text-blue-300",
+                      danceActionFeedback.type === "warning" &&
+                        "bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-300"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      {danceActionFeedback.type === "success" && <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-600" />}
+                      {danceActionFeedback.type === "info" && <Info className="w-4 h-4 flex-shrink-0 text-blue-600" />}
+                      {danceActionFeedback.type === "warning" && <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600" />}
+                      <span>{danceActionFeedback.message}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDanceActionFeedback(null)}
+                      className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Roles Grid */}
+                {getDanceRolesToDisplay().length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 dark:bg-slate-900/50 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+                    <BallerinaIcon className="w-10 h-10 text-rose-400 mx-auto opacity-60" />
+                    <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                      Nenhuma vaga ou função ativa configurada neste perfil de dança.
+                    </p>
+                    {userData?.churchId && (
+                      <Link
+                        href={`/dashboard/churches/${userData.churchId}/ministries/dance/scale-config`}
+                        target="_blank"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-rose-700 transition-colors"
+                      >
+                        <Sliders className="w-3.5 h-3.5" />
+                        Configurar Funções e Vagas de Dança
+                      </Link>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {getDanceRolesToDisplay().map((role) => {
                     const cfg = danceConfig[role.configKey];
                     if (!cfg || !cfg.enabled) return null;
@@ -6923,46 +7243,173 @@ export default function SchedulesPage() {
                     const candidates = getDanceCandidatesForRole(role.configKey);
 
                     return (
-                      <div key={role.key} className="space-y-4 p-6 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2 uppercase tracking-wide">
-                          <role.icon className="w-4 h-4 text-rose-600" />
-                          {role.title} ({slotsCount} vaga{slotsCount > 1 ? "s" : ""})
-                        </h4>
+                      <div
+                        key={role.key}
+                        className="space-y-5 p-6 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm"
+                      >
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-2 uppercase tracking-wide">
+                            <role.icon className="w-4 h-4 text-rose-600" />
+                            {role.title}
+                          </h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-md border border-rose-200/50">
+                            {slotsCount} vaga{slotsCount > 1 ? "s" : ""}
+                          </span>
+                        </div>
 
-                        <div className="space-y-4">
+                        <div className="space-y-5">
                           {slotsArr.map((_, idx) => {
                             const selectedUid = danceRolesForm[role.key]?.[idx] || "";
+                            const selectedMember = members.find((m) => m.uid === selectedUid);
+
+                            // Sort candidates: selected first, then available, then qualified
+                            const sortedCandidates = [...candidates].sort((a, b) => {
+                              const aSelected = selectedUid === a.uid ? 1 : 0;
+                              const bSelected = selectedUid === b.uid ? 1 : 0;
+                              if (aSelected !== bSelected) return bSelected - aSelected;
+
+                              const aAvail = teamAvailability.includes(a.uid) ? 1 : 0;
+                              const bAvail = teamAvailability.includes(b.uid) ? 1 : 0;
+                              if (aAvail !== bAvail) return bAvail - aAvail;
+
+                              const aQual = isDanceMemberQualifiedForRole(a, role.configKey) ? 1 : 0;
+                              const bQual = isDanceMemberQualifiedForRole(b, role.configKey) ? 1 : 0;
+                              if (aQual !== bQual) return bQual - aQual;
+
+                              return (a.name || "").localeCompare(b.name || "");
+                            });
+
                             return (
-                              <div key={`${role.key}-${idx}`} className="space-y-2">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-mono">
-                                  VAGA #{idx + 1}
-                                </span>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {candidates.length === 0 ? (
-                                    <span className="text-[10px] text-slate-400 italic">Nenhum membro disponível</span>
-                                  ) : (
-                                    candidates.map((cand, cIdx) => {
-                                      const isSelected = selectedUid === cand.uid;
-                                      const isAvailable = teamAvailability.includes(cand.uid);
-                                      return (
-                                        <button
-                                          key={`dance-${role.key}-${idx}-${cand.uid}-${cIdx}`}
-                                          type="button"
-                                          onClick={() => handleSelectDanceMember(role.key, idx, cand.uid)}
-                                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border-2 flex items-center gap-1.5 cursor-pointer ${
-                                            isSelected
-                                              ? "bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-600/25 scale-95"
-                                              : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-rose-200 dark:hover:border-rose-900/40"
-                                          }`}
-                                        >
-                                          {cand.name ? cand.name.split(" ")[0] : "Anon"}
-                                          {isAvailable && (
-                                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Disponível"></span>
-                                          )}
-                                        </button>
-                                      );
-                                    })
+                              <div
+                                key={`${role.key}-${idx}`}
+                                className="space-y-2.5 p-4 bg-white dark:bg-slate-950/50 rounded-2xl border border-slate-200/70 dark:border-slate-800/80 shadow-xs"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block font-mono">
+                                    VAGA #{idx + 1}
+                                  </span>
+                                  {selectedMember && (
+                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                                      <CheckCircle2 className="w-3 h-3" /> Preenchida
+                                    </span>
                                   )}
+                                </div>
+
+                                {/* Assigned Member Card */}
+                                {selectedMember ? (
+                                  <div className="flex items-center justify-between p-2.5 bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200/80 dark:border-rose-900/50 rounded-2xl shadow-sm">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className="w-8 h-8 rounded-full bg-rose-600 text-white font-black text-xs flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
+                                        {selectedMember.photoURL || selectedMember.avatarUrl ? (
+                                          <img
+                                            src={selectedMember.photoURL || selectedMember.avatarUrl}
+                                            alt={selectedMember.name}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          (selectedMember.name || "D").substring(0, 2).toUpperCase()
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                                            {selectedMember.name}
+                                          </span>
+                                          {teamAvailability.includes(selectedMember.uid) && (
+                                            <span
+                                              className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"
+                                              title="Disponível nesta data"
+                                            />
+                                          )}
+                                        </div>
+                                        <span className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold block truncate">
+                                          {selectedMember.role || "Integrante de Dança"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleClearDanceSlot(role.key, idx)}
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded-xl transition-all cursor-pointer"
+                                      title="Desalocar desta vaga"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="p-2 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center">
+                                    <span className="text-[11px] text-slate-400 italic">
+                                      Vaga aberta — selecione um integrante abaixo:
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Candidates Pills */}
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                                    {selectedMember ? "Trocar por outro integrante:" : "Candidatos disponíveis:"}
+                                  </span>
+                                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                                    {sortedCandidates.length === 0 ? (
+                                      <span className="text-[10px] text-slate-400 italic">
+                                        Nenhum integrante encontrado no ministério de dança.
+                                      </span>
+                                    ) : (
+                                      sortedCandidates.map((cand, cIdx) => {
+                                        const isSelected = selectedUid === cand.uid;
+                                        const isAvailable = teamAvailability.includes(cand.uid);
+                                        const isQualified = isDanceMemberQualifiedForRole(cand, role.configKey);
+                                        const allocatedInfo = getMemberAllocatedSlot(cand.uid);
+                                        const isAssignedElsewhere =
+                                          allocatedInfo !== null &&
+                                          (allocatedInfo.roleKey !== role.key || allocatedInfo.index !== idx);
+
+                                        return (
+                                          <button
+                                            key={`dance-${role.key}-${idx}-${cand.uid}-${cIdx}`}
+                                            type="button"
+                                            onClick={() => handleSelectDanceMember(role.key, idx, cand.uid)}
+                                            className={cn(
+                                              "px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer",
+                                              isSelected
+                                                ? "bg-rose-600 border-rose-600 text-white shadow-md shadow-rose-600/25 scale-95"
+                                                : isAssignedElsewhere
+                                                ? "bg-slate-50 dark:bg-slate-900/70 border-dashed border-amber-300 dark:border-amber-700/60 text-slate-500 hover:border-rose-400 hover:text-slate-800"
+                                                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-rose-300 dark:hover:border-rose-800"
+                                            )}
+                                            title={
+                                              isAssignedElsewhere
+                                                ? `Já alocado(a) em ${allocatedInfo.roleTitle} (Vaga #${allocatedInfo.index + 1}). Clique para mover para cá.`
+                                                : isQualified
+                                                ? "Qualificado(a) para esta função"
+                                                : undefined
+                                            }
+                                          >
+                                            <span>{cand.name ? cand.name.split(" ")[0] : "Anon"}</span>
+
+                                            {isAssignedElsewhere && (
+                                              <span className="text-[9px] px-1 py-0.2 bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 rounded font-normal">
+                                                (Em {allocatedInfo.roleTitle.split(" ")[0]})
+                                              </span>
+                                            )}
+
+                                            {isQualified && !isSelected && (
+                                              <span title="Qualificado(a) para esta função" className="inline-flex">
+                                                <Sparkles className="w-2.5 h-2.5 text-amber-500 flex-shrink-0" />
+                                              </span>
+                                            )}
+
+                                            {isAvailable && (
+                                              <span
+                                                className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"
+                                                title="Disponível na data"
+                                              />
+                                            )}
+                                          </button>
+                                        );
+                                      })
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             );
@@ -6972,6 +7419,7 @@ export default function SchedulesPage() {
                     );
                   })}
                 </div>
+                )}
               </div>
 
               {/* Footer Save / Cancel buttons */}
