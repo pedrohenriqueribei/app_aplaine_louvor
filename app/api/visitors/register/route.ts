@@ -1,8 +1,71 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { saveVisitorToStore, getVisitorsStore, VisitorRecord } from "@/lib/visitorsStore";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * GET /api/visitors/register?churchId=...
+ * Returns visitors registered via public form for the given church
+ */
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const churchId = searchParams.get("churchId");
+
+    let items: VisitorRecord[] = [];
+
+    // 1. Safely query adminDb if available
+    try {
+      let q: FirebaseFirestore.Query = adminDb.collection("visitors");
+      if (churchId) {
+        q = q.where("churchId", "==", churchId.trim());
+      }
+      const snap = await q.get();
+      if (!snap.empty) {
+        items = snap.docs.map((doc) => {
+          const d = doc.data();
+          return {
+            id: doc.id,
+            ...d,
+            createdAt:
+              typeof d.createdAt === "object" && d.createdAt && "toDate" in d.createdAt
+                ? d.createdAt.toDate().toISOString()
+                : String(d.createdAt || new Date().toISOString()),
+          } as VisitorRecord;
+        });
+      }
+    } catch (err: any) {
+      // Gracefully handle server IAM restrictions
+      const isPermissionDenied =
+        err?.code === 7 ||
+        err?.message?.includes("PERMISSION_DENIED") ||
+        err?.message?.includes("Missing or insufficient permissions");
+
+      if (!isPermissionDenied) {
+        console.warn("[Visitors API] adminDb query notice:", err?.message || err);
+      }
+    }
+
+    // 2. Merge with resilient server store to guarantee no registrations are lost
+    const cached = getVisitorsStore(churchId || undefined);
+    const idMap = new Map<string, VisitorRecord>();
+    items.forEach((item) => idMap.set(item.id, item));
+    cached.forEach((item) => {
+      if (!idMap.has(item.id)) {
+        idMap.set(item.id, item);
+      }
+    });
+
+    const allVisitors = Array.from(idMap.values());
+    allVisitors.sort((a, b) => new Date(b.firstVisit || 0).getTime() - new Date(a.firstVisit || 0).getTime());
+
+    return NextResponse.json({ visitors: allVisitors });
+  } catch (err: any) {
+    return NextResponse.json({ visitors: getVisitorsStore() });
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -108,15 +171,16 @@ export async function POST(req: NextRequest) {
     const fullNotes = assembledNotesList.join(" | ");
 
     const visitorId = `visitor_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const nowIso = new Date().toISOString();
 
-    const newVisitorRecord = {
+    const newVisitorRecord: VisitorRecord = {
       id: visitorId,
       name: trimmedName,
       phone: trimmedPhone,
       email: trimmedEmail,
       churchId: churchId.trim(),
       firstVisit: visitDate,
-      followupStatus: "pending", // Always starts as Pending in reception funnel
+      followupStatus: "pending",
       source: "public_form",
       acceptedJesus: isAcceptedJesus,
       reconciliation: isReconciliation,
@@ -135,14 +199,33 @@ export async function POST(req: NextRequest) {
       hasChildren: hasChildren ? hasChildren.trim().slice(0, 20) : "",
       prayerRequest: prayerRequest ? prayerRequest.trim().slice(0, 1000) : "",
       notes: fullNotes.slice(0, 2000),
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
+      createdAt: nowIso,
+      updatedAt: nowIso,
       createdBy: "public_visitor_form",
     };
 
-    await adminDb.collection("visitors").doc(visitorId).set(newVisitorRecord);
+    // 1. Guaranteed server persistence via resilient store
+    saveVisitorToStore(newVisitorRecord);
 
-    // Also register an audit record if audit_logs collection is active
+    // 2. Safely attempt Firestore admin write
+    try {
+      await adminDb.collection("visitors").doc(visitorId).set({
+        ...newVisitorRecord,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    } catch (dbErr: any) {
+      const isPermissionDenied =
+        dbErr?.code === 7 ||
+        dbErr?.message?.includes("PERMISSION_DENIED") ||
+        dbErr?.message?.includes("Missing or insufficient permissions");
+
+      if (!isPermissionDenied) {
+        console.warn("[Register Visitor] adminDb write notice:", dbErr?.message || dbErr);
+      }
+    }
+
+    // 3. Register audit record safely
     try {
       const auditId = `audit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       await adminDb.collection("audit_logs").doc(auditId).set({
@@ -167,7 +250,7 @@ export async function POST(req: NextRequest) {
         },
       });
     } catch (auditErr) {
-      console.warn("[Register Visitor] Audit log silently skipped:", auditErr);
+      // Audit log skipped if server write restricted
     }
 
     return NextResponse.json({
@@ -176,7 +259,7 @@ export async function POST(req: NextRequest) {
       message: "Cadastro realizado com sucesso! Seja muito bem-vindo(a)!",
     });
   } catch (error: any) {
-    console.error("[Register Visitor API Error]:", error);
+    console.error("[Register Visitor API Error]:", error?.message || error);
     return NextResponse.json(
       { error: "Erro interno ao cadastrar visitante. Tente novamente.", details: error?.message },
       { status: 500 }

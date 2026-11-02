@@ -322,9 +322,29 @@ export default function VisitorsPage() {
         : query(collection(db, "visitors"), orderBy("firstVisit", "desc"));
 
       const snap = await getDocs(q);
-      setVisitors(
-        snap.docs.map((doc) => ({ ...doc.data(), id: doc.id }) as Visitor),
-      );
+      let list = snap.docs.map((doc) => ({ ...doc.data(), id: doc.id }) as Visitor);
+
+      try {
+        const churchQuery = userData?.churchId ? `?churchId=${encodeURIComponent(userData.churchId)}` : "";
+        const apiRes = await fetch(`/api/visitors/register${churchQuery}`);
+        if (apiRes.ok) {
+          const apiData = await apiRes.json();
+          if (Array.isArray(apiData.visitors) && apiData.visitors.length > 0) {
+            const map = new Map<string, Visitor>();
+            list.forEach((v) => map.set(v.id, v));
+            apiData.visitors.forEach((v: Visitor) => {
+              if (!map.has(v.id)) {
+                map.set(v.id, v);
+              }
+            });
+            list = Array.from(map.values());
+          }
+        }
+      } catch {
+        // Ignore API merge error and proceed with Firestore list
+      }
+
+      setVisitors(list);
     } catch (e) {
       handleFirestoreError(e, OperationType.LIST, "visitors");
     } finally {

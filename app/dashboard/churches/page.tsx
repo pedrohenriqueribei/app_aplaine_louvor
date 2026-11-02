@@ -101,6 +101,13 @@ export default function ChurchesPage() {
           formData,
           { churchId: editingChurch.id }
         ).catch((err) => console.warn("Audit church update error:", err));
+
+        // Sync with server cache for visitor forms
+        fetch("/api/visitors/church-info", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingChurch.id, ...formData }),
+        }).catch(() => {});
       } else {
         const newId = `church_${Date.now()}`;
         const newRecord = {
@@ -121,6 +128,13 @@ export default function ChurchesPage() {
           newRecord,
           { churchId: newId }
         ).catch((err) => console.warn("Audit church create error:", err));
+
+        // Sync with server cache for visitor forms
+        fetch("/api/visitors/church-info", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: newId, ...formData }),
+        }).catch(() => {});
       }
       setIsModalOpen(false);
       setEditingChurch(null);
