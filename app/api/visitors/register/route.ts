@@ -20,6 +20,16 @@ export async function POST(req: NextRequest) {
       hasChildren = "",
       prayerRequest = "",
       notes = "",
+      acceptedJesus = false,
+      reconciliation = false,
+      wantsVisit = false,
+      cep = "",
+      logradouro = "",
+      numero = "",
+      complemento = "",
+      bairro = "",
+      cidade = "",
+      uf = "",
     } = body;
 
     // Basic validation
@@ -47,6 +57,17 @@ export async function POST(req: NextRequest) {
     const trimmedName = name.trim().slice(0, 100);
     const trimmedPhone = phone.trim().slice(0, 40);
     const trimmedEmail = email ? email.trim().slice(0, 100) : "";
+    const isAcceptedJesus = Boolean(acceptedJesus);
+    const isReconciliation = Boolean(reconciliation);
+    const isWantsVisit = Boolean(wantsVisit);
+    const trimmedCep = cep ? String(cep).trim().slice(0, 12) : "";
+    const trimmedLogradouro = logradouro ? String(logradouro).trim().slice(0, 150) : "";
+    const trimmedNumero = numero ? String(numero).trim().slice(0, 30) : "";
+    const trimmedComplemento = complemento ? String(complemento).trim().slice(0, 60) : "";
+    const trimmedBairro = bairro ? String(bairro).trim().slice(0, 100) : "";
+    const trimmedCidade = cidade ? String(cidade).trim().slice(0, 100) : "";
+    const trimmedUf = uf ? String(uf).trim().slice(0, 10) : "";
+
     const visitDate =
       firstVisit && typeof firstVisit === "string"
         ? firstVisit
@@ -54,6 +75,17 @@ export async function POST(req: NextRequest) {
 
     // Combine notes with prayer request & invitation source if present
     const assembledNotesList: string[] = [];
+    if (isAcceptedJesus) {
+      assembledNotesList.push(`[Decisão de Fé]: Aceitou Jesus ✨`);
+    }
+    if (isReconciliation) {
+      assembledNotesList.push(`[Decisão Espiritual]: Reconciliação com Cristo 🕊️`);
+    }
+    if (isWantsVisit) {
+      assembledNotesList.push(
+        `[Deseja Visita]: Sim 🏠 | Endereço: ${trimmedLogradouro}, ${trimmedNumero}${trimmedComplemento ? ` (${trimmedComplemento})` : ""} - ${trimmedBairro}, ${trimmedCidade}/${trimmedUf} - CEP: ${trimmedCep}`
+      );
+    }
     if (prayerRequest && prayerRequest.trim()) {
       assembledNotesList.push(`[Pedido de Oração]: ${prayerRequest.trim()}`);
     }
@@ -86,6 +118,16 @@ export async function POST(req: NextRequest) {
       firstVisit: visitDate,
       followupStatus: "pending", // Always starts as Pending in reception funnel
       source: "public_form",
+      acceptedJesus: isAcceptedJesus,
+      reconciliation: isReconciliation,
+      wantsVisit: isWantsVisit,
+      cep: trimmedCep,
+      logradouro: trimmedLogradouro,
+      numero: trimmedNumero,
+      complemento: trimmedComplemento,
+      bairro: trimmedBairro,
+      cidade: trimmedCidade,
+      uf: trimmedUf,
       howMet: howMet ? howMet.trim().slice(0, 100) : "",
       invitedBy: invitedBy ? invitedBy.trim().slice(0, 100) : "",
       ageGroup: ageGroup ? ageGroup.trim().slice(0, 50) : "",

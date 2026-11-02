@@ -21,9 +21,11 @@ import {
   RefreshCw,
   Clock,
   HeartHandshake,
+  Home,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { formatPhone } from "@/lib/utils";
+import { formatPhone, formatCep, fetchAddressByCep } from "@/lib/utils";
 
 interface ChurchMeta {
   id: string;
@@ -52,6 +54,20 @@ function VisitorFormContent() {
   const [ageGroup, setAgeGroup] = useState("");
   const [maritalStatus, setMaritalStatus] = useState("");
   const [prayerRequest, setPrayerRequest] = useState("");
+  const [acceptedJesus, setAcceptedJesus] = useState(false);
+  const [reconciliation, setReconciliation] = useState(false);
+  const [wantsVisit, setWantsVisit] = useState(false);
+
+  // Address state for home visits
+  const [cep, setCep] = useState("");
+  const [logradouro, setLogradouro] = useState("");
+  const [numero, setNumero] = useState("");
+  const [complemento, setComplemento] = useState("");
+  const [bairro, setBairro] = useState("");
+  const [cidade, setCidade] = useState("");
+  const [uf, setUf] = useState("");
+  const [loadingCep, setLoadingCep] = useState(false);
+  const [cepError, setCepError] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -99,6 +115,34 @@ function VisitorFormContent() {
     setPhone(formatted);
   };
 
+  // Handle CEP mask & automatic address completion via ViaCEP
+  const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCep(e.target.value);
+    setCep(formatted);
+    setCepError(null);
+
+    const cleanDigits = formatted.replace(/\D/g, "");
+    if (cleanDigits.length === 8) {
+      setLoadingCep(true);
+      try {
+        const data = await fetchAddressByCep(cleanDigits);
+        if (data && !data.erro) {
+          setLogradouro(data.logradouro || "");
+          setComplemento(data.complemento || "");
+          setBairro(data.bairro || "");
+          setCidade(data.localidade || "");
+          setUf(data.uf || "");
+        } else {
+          setCepError("CEP não encontrado. Preencha os campos manualmente.");
+        }
+      } catch {
+        setCepError("Erro ao consultar CEP. Preencha os campos manualmente.");
+      } finally {
+        setLoadingCep(false);
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -135,6 +179,16 @@ function VisitorFormContent() {
           ageGroup,
           maritalStatus,
           prayerRequest: prayerRequest.trim(),
+          acceptedJesus,
+          reconciliation,
+          wantsVisit,
+          cep: wantsVisit ? cep : "",
+          logradouro: wantsVisit ? logradouro.trim() : "",
+          numero: wantsVisit ? numero.trim() : "",
+          complemento: wantsVisit ? complemento.trim() : "",
+          bairro: wantsVisit ? bairro.trim() : "",
+          cidade: wantsVisit ? cidade.trim() : "",
+          uf: wantsVisit ? uf.trim() : "",
         }),
       });
 
@@ -162,6 +216,17 @@ function VisitorFormContent() {
     setAgeGroup("");
     setMaritalStatus("");
     setPrayerRequest("");
+    setAcceptedJesus(false);
+    setReconciliation(false);
+    setWantsVisit(false);
+    setCep("");
+    setLogradouro("");
+    setNumero("");
+    setComplemento("");
+    setBairro("");
+    setCidade("");
+    setUf("");
+    setCepError(null);
     setSubmitted(false);
     setErrorMessage(null);
   };
@@ -481,6 +546,310 @@ function VisitorFormContent() {
                         className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
                       />
                     </div>
+                  </div>
+
+                  {/* DECISÕES DE FÉ & ESPIRITUAL - CAMPOS ON / OFF */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-50/70 via-slate-50 to-indigo-50/70 dark:from-amber-950/25 dark:via-slate-800/50 dark:to-indigo-950/25 border border-slate-200/90 dark:border-slate-700/80 space-y-3.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-300 flex items-center justify-center">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">
+                          Decisões no Culto de Hoje
+                        </h3>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Se você tomou uma decisão de fé, assinale abaixo para que nossa equipe ore por você
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      {/* SWITCH 1: ACEITEI JESUS */}
+                      <div
+                        onClick={() => setAcceptedJesus(!acceptedJesus)}
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
+                          acceptedJesus
+                            ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 shadow-xs"
+                            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="space-y-0.5 min-w-0 pr-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                              Aceitei Jesus
+                            </span>
+                            {acceptedJesus && (
+                              <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+                                ON
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                            Entreguei minha vida a Cristo
+                          </p>
+                        </div>
+
+                        {/* Botão Switch Visual */}
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={acceptedJesus}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAcceptedJesus(!acceptedJesus);
+                          }}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 ${
+                            acceptedJesus ? "bg-amber-500" : "bg-slate-300 dark:bg-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                              acceptedJesus ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* SWITCH 2: RECONCILIAÇÃO */}
+                      <div
+                        onClick={() => setReconciliation(!reconciliation)}
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
+                          reconciliation
+                            ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 shadow-xs"
+                            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="space-y-0.5 min-w-0 pr-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                              Reconciliação
+                            </span>
+                            {reconciliation && (
+                              <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-indigo-200 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-200">
+                                ON
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                            Retorno aos caminhos do Senhor
+                          </p>
+                        </div>
+
+                        {/* Botão Switch Visual */}
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={reconciliation}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReconciliation(!reconciliation);
+                          }}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                            reconciliation ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                              reconciliation ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* SWITCH 3: QUERO RECEBER VISITA */}
+                      <div
+                        onClick={() => setWantsVisit(!wantsVisit)}
+                        className={`sm:col-span-2 p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
+                          wantsVisit
+                            ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 shadow-xs"
+                            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="space-y-0.5 min-w-0 pr-1 flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                            wantsVisit ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                          }`}>
+                            <Home className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                                Quero receber visita
+                              </span>
+                              {wantsVisit && (
+                                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200">
+                                  ON
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                              Gostaria de receber uma visita pastoral ou de boas-vindas em casa
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Botão Switch Visual */}
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={wantsVisit}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setWantsVisit(!wantsVisit);
+                          }}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${
+                            wantsVisit ? "bg-emerald-600" : "bg-slate-300 dark:bg-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                              wantsVisit ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* CONDITIONAL ADDRESS FIELDS */}
+                    <AnimatePresence>
+                      {wantsVisit && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="pt-2 overflow-hidden"
+                        >
+                          <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800/60 shadow-xs space-y-3.5">
+                            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                              <div className="flex items-center gap-2">
+                                <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                                  Endereço para Visita
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-slate-400">
+                                Preenchimento automático por CEP
+                              </span>
+                            </div>
+
+                            {/* CEP & LOADING */}
+                            <div className="space-y-1">
+                              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                CEP <span className="text-emerald-600 font-semibold">(digite para autopreencher)</span>
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={cep}
+                                  onChange={handleCepChange}
+                                  maxLength={9}
+                                  placeholder="00000-000"
+                                  className="w-full pl-3.5 pr-10 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
+                                />
+                                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                                  {loadingCep ? (
+                                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                                  ) : (
+                                    <MapPin className="w-4 h-4" />
+                                  )}
+                                </div>
+                              </div>
+                              {cepError && (
+                                <p className="text-[10px] text-rose-500 font-medium">
+                                  {cepError}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* LOGRADOURO & NUMERO */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div className="sm:col-span-2 space-y-1">
+                                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                  Logradouro (Rua / Av.)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={logradouro}
+                                  onChange={(e) => setLogradouro(e.target.value)}
+                                  placeholder="Ex: Rua das Flores"
+                                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                  Número
+                                </label>
+                                <input
+                                  type="text"
+                                  value={numero}
+                                  onChange={(e) => setNumero(e.target.value)}
+                                  placeholder="Ex: 120"
+                                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
+                                />
+                              </div>
+                            </div>
+
+                            {/* COMPLEMENTO & BAIRRO */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                  Complemento <span className="text-slate-400 font-normal">(opcional)</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={complemento}
+                                  onChange={(e) => setComplemento(e.target.value)}
+                                  placeholder="Ex: Apto 302, Bloco B"
+                                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                  Bairro
+                                </label>
+                                <input
+                                  type="text"
+                                  value={bairro}
+                                  onChange={(e) => setBairro(e.target.value)}
+                                  placeholder="Ex: Jardim Primavera"
+                                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
+                                />
+                              </div>
+                            </div>
+
+                            {/* CIDADE & UF */}
+                            <div className="grid grid-cols-3 gap-3">
+                              <div className="col-span-2 space-y-1">
+                                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                  Cidade
+                                </label>
+                                <input
+                                  type="text"
+                                  value={cidade}
+                                  onChange={(e) => setCidade(e.target.value)}
+                                  placeholder="Ex: São Paulo"
+                                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                  UF
+                                </label>
+                                <input
+                                  type="text"
+                                  value={uf}
+                                  onChange={(e) => setUf(e.target.value.toUpperCase())}
+                                  maxLength={2}
+                                  placeholder="SP"
+                                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 uppercase text-center focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   {/* PEDIDO DE ORAÇÃO OU MENSAGEM */}

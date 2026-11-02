@@ -31,6 +31,38 @@ export function formatPhone(value: string | undefined | null): string {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
 }
 
+export function formatCep(value: string | undefined | null): string {
+  if (!value) return "";
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+export interface ViaCepResponse {
+  cep?: string;
+  logradouro?: string;
+  complemento?: string;
+  bairro?: string;
+  localidade?: string;
+  uf?: string;
+  erro?: boolean;
+}
+
+export async function fetchAddressByCep(cep: string): Promise<ViaCepResponse | null> {
+  const cleanDigits = cep.replace(/\D/g, "");
+  if (cleanDigits.length !== 8) return null;
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${cleanDigits}/json/`);
+    if (!res.ok) return null;
+    const data: ViaCepResponse = await res.json();
+    if (data.erro) return null;
+    return data;
+  } catch (err) {
+    console.warn("Erro ao consultar ViaCEP:", err);
+    return null;
+  }
+}
+
 /**
  * Formata a data de nascimento para exibição no padrão brasileiro DD/MM.
  * Suporta Firestore Timestamp, Date, string no formato MM-DD, DD/MM, ISO ou objeto com seconds.

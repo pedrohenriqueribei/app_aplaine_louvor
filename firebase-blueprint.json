@@ -80,7 +80,17 @@
         "ageGroup": { "type": "string" },
         "maritalStatus": { "type": "string" },
         "hasChildren": { "type": "string" },
-        "prayerRequest": { "type": "string" }
+        "prayerRequest": { "type": "string" },
+        "acceptedJesus": { "type": "boolean", "description": "Indica se o visitante aceitou a Jesus" },
+        "reconciliation": { "type": "boolean", "description": "Indica se o visitante expressou reconciliação com Cristo" },
+        "wantsVisit": { "type": "boolean", "description": "Indica se o visitante deseja receber visita pastoral" },
+        "cep": { "type": "string" },
+        "logradouro": { "type": "string" },
+        "numero": { "type": "string" },
+        "complemento": { "type": "string" },
+        "bairro": { "type": "string" },
+        "cidade": { "type": "string" },
+        "uf": { "type": "string" }
       },
       "required": ["id", "name", "churchId", "followupStatus"]
     },

@@ -44,10 +44,13 @@ import {
   Printer,
   Link as LinkIcon,
   RefreshCw,
+  Home,
+  MapPin,
+  Loader2,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { useAuth } from "@/components/AuthProvider";
-import { formatPhone, cn } from "@/lib/utils";
+import { formatPhone, formatCep, fetchAddressByCep, cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 
 interface Visitor {
@@ -64,6 +67,16 @@ interface Visitor {
   invitedBy?: string;
   ageGroup?: string;
   prayerRequest?: string;
+  acceptedJesus?: boolean;
+  reconciliation?: boolean;
+  wantsVisit?: boolean;
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
 }
 
 type FunnelStageKey = "pending" | "contacted" | "member";
@@ -137,7 +150,52 @@ export default function VisitorsPage() {
     firstVisit: new Date().toISOString().split("T")[0],
     followupStatus: "pending" as FunnelStageKey,
     notes: "",
+    acceptedJesus: false,
+    reconciliation: false,
+    wantsVisit: false,
+    cep: "",
+    logradouro: "",
+    numero: "",
+    complemento: "",
+    bairro: "",
+    cidade: "",
+    uf: "",
   });
+
+  const [loadingCep, setLoadingCep] = useState(false);
+  const [cepError, setCepError] = useState<string | null>(null);
+
+  const handleCepChange = async (value: string) => {
+    const formatted = formatCep(value);
+    setFormData((prev) => ({ ...prev, cep: formatted }));
+    setCepError(null);
+
+    const clean = value.replace(/\D/g, "");
+    if (clean.length === 8) {
+      setLoadingCep(true);
+      try {
+        const address = await fetchAddressByCep(clean);
+        if (address) {
+          setFormData((prev) => ({
+            ...prev,
+            cep: formatted,
+            logradouro: address.logradouro || prev.logradouro,
+            complemento: address.complemento || prev.complemento,
+            bairro: address.bairro || prev.bairro,
+            cidade: address.localidade || prev.cidade,
+            uf: address.uf || prev.uf,
+          }));
+        } else {
+          setCepError("CEP não localizado. Preencha o endereço manualmente.");
+        }
+      } catch (err) {
+        console.warn("Erro ao buscar CEP:", err);
+        setCepError("Erro ao buscar CEP. Preencha manualmente.");
+      } finally {
+        setLoadingCep(false);
+      }
+    }
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -419,7 +477,18 @@ export default function VisitorsPage() {
         firstVisit: new Date().toISOString().split("T")[0],
         followupStatus: "pending",
         notes: "",
+        acceptedJesus: false,
+        reconciliation: false,
+        wantsVisit: false,
+        cep: "",
+        logradouro: "",
+        numero: "",
+        complemento: "",
+        bairro: "",
+        cidade: "",
+        uf: "",
       });
+      setCepError(null);
       fetchVisitors();
     } catch (err) {
       handleFirestoreError(
@@ -632,7 +701,18 @@ export default function VisitorsPage() {
                 firstVisit: new Date().toISOString().split("T")[0],
                 followupStatus: "pending",
                 notes: "",
+                acceptedJesus: false,
+                reconciliation: false,
+                wantsVisit: false,
+                cep: "",
+                logradouro: "",
+                numero: "",
+                complemento: "",
+                bairro: "",
+                cidade: "",
+                uf: "",
               });
+              setCepError(null);
               setIsModalOpen(true);
             }}
             className="bg-slate-900 hover:bg-black dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all shadow-md active:scale-95 shrink-0 cursor-pointer"
@@ -870,6 +950,25 @@ export default function VisitorsPage() {
           <button
             onClick={() => {
               setEditingVisitor(null);
+              setFormData({
+                name: "",
+                phone: "",
+                email: "",
+                firstVisit: new Date().toISOString().split("T")[0],
+                followupStatus: "pending",
+                notes: "",
+                acceptedJesus: false,
+                reconciliation: false,
+                wantsVisit: false,
+                cep: "",
+                logradouro: "",
+                numero: "",
+                complemento: "",
+                bairro: "",
+                cidade: "",
+                uf: "",
+              });
+              setCepError(null);
               setIsModalOpen(true);
             }}
             className="mt-5 px-5 py-2.5 rounded-xl bg-blue-800 text-white text-xs font-bold hover:bg-blue-900 shadow-md transition-all inline-flex items-center gap-1.5"
@@ -973,6 +1072,24 @@ export default function VisitorsPage() {
                                       Online
                                     </span>
                                   )}
+                                  {visitor.acceptedJesus && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 font-bold border border-amber-300/80 dark:border-amber-700/60 inline-flex items-center gap-0.5 shadow-2xs">
+                                      <Sparkles className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+                                      Aceitou Jesus
+                                    </span>
+                                  )}
+                                  {visitor.reconciliation && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300 font-bold border border-indigo-300/80 dark:border-indigo-700/60 inline-flex items-center gap-0.5 shadow-2xs">
+                                      <HeartHandshake className="w-2.5 h-2.5 text-indigo-600 dark:text-indigo-400" />
+                                      Reconciliação
+                                    </span>
+                                  )}
+                                  {visitor.wantsVisit && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-bold border border-emerald-300/80 dark:border-emerald-700/60 inline-flex items-center gap-0.5 shadow-2xs">
+                                      <Home className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
+                                      Quero Visita
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -988,7 +1105,18 @@ export default function VisitorsPage() {
                                   firstVisit: visitor.firstVisit,
                                   followupStatus: visitor.followupStatus,
                                   notes: visitor.notes || "",
+                                  acceptedJesus: !!visitor.acceptedJesus,
+                                  reconciliation: !!visitor.reconciliation,
+                                  wantsVisit: !!visitor.wantsVisit,
+                                  cep: visitor.cep ? formatCep(visitor.cep) : "",
+                                  logradouro: visitor.logradouro || "",
+                                  numero: visitor.numero || "",
+                                  complemento: visitor.complemento || "",
+                                  bairro: visitor.bairro || "",
+                                  cidade: visitor.cidade || "",
+                                  uf: visitor.uf || "",
                                 });
+                                setCepError(null);
                                 setIsModalOpen(true);
                               }}
                               className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
@@ -1029,6 +1157,15 @@ export default function VisitorsPage() {
                               <div className="flex items-center gap-1 text-[11px] text-slate-500 truncate">
                                 <Mail className="w-3 h-3 text-slate-400 shrink-0" />
                                 <span className="truncate">{visitor.email}</span>
+                              </div>
+                            )}
+
+                            {visitor.wantsVisit && (visitor.logradouro || visitor.bairro) && (
+                              <div className="flex items-center gap-1 text-[10.5px] text-emerald-800 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-950/40 px-2 py-1 rounded-lg border border-emerald-200/60 dark:border-emerald-900/50 truncate font-medium">
+                                <MapPin className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                <span className="truncate">
+                                  {visitor.logradouro ? `${visitor.logradouro}${visitor.numero ? `, ${visitor.numero}` : ""}` : ""} {visitor.bairro ? `• ${visitor.bairro}` : ""} {visitor.cidade ? `(${visitor.cidade})` : ""}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -1112,7 +1249,7 @@ export default function VisitorsPage() {
                       <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
                         {visitor.name}
                       </h3>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
                         <p className="text-sm font-medium text-slate-500">
                           {new Date(visitor.firstVisit + "T12:00:00").toLocaleDateString("pt-BR")}
                         </p>
@@ -1120,6 +1257,24 @@ export default function VisitorsPage() {
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold inline-flex items-center gap-1">
                             <Sparkles className="w-2.5 h-2.5" />
                             Online
+                          </span>
+                        )}
+                        {visitor.acceptedJesus && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-700/60 inline-flex items-center gap-1 shadow-2xs">
+                            <Sparkles className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+                            Aceitou Jesus
+                          </span>
+                        )}
+                        {visitor.reconciliation && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 font-bold border border-indigo-300 dark:border-indigo-700/60 inline-flex items-center gap-1 shadow-2xs">
+                            <HeartHandshake className="w-2.5 h-2.5 text-indigo-600 dark:text-indigo-400" />
+                            Reconciliação
+                          </span>
+                        )}
+                        {visitor.wantsVisit && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold border border-emerald-300 dark:border-emerald-700/60 inline-flex items-center gap-1 shadow-2xs">
+                            <Home className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
+                            Quero Visita
                           </span>
                         )}
                       </div>
@@ -1134,6 +1289,14 @@ export default function VisitorsPage() {
                     {visitor.email && (
                       <p className="flex items-center gap-2">
                         <strong>📧</strong> {visitor.email}
+                      </p>
+                    )}
+                    {visitor.wantsVisit && (visitor.logradouro || visitor.bairro) && (
+                      <p className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                        <MapPin className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          {visitor.logradouro ? `${visitor.logradouro}, ${visitor.numero || "S/N"}` : ""} {visitor.bairro ? `• ${visitor.bairro}` : ""} {visitor.cidade ? `(${visitor.cidade})` : ""}
+                        </span>
                       </p>
                     )}
                   </div>
@@ -1170,7 +1333,18 @@ export default function VisitorsPage() {
                         firstVisit: visitor.firstVisit,
                         followupStatus: visitor.followupStatus,
                         notes: visitor.notes || "",
+                        acceptedJesus: !!visitor.acceptedJesus,
+                        reconciliation: !!visitor.reconciliation,
+                        wantsVisit: !!visitor.wantsVisit,
+                        cep: visitor.cep ? formatCep(visitor.cep) : "",
+                        logradouro: visitor.logradouro || "",
+                        numero: visitor.numero || "",
+                        complemento: visitor.complemento || "",
+                        bairro: visitor.bairro || "",
+                        cidade: visitor.cidade || "",
+                        uf: visitor.uf || "",
                       });
+                      setCepError(null);
                       setIsModalOpen(true);
                     }}
                     className="p-2 bg-white dark:bg-slate-800 text-blue-800 dark:text-blue-400 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-blue-50 transition-colors"
@@ -1188,139 +1362,464 @@ export default function VisitorsPage() {
       {/* 5. MODAL DE CADASTRO / EDIÇÃO DE VISITANTE */}
       {/* ========================================================================= */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto">
+          {/* Backdrop com blur */}
           <div
             onClick={() => setIsModalOpen(false)}
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"
           />
-          <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl p-8 sm:p-10 overflow-hidden border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl sm:text-3xl font-display font-bold text-slate-800 dark:text-slate-100">
-                {editingVisitor ? "Editar Visitante" : "Novo Visitante"}
-              </h2>
+
+          {/* Dialog Container: com max-h e flex-col para garantir que topo e rodapé nunca fiquem cortados */}
+          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl sm:rounded-[2.5rem] shadow-2xl border border-slate-200/90 dark:border-slate-800 flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] my-auto overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-200">
+            {/* CABEÇALHO FIXO (SEMPRE VISÍVEL NO TOPO) */}
+            <div className="flex items-center justify-between px-6 sm:px-8 py-4 sm:py-5 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-700 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-blue-600/20">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-display font-black text-slate-900 dark:text-slate-100 leading-tight">
+                    {editingVisitor ? "Editar Visitante" : "Novo Visitante"}
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    {editingVisitor ? "Atualize o cadastro, decisões e acompanhamento" : "Cadastre uma nova pessoa no acolhimento da igreja"}
+                  </p>
+                </div>
+              </div>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title="Fechar"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
-                    Nome Completo
-                  </label>
-                  <input
-                    required
-                    type="text"
-                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 outline-none transition-all font-medium text-slate-800 dark:text-slate-100"
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                    placeholder="Nome do Visitante"
-                  />
+            {/* CORPO DO FORMULÁRIO COM ROLAGEM SUAVE */}
+            <form id="visitor-form" onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
+              {/* SEÇÃO 1: DADOS PESSOAIS */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-1 border-b border-slate-100 dark:border-slate-800/80">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-400">
+                    Dados Pessoais & Contato
+                  </span>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
-                    Data da 1ª Visita
-                  </label>
-                  <input
-                    required
-                    type="date"
-                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 outline-none transition-all font-medium text-slate-800 dark:text-slate-100"
-                    value={formData.firstVisit}
-                    onChange={(e) =>
-                      setFormData({ ...formData, firstVisit: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
-                    Telefone / WhatsApp
-                  </label>
-                  <input
-                    type="tel"
-                    maxLength={15}
-                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 outline-none transition-all font-medium text-slate-800 dark:text-slate-100"
-                    value={formData.phone}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phone: formatPhone(e.target.value) })
-                    }
-                    placeholder="(11) 99999-9999"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
-                    E-mail (Opcional)
-                  </label>
-                  <input
-                    type="email"
-                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 outline-none transition-all font-medium text-slate-800 dark:text-slate-100"
-                    value={formData.email}
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
-                    placeholder="email@exemplo.com"
-                  />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Nome Completo <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      required
+                      type="text"
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 focus:border-blue-700 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/30 outline-none transition-all font-medium text-xs sm:text-sm text-slate-900 dark:text-slate-100"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                      placeholder="Ex: Carlos Eduardo de Oliveira"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Data da 1ª Visita <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      required
+                      type="date"
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 focus:border-blue-700 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/30 outline-none transition-all font-medium text-xs sm:text-sm text-slate-900 dark:text-slate-100"
+                      value={formData.firstVisit}
+                      onChange={(e) =>
+                        setFormData({ ...formData, firstVisit: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Telefone / WhatsApp <span className="text-slate-400 font-normal">(com DDD)</span>
+                    </label>
+                    <input
+                      type="tel"
+                      maxLength={15}
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 focus:border-blue-700 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/30 outline-none transition-all font-medium text-xs sm:text-sm text-slate-900 dark:text-slate-100"
+                      value={formData.phone}
+                      onChange={(e) =>
+                        setFormData({ ...formData, phone: formatPhone(e.target.value) })
+                      }
+                      placeholder="(11) 98765-4321"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      E-mail <span className="text-slate-400 font-normal">(opcional)</span>
+                    </label>
+                    <input
+                      type="email"
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 focus:border-blue-700 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/30 outline-none transition-all font-medium text-xs sm:text-sm text-slate-900 dark:text-slate-100"
+                      value={formData.email}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
+                      placeholder="visitante@exemplo.com"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
-                  Estágio no Funil de Acolhimento
-                </label>
-                <select
-                  className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 outline-none transition-all font-medium text-slate-800 dark:text-slate-100"
-                  value={formData.followupStatus}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      followupStatus: e.target.value as any,
-                    })
-                  }
-                >
-                  <option value="pending">Pendente (Fazer Contato / Boas-vindas)</option>
-                  <option value="contacted">Já Contatado (Em Acompanhamento)</option>
-                  <option value="member">Tornou-se Membro (Integrado)</option>
-                </select>
+              {/* SEÇÃO 2: DECISÕES DE FÉ (CAMPOS ON / OFF SOLICITADOS) */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-50/70 via-slate-50 to-indigo-50/70 dark:from-amber-950/25 dark:via-slate-800/50 dark:to-indigo-950/25 border border-slate-200 dark:border-slate-700/80 space-y-3.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-300 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">
+                      Decisões Espirituais & Fé
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Sinalize os compromissos espirituais manifestados no culto
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* SWITCH 1: ACEITEI JESUS */}
+                  <div
+                    onClick={() => setFormData({ ...formData, acceptedJesus: !formData.acceptedJesus })}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
+                      formData.acceptedJesus
+                        ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 shadow-xs"
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="space-y-0.5 min-w-0 pr-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          Aceitei Jesus
+                        </span>
+                        {formData.acceptedJesus && (
+                          <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+                            ON
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                        Tomou a decisão de entregar a vida a Cristo
+                      </p>
+                    </div>
+
+                    {/* Botão Switch Visual */}
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={formData.acceptedJesus}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFormData({ ...formData, acceptedJesus: !formData.acceptedJesus });
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 ${
+                        formData.acceptedJesus ? "bg-amber-500" : "bg-slate-300 dark:bg-slate-700"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          formData.acceptedJesus ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* SWITCH 2: RECONCILIAÇÃO */}
+                  <div
+                    onClick={() => setFormData({ ...formData, reconciliation: !formData.reconciliation })}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
+                      formData.reconciliation
+                        ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 shadow-xs"
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="space-y-0.5 min-w-0 pr-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          Reconciliação
+                        </span>
+                        {formData.reconciliation && (
+                          <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-indigo-200 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-200">
+                            ON
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                        Expressou reconciliação com o Senhor
+                      </p>
+                    </div>
+
+                    {/* Botão Switch Visual */}
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={formData.reconciliation}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFormData({ ...formData, reconciliation: !formData.reconciliation });
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                        formData.reconciliation ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-700"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          formData.reconciliation ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* SWITCH 3: QUERO RECEBER VISITA */}
+                  <div
+                    onClick={() => setFormData({ ...formData, wantsVisit: !formData.wantsVisit })}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none sm:col-span-2 ${
+                      formData.wantsVisit
+                        ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 shadow-xs"
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="space-y-0.5 min-w-0 pr-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          Quero receber visita
+                        </span>
+                        {formData.wantsVisit && (
+                          <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200">
+                            ON
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                        Solicita visita pastoral ou da equipe de acolhimento em seu endereço
+                      </p>
+                    </div>
+
+                    {/* Botão Switch Visual */}
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={formData.wantsVisit}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFormData({ ...formData, wantsVisit: !formData.wantsVisit });
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${
+                        formData.wantsVisit ? "bg-emerald-600" : "bg-slate-300 dark:bg-slate-700"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          formData.wantsVisit ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* CAMPOS DE ENDEREÇO (REVELADOS AO MARCAR QUERO RECEBER VISITA) */}
+                {formData.wantsVisit && (
+                  <div className="mt-4 pt-4 border-t border-emerald-200/60 dark:border-emerald-800/60 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          Endereço para Visita
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        Digite o CEP para preenchimento automático
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
+                      {/* CEP */}
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                          <span>CEP</span>
+                          {loadingCep && (
+                            <span className="text-[10px] text-blue-600 font-normal inline-flex items-center gap-1">
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" /> Buscando...
+                            </span>
+                          )}
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            maxLength={9}
+                            value={formData.cep}
+                            onChange={(e) => handleCepChange(e.target.value)}
+                            placeholder="00000-000"
+                            className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-950 outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+                          />
+                        </div>
+                        {cepError && (
+                          <p className="text-[10px] text-rose-500 font-medium">{cepError}</p>
+                        )}
+                      </div>
+
+                      {/* LOGRADOURO */}
+                      <div className="sm:col-span-4 space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Logradouro (Rua, Av.)
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.logradouro}
+                          onChange={(e) => setFormData({ ...formData, logradouro: e.target.value })}
+                          placeholder="Ex: Rua das Flores"
+                          className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-950 outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+                        />
+                      </div>
+
+                      {/* NÚMERO */}
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Número
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.numero}
+                          onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
+                          placeholder="123"
+                          className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-950 outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+                        />
+                      </div>
+
+                      {/* COMPLEMENTO */}
+                      <div className="sm:col-span-4 space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Complemento <span className="text-slate-400 font-normal">(opcional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.complemento}
+                          onChange={(e) => setFormData({ ...formData, complemento: e.target.value })}
+                          placeholder="Apto 42, Bloco B, Casa 2"
+                          className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-950 outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+                        />
+                      </div>
+
+                      {/* BAIRRO */}
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Bairro
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.bairro}
+                          onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
+                          placeholder="Jardim América"
+                          className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-950 outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+                        />
+                      </div>
+
+                      {/* CIDADE */}
+                      <div className="sm:col-span-3 space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Cidade
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.cidade}
+                          onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
+                          placeholder="São Paulo"
+                          className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-950 outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+                        />
+                      </div>
+
+                      {/* UF */}
+                      <div className="sm:col-span-1 space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          UF
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={2}
+                          value={formData.uf}
+                          onChange={(e) => setFormData({ ...formData, uf: e.target.value.toUpperCase() })}
+                          placeholder="SP"
+                          className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-950 outline-none text-xs font-medium text-slate-900 dark:text-slate-100 uppercase placeholder:text-slate-400 text-center"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
-                  Observações e Pedidos de Oração
-                </label>
-                <textarea
-                  rows={3}
-                  className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-transparent focus:border-blue-800 outline-none transition-all font-medium text-slate-800 dark:text-slate-100 resize-none"
-                  value={formData.notes}
-                  onChange={(e) =>
-                    setFormData({ ...formData, notes: e.target.value })
-                  }
-                  placeholder="Detalhes sobre a visita, quem os convidou, pedidos de oração, etc."
-                />
-              </div>
+              {/* SEÇÃO 3: FUNIL & ACOMPANHAMENTO */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-1 border-b border-slate-100 dark:border-slate-800/80">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-400">
+                    Acompanhamento & Integração
+                  </span>
+                </div>
 
-              <div className="flex gap-4 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 px-8 py-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-2xl transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-8 py-4 bg-blue-800 hover:bg-blue-900 text-white font-bold rounded-2xl transition-all shadow-xl shadow-blue-800/20"
-                >
-                  Salvar
-                </button>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Estágio no Funil de Acolhimento
+                  </label>
+                  <select
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 focus:border-blue-700 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/30 outline-none transition-all font-medium text-xs sm:text-sm text-slate-900 dark:text-slate-100"
+                    value={formData.followupStatus}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        followupStatus: e.target.value as any,
+                      })
+                    }
+                  >
+                    <option value="pending">Pendente (Fazer Contato / Boas-vindas)</option>
+                    <option value="contacted">Já Contatado (Em Acompanhamento Pastoral)</option>
+                    <option value="member">Tornou-se Membro (Integrado à Comunidade)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Observações e Pedidos de Oração
+                  </label>
+                  <textarea
+                    rows={3}
+                    className="w-full p-4 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 focus:border-blue-700 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/30 outline-none transition-all font-medium text-xs sm:text-sm text-slate-900 dark:text-slate-100 resize-none placeholder:text-slate-400"
+                    value={formData.notes}
+                    onChange={(e) =>
+                      setFormData({ ...formData, notes: e.target.value })
+                    }
+                    placeholder="Detalhes sobre a visita, quem os convidou, pedidos de oração, etc."
+                  />
+                </div>
               </div>
             </form>
+
+            {/* RODAPÉ FIXO (SEMPRE VISÍVEL NA PARTE DE BAIXO) */}
+            <div className="flex items-center justify-end gap-3 px-6 sm:px-8 py-3.5 sm:py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs sm:text-sm transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                form="visitor-form"
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-700 to-indigo-600 hover:from-blue-800 hover:to-indigo-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-600/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>Salvar Visitante</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
