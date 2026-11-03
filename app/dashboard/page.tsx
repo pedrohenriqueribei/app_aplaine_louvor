@@ -93,6 +93,7 @@ import { detectAllScheduleConflicts, type ScheduleConflictSummary } from "@/lib/
 import { ScheduleConflictBadge } from "@/components/ScheduleConflictBadge";
 import { QuickScheduleConfirmationBanner } from "@/components/QuickScheduleConfirmationBanner";
 import { resolveScheduleMinistries, type ScheduleMinistryBadge } from "@/lib/ministryUtils";
+import { TreasurySummaryWidget } from "@/components/TreasurySummaryWidget";
 
 interface BirthdayMember {
   uid: string;
@@ -2704,6 +2705,13 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+
+        {/* RESUMO DA TESOURARIA (SALDO TOTAL & FLUXO DE CAIXA DO MÊS) */}
+        {canAccessActiveManagement && (
+          <div className="pt-2">
+            <TreasurySummaryWidget churchId={userData?.churchId} churchName={churchName} />
+          </div>
+        )}
 
       {/* Fim do layout principal em 3 níveis */}
 

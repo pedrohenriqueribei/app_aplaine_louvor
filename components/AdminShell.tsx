@@ -22,22 +22,24 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     return "Painel Administrativo";
   };
 
+  const isAuthorized = Boolean(isSuperAdmin || user?.email === 'pedrohenriqueribei@gmail.com');
+
   React.useEffect(() => {
     if (!loading) {
       if (!user) {
         router.push("/admin/login");
-      } else if (!isSuperAdmin) {
+      } else if (!isAuthorized) {
         router.push("/dashboard");
       }
     }
-  }, [user, isSuperAdmin, loading, router]);
+  }, [user, isAuthorized, loading, router]);
 
   const handleLogout = async () => {
     await signOut(auth);
     router.push("/admin/login");
   };
 
-  if (loading || !user || !isSuperAdmin) return null;
+  if (loading || !user || !isAuthorized) return null;
 
   const navItems = [
     {

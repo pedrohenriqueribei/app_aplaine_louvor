@@ -6,6 +6,7 @@ import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import { ShieldAlert, AlertTriangle, CheckCircle2, Loader2, Mail } from "lucide-react";
 import { AuditSecuritySettingsPanel } from "@/components/AuditSecuritySettingsPanel";
+import { TreasurySummaryWidget } from "@/components/TreasurySummaryWidget";
 
 export default function AdminPage() {
   const { isSuperAdmin, loading } = useAuth();
@@ -98,8 +99,11 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-800 rounded-2xl p-6 mb-8 flex gap-4 text-amber-800 dark:text-amber-200">
+    <div className="max-w-4xl mx-auto space-y-8">
+      {/* Widget Resumo da Tesouraria */}
+      <TreasurySummaryWidget />
+
+      <div className="bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-800 rounded-2xl p-6 flex gap-4 text-amber-800 dark:text-amber-200">
         <ShieldAlert className="w-6 h-6 shrink-0 mt-1" />
         <div>
           <h2 className="text-lg font-bold">Área Restrita</h2>

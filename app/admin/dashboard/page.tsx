@@ -6,6 +6,7 @@ import { collection, getDocs, doc, setDoc, serverTimestamp, updateDoc } from 'fi
 import { Building2, Users, Loader2, Plus, Edit2, ShieldCheck, CheckCircle2, AlertTriangle, Play, Pause, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
+import { TreasurySummaryWidget } from '@/components/TreasurySummaryWidget';
 
 interface Church {
   id: string;
@@ -154,6 +155,9 @@ export default function AdminDashboard() {
           </div>
         </Link>
       </div>
+
+      {/* Widget Resumo da Tesouraria */}
+      <TreasurySummaryWidget className="mb-12" />
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 overflow-hidden">
         <div className="flex justify-between items-center mb-6">

@@ -13,6 +13,14 @@ import {
   Video,
   Briefcase,
   ChevronDown,
+  ChevronRight,
+  BookOpen,
+  HeartHandshake,
+  Flame,
+  Globe,
+  Coins,
+  Building2,
+  Sparkles,
 } from "lucide-react";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
 
@@ -39,11 +47,7 @@ export default function HomePage() {
   }, []);
 
   const handleStart = () => {
-    if (user) {
-      router.push("/dashboard");
-    } else {
-      router.push("/login");
-    }
+    router.push("/ministerios");
   };
 
   return (
@@ -131,8 +135,8 @@ export default function HomePage() {
 
       {/* Hero Section */}
       <section className="pt-40 pb-20 px-6">
-        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-          <div>
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-start">
+          <div className="lg:sticky lg:top-28">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-bold mb-6 border border-blue-100">
               <Music className="w-4 h-4" />
               Chegou o App que a sua igreja esperava!
@@ -170,122 +174,417 @@ export default function HomePage() {
           </div>
 
           <div className="relative" id="hero-visual">
-            <div className="bg-gradient-to-tr from-blue-100 to-indigo-50/50 rounded-[3rem] p-6 lg:p-8 border border-blue-50">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-4">
-                  {/* Ministério de Louvor */}
-                  <div className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm group" id="card-louvor">
-                    <div className="relative h-40 rounded-2xl overflow-hidden" id="card-louvor-image-container">
-                      <img
-                        id="card-louvor-image"
-                        src="/images/worship.png"
-                        alt="Banda tocando"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        referrerPolicy="no-referrer"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/10 to-transparent"></div>
-                      <div className="absolute bottom-3 left-3">
-                        <h3 className="text-white font-bold text-sm">
+            <div className="bg-gradient-to-tr from-blue-100 to-indigo-50/50 rounded-[3rem] p-5 lg:p-7 border border-blue-100/70 shadow-xl shadow-blue-900/5">
+              {/* Header inside hero visual */}
+              <div className="flex items-center justify-between mb-4 px-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-900">
+                    Ministérios & Gestão
+                  </span>
+                </div>
+                <Link
+                  href="/ministerios"
+                  className="text-[11px] font-semibold text-blue-700 bg-blue-50/80 hover:bg-blue-100 px-2.5 py-0.5 rounded-full border border-blue-200/60 transition-colors inline-flex items-center gap-1 group"
+                >
+                  <span>12 Áreas Integradas</span>
+                  <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                </Link>
+              </div>
+
+              {/* Grid of Ministry Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* 1. Ministério de Louvor (Principal 1) */}
+                <Link
+                  href="/ministerios#louvor"
+                  className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col cursor-pointer"
+                  id="card-louvor"
+                >
+                  <div className="relative h-40 sm:h-44 rounded-2xl overflow-hidden" id="card-louvor-image-container">
+                    <img
+                      id="card-louvor-image"
+                      src="/images/worship.png"
+                      alt="Ministério de Louvor"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/35 to-transparent"></div>
+                    <div className="absolute top-2.5 right-2.5">
+                      <span className="bg-blue-600/90 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full border border-white/20 shadow-xs">
+                        Principal
+                      </span>
+                    </div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Music className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-white font-bold text-sm leading-tight truncate">
                           Ministério de Louvor
                         </h3>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Escalas com Imagem de Calendário */}
-                  <div className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm group" id="card-escalas">
-                    <div className="relative h-36 rounded-2xl overflow-hidden" id="card-escalas-image-container">
-                      <img
-                        id="card-escalas-image"
-                        src="/images/calendar_schedule_1790306007642.jpg"
-                        alt="Calendário de Escalas"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        referrerPolicy="no-referrer"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/20 to-transparent"></div>
-                      <div className="absolute bottom-3 left-3 flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-xl bg-blue-600/90 text-white flex items-center justify-center shrink-0 shadow-xs">
-                          <Calendar className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <h3 className="text-white font-bold text-sm leading-tight">
-                            Escalas
-                          </h3>
-                          <p className="text-[10px] text-blue-100/90 font-medium">
-                            Organize cultos semanalmente
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Secretaria */}
-                  <div className="bg-white/90 backdrop-blur-md rounded-3xl p-5 border border-white shadow-sm" id="card-secretaria">
-                    <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-700 mb-3">
-                      <Users className="w-4 h-4" />
-                    </div>
-                    <h3 className="text-sm font-bold text-slate-800 mb-2">
-                      Secretaria
-                    </h3>
-                    <p className="text-xs font-medium text-slate-500 leading-relaxed">
-                      Faça gestão dos membros, tenha controle de
-                      aniversariantes, visitas, aconselhamento pastoral.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4 pt-10">
-                  {/* Ministério de Multimídia (Substituindo o Repertório) */}
-                  <div className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm group" id="card-multimedia">
-                    <div className="relative h-44 rounded-2xl overflow-hidden" id="card-multimedia-image-container">
-                      <img
-                        id="card-multimedia-image"
-                        src="/images/multimedia.png"
-                        alt="Mesa de som e painel digital"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        referrerPolicy="no-referrer"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/20 to-transparent"></div>
-                      <div className="absolute bottom-3 left-3">
-                        <h3 className="text-white font-bold text-sm">
-                          Ministério de Multimídia
-                        </h3>
-                        <p className="text-[10px] text-purple-200 font-medium">
-                          Gestão de áudio, projeção e transmissões
+                        <p className="text-[10px] text-blue-100/90 font-medium line-clamp-1 mt-0.5">
+                          Bandas, repertório de cifras, vozes e adoração
                         </p>
                       </div>
                     </div>
                   </div>
+                </Link>
 
-                  {/* Ministério de Dança */}
-                  <div className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm group" id="card-danca">
-                    <div className="relative h-44 rounded-2xl overflow-hidden" id="card-danca-image-container">
-                      <img
-                        id="card-danca-image"
-                        src="/images/church_dance_ministry_1790305997872.jpg"
-                        alt="Meninas dançando durante o louvor na igreja"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        referrerPolicy="no-referrer"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/20 to-transparent"></div>
-                      <div className="absolute bottom-3 left-3">
-                        <h3 className="text-white font-bold text-sm">
+                {/* 2. Multimídia (Principal 2) */}
+                <Link
+                  href="/ministerios#multimedia"
+                  className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col cursor-pointer"
+                  id="card-multimedia"
+                >
+                  <div className="relative h-40 sm:h-44 rounded-2xl overflow-hidden" id="card-multimedia-image-container">
+                    <img
+                      id="card-multimedia-image"
+                      src="/images/multimedia.png"
+                      alt="Multimídia"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/35 to-transparent"></div>
+                    <div className="absolute top-2.5 right-2.5">
+                      <span className="bg-purple-600/90 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full border border-white/20 shadow-xs">
+                        Principal
+                      </span>
+                    </div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Video className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-white font-bold text-sm leading-tight truncate">
+                          Multimídia
+                        </h3>
+                        <p className="text-[10px] text-purple-100/90 font-medium line-clamp-1 mt-0.5">
+                          Áudio, projeção de letras, transmissões e redes
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* 3. Escalas (Principal 3) */}
+                <Link
+                  href="/ministerios#escalas"
+                  className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col cursor-pointer"
+                  id="card-escalas"
+                >
+                  <div className="relative h-40 sm:h-44 rounded-2xl overflow-hidden" id="card-escalas-image-container">
+                    <img
+                      id="card-escalas-image"
+                      src="/images/calendar_schedule_1790306007642.jpg"
+                      alt="Escalas"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/35 to-transparent"></div>
+                    <div className="absolute top-2.5 right-2.5">
+                      <span className="bg-indigo-600/90 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full border border-white/20 shadow-xs">
+                        Principal
+                      </span>
+                    </div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Calendar className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-white font-bold text-sm leading-tight truncate">
+                          Escalas
+                        </h3>
+                        <p className="text-[10px] text-indigo-100/90 font-medium line-clamp-1 mt-0.5">
+                          Organize e confirme cultos semanalmente
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* 4. Ministério de Dança (Principal 4) */}
+                <Link
+                  href="/ministerios#danca"
+                  className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col cursor-pointer"
+                  id="card-danca"
+                >
+                  <div className="relative h-40 sm:h-44 rounded-2xl overflow-hidden" id="card-danca-image-container">
+                    <img
+                      id="card-danca-image"
+                      src="/images/church_dance_ministry_1790305997872.jpg"
+                      alt="Ministério de Dança"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/35 to-transparent"></div>
+                    <div className="absolute top-2.5 right-2.5">
+                      <span className="bg-rose-600/90 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full border border-white/20 shadow-xs">
+                        Principal
+                      </span>
+                    </div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <BallerinaIcon className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-white font-bold text-sm leading-tight truncate">
                           Ministério de Dança
                         </h3>
-                        <p className="text-[10px] text-rose-200 font-medium">
-                          Adoração com gestos e vestes ministeriais
+                        <p className="text-[10px] text-rose-100/90 font-medium line-clamp-1 mt-0.5">
+                          Adoração com gestos, coreografias e vestes
                         </p>
                       </div>
                     </div>
                   </div>
+                </Link>
 
-                  <FeatureCard
-                    icon={Users}
-                    iconColor="text-emerald-600"
-                    title="Equipe & Talentos"
-                    desc="Músicos, voluntários e liderança"
-                  />
-                </div>
+                {/* 5. Secretaria & Administração */}
+                <Link
+                  href="/ministerios#secretaria"
+                  className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col cursor-pointer"
+                  id="card-secretaria"
+                >
+                  <div className="relative h-40 sm:h-44 rounded-2xl overflow-hidden" id="card-secretaria-image-container">
+                    <img
+                      id="card-secretaria-image"
+                      src="/images/church_secretariat.jpg"
+                      alt="Secretaria"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/35 to-transparent"></div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Briefcase className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-white font-bold text-sm leading-tight truncate">
+                          Secretaria
+                        </h3>
+                        <p className="text-[10px] text-emerald-100/90 font-medium line-clamp-1 mt-0.5">
+                          Membros, atas, aniversariantes e apoio pastoral
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* 6. Ministério Bíblico & Ensino */}
+                <Link
+                  href="/ministerios#biblico"
+                  className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col cursor-pointer"
+                  id="card-biblico"
+                >
+                  <div className="relative h-40 sm:h-44 rounded-2xl overflow-hidden" id="card-biblico-image-container">
+                    <img
+                      id="card-biblico-image"
+                      src="/images/church_teaching.jpg"
+                      alt="Ministério Bíblico"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/35 to-transparent"></div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <BookOpen className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-white font-bold text-sm leading-tight truncate">
+                          Ministério Bíblico
+                        </h3>
+                        <p className="text-[10px] text-indigo-100/90 font-medium line-clamp-1 mt-0.5">
+                          Escola Bíblica (EBD), discipulado e formação
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* 7. Ministério de Acolhimento & Recepção */}
+                <Link
+                  href="/ministerios#acolhimento"
+                  className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col cursor-pointer"
+                  id="card-acolhimento"
+                >
+                  <div className="relative h-40 sm:h-44 rounded-2xl overflow-hidden" id="card-acolhimento-image-container">
+                    <img
+                      id="card-acolhimento-image"
+                      src="/images/church_welcome.jpg"
+                      alt="Acolhimento & Recepção"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/35 to-transparent"></div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <HeartHandshake className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-white font-bold text-sm leading-tight truncate">
+                          Acolhimento & Recepção
+                        </h3>
+                        <p className="text-[10px] text-teal-100/90 font-medium line-clamp-1 mt-0.5">
+                          Recepção de visitantes, boas-vindas e acolhimento
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* 8. Ministério de Intercessão & Oração */}
+                <Link
+                  href="/ministerios#intercessao"
+                  className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col cursor-pointer"
+                  id="card-intercessao"
+                >
+                  <div className="relative h-40 sm:h-44 rounded-2xl overflow-hidden" id="card-intercessao-image-container">
+                    <img
+                      id="card-intercessao-image"
+                      src="/images/church_prayer.jpg"
+                      alt="Intercessão & Oração"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/35 to-transparent"></div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-violet-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Flame className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-white font-bold text-sm leading-tight truncate">
+                          Intercessão & Oração
+                        </h3>
+                        <p className="text-[10px] text-violet-100/90 font-medium line-clamp-1 mt-0.5">
+                          Vigílias, clamor pelas famílias e oração contínua
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* 9. Ministério de Evangelismo & Missões */}
+                <Link
+                  href="/ministerios#evangelismo"
+                  className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col cursor-pointer"
+                  id="card-evangelismo"
+                >
+                  <div className="relative h-40 sm:h-44 rounded-2xl overflow-hidden" id="card-evangelismo-image-container">
+                    <img
+                      id="card-evangelismo-image"
+                      src="/images/church_missions.jpg"
+                      alt="Evangelismo & Missões"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/35 to-transparent"></div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Globe className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-white font-bold text-sm leading-tight truncate">
+                          Evangelismo & Missões
+                        </h3>
+                        <p className="text-[10px] text-orange-100/90 font-medium line-clamp-1 mt-0.5">
+                          Ações urbanas, impactos sociais e apoio missionário
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* 10. Tesouraria & Finanças */}
+                <Link
+                  href="/ministerios#tesouraria"
+                  className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col cursor-pointer"
+                  id="card-tesouraria"
+                >
+                  <div className="relative h-40 sm:h-44 rounded-2xl overflow-hidden" id="card-tesouraria-image-container">
+                    <img
+                      id="card-tesouraria-image"
+                      src="/images/church_treasury.jpg"
+                      alt="Tesouraria & Finanças"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/35 to-transparent"></div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-emerald-700 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Coins className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-white font-bold text-sm leading-tight truncate">
+                          Tesouraria & Finanças
+                        </h3>
+                        <p className="text-[10px] text-emerald-100/90 font-medium line-clamp-1 mt-0.5">
+                          Dízimos, ofertas, relatórios e prestação de contas
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* 11. Patrimônio & Zeladoria */}
+                <Link
+                  href="/ministerios#patrimonio"
+                  className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col cursor-pointer"
+                  id="card-patrimonio"
+                >
+                  <div className="relative h-40 sm:h-44 rounded-2xl overflow-hidden" id="card-patrimonio-image-container">
+                    <img
+                      id="card-patrimonio-image"
+                      src="/images/church_heritage.jpg"
+                      alt="Patrimônio & Zeladoria"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/35 to-transparent"></div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-cyan-700 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Building2 className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-white font-bold text-sm leading-tight truncate">
+                          Patrimônio & Zeladoria
+                        </h3>
+                        <p className="text-[10px] text-cyan-100/90 font-medium line-clamp-1 mt-0.5">
+                          Inventário de bens, zeladoria e cuidado com o templo
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* 12. Ministério Infantil */}
+                <Link
+                  href="/ministerios#infantil"
+                  className="bg-white rounded-3xl p-2 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col cursor-pointer"
+                  id="card-infantil"
+                >
+                  <div className="relative h-40 sm:h-44 rounded-2xl overflow-hidden" id="card-infantil-image-container">
+                    <img
+                      id="card-infantil-image"
+                      src="/images/church_kids.jpg"
+                      alt="Ministério Infantil"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/35 to-transparent"></div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Sparkles className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-white font-bold text-sm leading-tight truncate">
+                          Ministério Infantil (Kids)
+                        </h3>
+                        <p className="text-[10px] text-amber-100/90 font-medium line-clamp-1 mt-0.5">
+                          Culto infantil lúdico, histórias bíblicas e apoio às famílias
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
               </div>
             </div>
           </div>
