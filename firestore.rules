@@ -58,11 +58,13 @@ service cloud.firestore {
     function isLeader() {
       return isSignedIn() && (
         isSuperAdmin() ||
-        myData().get('role', '') == 'líder' ||
+        myData().get('role', '') in ['líder', 'pastor', 'pastor_titular', 'pastor_auxiliar'] ||
         myRoles().get('worship', []).hasAny(leaderRoles()) ||
         myRoles().get('multimedia', []).hasAny(leaderRoles()) ||
         myRoles().get('secretariat', []).hasAny(leaderRoles()) ||
-        myRoles().get('dance', []).hasAny(leaderRoles())
+        myRoles().get('dance', []).hasAny(leaderRoles()) ||
+        myRoles().get('tesouraria', []).hasAny(leaderRoles()) ||
+        myRoles().get('treasury', []).hasAny(leaderRoles())
       );
     }
 
@@ -89,6 +91,7 @@ service cloud.firestore {
              (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
              (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 100)) &&
              (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
+             (!('pastoralTitle' in data) || (data.pastoralTitle is string && data.pastoralTitle.size() <= 100)) &&
              (!('dataNascimento' in data) || data.dataNascimento == null || data.dataNascimento is timestamp || (data.dataNascimento is string && data.dataNascimento.size() <= 20)) &&
              (!('vocalRange' in data) || (data.vocalRange is string)) &&
              (!('level' in data) || (data.level is string)) &&
@@ -201,6 +204,13 @@ service cloud.firestore {
 
           allow delete: if leadsChurch(churchId);
         }
+      }
+
+      match /financial_records/{recordId} {
+        allow read: if isSignedIn() && (isSuperAdmin() || leadsChurch(churchId));
+        allow create: if isSignedIn() && (isSuperAdmin() || leadsChurch(churchId));
+        allow update: if isSignedIn() && (isSuperAdmin() || leadsChurch(churchId));
+        allow delete: if isSignedIn() && (isSuperAdmin() || leadsChurch(churchId));
       }
     }
 

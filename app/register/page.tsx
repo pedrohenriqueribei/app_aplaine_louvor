@@ -234,12 +234,23 @@ function RegisterForm() {
         danceRoles.push("dancer");
       }
 
-      const userRoles = {
+      const userRoles: Record<string, string[]> = {
         worship: selectedRole === "musico" ? instrumentsSelected : [],
         multimedia: multimediaRoles,
         secretariat: selectedRole === "secretaria" ? ["admin"] : [],
         dance: danceRoles,
       };
+
+      // Support dynamic ministries (biblico, acolhimento, intercessao, evangelismo, tesouraria, patrimonio, etc.)
+      if (
+        selectedRole &&
+        !["musico", "multimidia", "secretaria", "danca"].includes(selectedRole)
+      ) {
+        userRoles[selectedRole] =
+          instrumentsSelected.length > 0 ? instrumentsSelected : ["membro"];
+      }
+
+      const isPastorRegistration = selectedRole === "pastor";
 
       await signUpWithEmail(email, password, name, {
         phone,
@@ -248,6 +259,8 @@ function RegisterForm() {
         vocalRange: selectedRole === "musico" ? vocalRange : "",
         churchId: churchIdFromUrl || "",
         roles: userRoles,
+        role: isPastorRegistration ? "pastor" : undefined,
+        pastoralTitle: isPastorRegistration ? "Pastor" : undefined,
         danceStyles: selectedRole === "danca" ? danceStylesSelected : [],
       });
 
@@ -432,6 +445,30 @@ function RegisterForm() {
                     </p>
                   </div>
                 </button>
+
+                {/* Outros Ministérios & Liderança Pastoral */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedRole("membro");
+                    if (instrumentsSelected.length === 0) {
+                      setInstrumentsSelected(["membro"]);
+                    }
+                  }}
+                  className="w-full bg-white p-6 rounded-3xl border-2 border-slate-200 hover:border-emerald-600 hover:shadow-xl hover:shadow-emerald-900/5 transition-all duration-300 text-left cursor-pointer group flex items-center gap-4"
+                >
+                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-110">
+                    <Briefcase className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
+                      Outros Ministérios / Voluntário
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
+                      Ensino Bíblico, Acolhimento, Intercessão, Evangelismo, Tesouraria, Patrimônio ou Liderança.
+                    </p>
+                  </div>
+                </button>
               </div>
 
               <p className="text-center text-slate-600 font-medium">
@@ -480,16 +517,24 @@ function RegisterForm() {
                       ? "Cadastro de Multimídia"
                       : selectedRole === "danca"
                         ? "Cadastro de Dança"
-                        : "Cadastro de Secretaria"}
+                        : selectedRole === "pastor"
+                          ? "Cadastro Pastoral"
+                          : selectedRole === "biblico"
+                            ? "Ministério Bíblico & Ensino"
+                            : selectedRole === "acolhimento"
+                              ? "Ministério de Acolhimento"
+                              : selectedRole === "intercessao"
+                                ? "Ministério de Intercessão"
+                                : selectedRole === "evangelismo"
+                                  ? "Ministério de Evangelismo"
+                                  : selectedRole === "tesouraria"
+                                    ? "Tesouraria & Finanças"
+                                    : selectedRole === "patrimonio"
+                                      ? "Patrimônio & Zeladoria"
+                                      : "Cadastro de Integrante"}
                 </h1>
                 <p className="text-slate-500 font-medium">
-                  {selectedRole === "musico"
-                    ? "Preencha os dados abaixo para se juntar ao ministério de louvor."
-                    : selectedRole === "multimidia"
-                      ? "Preencha os dados abaixo para apoiar na equipe técnica."
-                      : selectedRole === "danca"
-                        ? "Preencha os dados abaixo para participar do ministério de dança."
-                        : "Preencha os dados abaixo para apoiar na secretaria."}
+                  Preencha os dados abaixo para participar ativamente e integrar as escalas e atividades da igreja.
                 </p>
               </div>
 

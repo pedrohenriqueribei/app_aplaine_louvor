@@ -6,6 +6,17 @@ export interface ChurchRecord {
   name: string;
   address?: string;
   pastor?: string;
+  pastors?: {
+    uid: string;
+    name: string;
+    email: string;
+    phone?: string;
+    title?: string;
+    createdAt?: string;
+  }[];
+  ministries?: any[];
+  phone?: string;
+  email?: string;
   worshipMinistryName?: string;
   worshipMinistryAcronym?: string;
   danceMinistryName?: string;

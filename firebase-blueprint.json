@@ -121,6 +121,8 @@
         "name": { "type": "string" },
         "address": { "type": "string" },
         "pastor": { "type": "string" },
+        "pastors": { "type": "array", "description": "Lista de pastores e liderança ministerial da igreja com login e senha" },
+        "ministries": { "type": "array", "description": "Lista de ministérios dinâmicos e customizados da igreja" },
         "worshipMinistryName": { "type": "string" },
         "worshipMinistryAcronym": { "type": "string" },
         "danceMinistryName": { "type": "string" },
@@ -417,6 +419,39 @@
         "updatedBy": { "type": "string" },
         "rules": { "type": "array" }
       }
+    },
+    "FinancialRecord": {
+      "title": "Lançamento Financeiro",
+      "description": "Movimentação contábil de dízimos, ofertas, doações ou despesas departamentais",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "churchId": { "type": "string" },
+        "type": { "type": "string", "enum": ["income", "expense"] },
+        "category": { "type": "string" },
+        "categoryLabel": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "description": "Data do lançamento no formato YYYY-MM-DD" },
+        "description": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string", "enum": ["confirmed", "pending"] },
+        "contributorName": { "type": "string" },
+        "contributorMemberId": { "type": "string" },
+        "isAnonymous": { "type": "boolean" },
+        "serviceName": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "departmentName": { "type": "string" },
+        "supplier": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "receiptNumber": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdByName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "churchId", "type", "category", "amount", "date", "description", "paymentMethod", "status"]
     }
   },
   "firestore": {
@@ -424,6 +459,7 @@
     "churches/{churchId}": { "schema": "Church", "description": "Listagem de igrejas" },
     "churches/{churchId}/departments/{departmentId}": { "schema": "Department", "description": "Departamentos da Igreja" },
     "churches/{churchId}/departments/{departmentId}/members/{userUid}": { "schema": "DepartmentMember", "description": "Papéis dos membros escopados no respectivo departamento" },
+    "churches/{churchId}/financial_records/{recordId}": { "schema": "FinancialRecord", "description": "Lançamentos contábeis de dízimos, ofertas e despesas por departamento" },
     "services/{serviceId}": { "schema": "Service", "description": "Cultos e celebrações da congregação" },
     "visitors/{visitorId}": { "schema": "Visitor", "description": "Visitantes" },
     "appointments/{appointmentId}": { "schema": "Appointment", "description": "Atendimentos" },

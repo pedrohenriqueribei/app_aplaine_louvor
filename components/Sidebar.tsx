@@ -22,11 +22,18 @@ import {
   Mic2,
   Monitor,
   Briefcase,
+  Coins,
+  BookOpen,
+  HeartHandshake,
+  Flame,
+  Globe,
+  Building2,
   CalendarDays
 } from 'lucide-react';
 import { BallerinaIcon } from '@/components/BallerinaIcon';
 import { UserAvatar } from '@/components/UserAvatar';
 import { cn } from '@/lib/utils';
+import { getAllChurchMinistries } from '@/lib/ministryUtils';
 import { auth, db } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
 import { useAuth } from '@/components/AuthProvider';
@@ -112,58 +119,63 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   // List of all church ministries
   const ministryList = useMemo(() => {
-    const list = [
-      {
-        key: 'louvor',
-        label: churchData?.worshipMinistryName?.trim() || 'Ministério de Louvor',
-        icon: Mic2,
-        iconColor: 'text-blue-600 dark:text-blue-400',
-        activeClass: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold',
-        href: churchId ? `/dashboard/churches/${churchId}/ministries/louvor` : '/dashboard/churches'
-      },
-      {
-        key: 'multimidia',
-        label: 'Ministério de Multimídia',
-        icon: Monitor,
-        iconColor: 'text-purple-600 dark:text-purple-400',
-        activeClass: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-bold',
-        href: churchId ? `/dashboard/churches/${churchId}/ministries/multimidia` : '/dashboard/churches'
-      },
-      {
-        key: 'danca',
-        label: churchData?.danceMinistryName?.trim() || 'Ministério de Dança',
-        icon: BallerinaIcon,
-        iconColor: 'text-rose-600 dark:text-rose-400',
-        activeClass: 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 font-bold',
-        href: churchId ? `/dashboard/churches/${churchId}/ministries/danca` : '/dashboard/churches'
-      },
-      {
-        key: 'secretaria',
-        label: 'Secretaria',
-        icon: Briefcase,
-        iconColor: 'text-emerald-600 dark:text-emerald-400',
-        activeClass: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-bold',
-        href: churchId ? `/dashboard/churches/${churchId}/ministries/secretaria` : '/dashboard/churches'
+    const all = getAllChurchMinistries(churchData);
+    return all.map((m) => {
+      let icon: React.ComponentType<any> = LayoutGrid;
+      let iconColor = 'text-blue-600 dark:text-blue-400';
+      let activeClass = 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold';
+
+      if (m.id === 'louvor') {
+        icon = Mic2;
+        iconColor = 'text-blue-600 dark:text-blue-400';
+        activeClass = 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold';
+      } else if (m.id === 'multimidia') {
+        icon = Monitor;
+        iconColor = 'text-purple-600 dark:text-purple-400';
+        activeClass = 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-bold';
+      } else if (m.id === 'danca') {
+        icon = BallerinaIcon;
+        iconColor = 'text-rose-600 dark:text-rose-400';
+        activeClass = 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 font-bold';
+      } else if (m.id === 'tesouraria') {
+        icon = Coins;
+        iconColor = 'text-emerald-600 dark:text-emerald-400';
+        activeClass = 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-bold';
+      } else if (m.id === 'secretaria') {
+        icon = Briefcase;
+        iconColor = 'text-slate-600 dark:text-slate-400';
+        activeClass = 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold';
+      } else if (m.id === 'biblico') {
+        icon = BookOpen;
+        iconColor = 'text-indigo-600 dark:text-indigo-400';
+        activeClass = 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-bold';
+      } else if (m.id === 'acolhimento') {
+        icon = HeartHandshake;
+        iconColor = 'text-teal-600 dark:text-teal-400';
+        activeClass = 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-bold';
+      } else if (m.id === 'intercessao') {
+        icon = Flame;
+        iconColor = 'text-violet-600 dark:text-violet-400';
+        activeClass = 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 font-bold';
+      } else if (m.id === 'evangelismo') {
+        icon = Globe;
+        iconColor = 'text-orange-600 dark:text-orange-400';
+        activeClass = 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 font-bold';
+      } else if (m.id === 'patrimonio') {
+        icon = Building2;
+        iconColor = 'text-cyan-600 dark:text-cyan-400';
+        activeClass = 'bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 font-bold';
       }
-    ];
 
-    if (Array.isArray(churchData?.customMinistries)) {
-      churchData.customMinistries.forEach((cm) => {
-        if (cm && cm.name) {
-          const slug = cm.id || cm.name.toLowerCase().replace(/\s+/g, '-');
-          list.push({
-            key: slug,
-            label: cm.name,
-            icon: LayoutGrid,
-            iconColor: 'text-indigo-600 dark:text-indigo-400',
-            activeClass: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-bold',
-            href: churchId ? `/dashboard/churches/${churchId}/ministries/${slug}` : '/dashboard/churches'
-          });
-        }
-      });
-    }
-
-    return list;
+      return {
+        key: m.id,
+        label: m.name,
+        icon,
+        iconColor,
+        activeClass,
+        href: churchId ? `/dashboard/churches/${churchId}/ministries/${m.id}` : '/dashboard/churches'
+      };
+    });
   }, [churchData, churchId]);
 
   const allItems = useMemo(() => {

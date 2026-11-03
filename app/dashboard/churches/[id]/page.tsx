@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +16,9 @@ import {
   serverTimestamp,
   updateDoc,
   deleteDoc,
+  setDoc,
 } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
+import { db, handleFirestoreError, OperationType, auth } from "@/lib/firebase";
 import { auditCreate, auditUpdate, auditDelete } from "@/lib/audit";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -48,12 +49,34 @@ import {
   Sparkles,
   Power,
   Loader2,
+  BookOpen,
+  HeartHandshake,
+  Flame,
+  Globe,
+  Coins,
+  Building2,
+  Eye,
+  EyeOff,
+  KeyRound,
+  ShieldCheck,
+  CheckCircle2,
+  ChevronRight,
+  UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/AuthProvider";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
 import { ChurchScalesCalendarWidget } from "@/components/ChurchScalesCalendarWidget";
+import {
+  getAllChurchMinistries,
+  normalizeMinistryKey,
+  getMinistryCustomName,
+  getMinistryShortName,
+  getMinistryIconComponent,
+  MinistryDefinition,
+  STANDARD_MINISTRIES_PRESETS,
+} from "@/lib/ministryUtils";
 
 interface Musician {
   uid: string;
@@ -63,12 +86,9 @@ interface Musician {
   instruments?: string[];
   vocalRange?: string;
   level?: string;
-  roles?: {
-    worship?: string[];
-    multimedia?: string[];
-    secretariat?: string[];
-    dance?: string[];
-  };
+  role?: string;
+  pastoralTitle?: string;
+  roles?: Record<string, string[]>;
   status: "active" | "inactive";
 }
 
@@ -80,13 +100,29 @@ interface Band {
   leaderId: string;
 }
 
+interface PastorRecord {
+  uid: string;
+  name: string;
+  email: string;
+  phone?: string;
+  title?: string;
+  createdAt?: string;
+}
+
 interface ChurchType {
   id: string;
   name: string;
   address: string;
   pastor: string;
+  phone?: string;
+  email?: string;
+  cnpj?: string;
+  pastors?: PastorRecord[];
+  ministries?: MinistryDefinition[];
   worshipMinistryName?: string;
   worshipMinistryAcronym?: string;
+  danceMinistryName?: string;
+  danceMinistryAcronym?: string;
 }
 
 interface ServiceType {
@@ -110,34 +146,64 @@ export default function ChurchDetailPage() {
   const [services, setServices] = useState<ServiceType[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [isMinistryModalOpen, setIsMinistryModalOpen] = useState(false);
-  const [selectedMinistry, setSelectedMinistry] = useState<
-    "louvor" | "multimidia" | "secretaria" | null
-  >(null);
-  const [isEditingWorship, setIsEditingWorship] = useState(false);
-  const [worshipEditData, setWorshipEditData] = useState({
-    name: "",
-    acronym: "",
-  });
-  const [savingWorship, setSavingWorship] = useState(false);
 
+  // Filter state for ministries
+  const [ministryFilter, setMinistryFilter] = useState<string>("all");
+
+  // Church Edition State
+  const [isEditChurchModalOpen, setIsEditChurchModalOpen] = useState(false);
+  const [churchFormData, setChurchFormData] = useState({
+    name: "",
+    address: "",
+    pastor: "",
+    phone: "",
+    email: "",
+    cnpj: "",
+  });
+  const [savingChurch, setSavingChurch] = useState(false);
+
+  // Pastoral Account Creation State
+  const [isPastorModalOpen, setIsPastorModalOpen] = useState(false);
+  const [pastorFormData, setPastorFormData] = useState({
+    name: "",
+    title: "Pastor Titular",
+    email: "",
+    password: "",
+    phone: "",
+  });
+  const [showPastorPassword, setShowPastorPassword] = useState(false);
+  const [savingPastor, setSavingPastor] = useState(false);
+  const [pastorError, setPastorError] = useState("");
+  const [pastorSuccessInfo, setPastorSuccessInfo] = useState<{
+    name: string;
+    email: string;
+    password: string;
+    title: string;
+  } | null>(null);
+  const [copiedPastorCredentials, setCopiedPastorCredentials] = useState(false);
+
+  // New Ministry Creation State
+  const [isNewMinistryModalOpen, setIsNewMinistryModalOpen] = useState(false);
+  const [newMinistryData, setNewMinistryData] = useState({
+    name: "",
+    shortName: "",
+    acronym: "",
+    description: "",
+    color: "blue",
+    iconKey: "sparkles",
+  });
+  const [savingNewMinistry, setSavingNewMinistry] = useState(false);
+  const [newMinistryError, setNewMinistryError] = useState("");
+
+  // Services CRUD State
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<ServiceType | null>(null);
   const [serviceToDelete, setServiceToDelete] = useState<ServiceType | null>(null);
-  const [isDeleteServiceModalOpen, setIsDeleteServiceModalOpen] =
-    useState(false);
+  const [isDeleteServiceModalOpen, setIsDeleteServiceModalOpen] = useState(false);
   const [deletingService, setDeletingService] = useState(false);
-  const [isBandModalOpen, setIsBandModalOpen] = useState(false);
-  const [isBandDetailOpen, setIsBandDetailOpen] = useState(false);
-  const [selectedBand, setSelectedBand] = useState<Band | null>(null);
   const [savingService, setSavingService] = useState(false);
   const [togglingServiceId, setTogglingServiceId] = useState<string | null>(null);
   const [serviceStatusFilter, setServiceStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  const [ministryFilter, setMinistryFilter] = useState<
-    "all" | "louvor" | "multimidia" | "danca" | "secretaria"
-  >("all");
-  const [savingBand, setSavingBand] = useState(false);
-  const [bandName, setBandName] = useState("");
   const [serviceFormData, setServiceFormData] = useState<{
     name: string;
     description: string;
@@ -148,46 +214,84 @@ export default function ChurchDetailPage() {
   }>({
     name: "",
     description: "",
-    startTime: "",
-    endTime: "",
+    startTime: "19:30",
+    endTime: "21:30",
     dayOfWeek: "Domingo",
     status: "active",
   });
 
-  const handleCopyLink = () => {
-    const inviteUrl = `${window.location.origin}/register?churchId=${id}`;
-    navigator.clipboard.writeText(inviteUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 3000);
-  };
+  // Bands State
+  const [isBandModalOpen, setIsBandModalOpen] = useState(false);
+  const [bandName, setBandName] = useState("");
+  const [savingBand, setSavingBand] = useState(false);
+
+  const canManageChurch = Boolean(
+    isSuperAdmin ||
+      userData?.role === "pastor" ||
+      userData?.role === "pastor_titular" ||
+      userData?.role === "líder" ||
+      userData?.churchId === id
+  );
+
+  const canManageServices = canManageChurch;
+
+  // Compute all available ministries for this church (merged presets + custom)
+  const allMinistries: MinistryDefinition[] = useMemo(() => {
+    return getAllChurchMinistries(church);
+  }, [church]);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        // Fetch Church
+        // 1. Fetch Church Data
         const churchDoc = await getDoc(doc(db, "churches", id as string));
         if (churchDoc.exists()) {
-          setChurch({ ...churchDoc.data() } as ChurchType);
+          const cData = { id: churchDoc.id, ...churchDoc.data() } as ChurchType;
+          setChurch(cData);
+          setChurchFormData({
+            name: cData.name || "",
+            address: cData.address || "",
+            pastor: cData.pastor || "",
+            phone: cData.phone || "",
+            email: cData.email || "",
+            cnpj: cData.cnpj || "",
+          });
         }
 
-        // 1. Fetch users directly registered under this churchId
+        // 2. Fetch Church Members
         const usersQ = query(
           collection(db, "users"),
-          where("churchId", "==", id),
+          where("churchId", "==", id)
         );
         const usersSnap = await getDocs(usersQ);
-        
         const membersMap = new Map<string, any>();
+
         usersSnap.docs.forEach((docSnap) => {
           membersMap.set(docSnap.id, {
             uid: docSnap.id,
-            ...docSnap.data()
+            ...docSnap.data(),
           });
         });
 
-        // 2. Fetch users and nested roles from department members subcollections
-        const depts = ["worship", "multimedia", "secretariat", "dance"];
-        for (const dept of depts) {
+        // 3. Scan department subcollections for extra members
+        const deptKeys = [
+          "worship",
+          "louvor",
+          "multimedia",
+          "multimidia",
+          "secretariat",
+          "secretaria",
+          "dance",
+          "danca",
+          "biblico",
+          "acolhimento",
+          "intercessao",
+          "evangelismo",
+          "tesouraria",
+          "patrimonio",
+        ];
+
+        for (const dept of deptKeys) {
           try {
             const deptSnap = await getDocs(
               collection(db, "churches", id as string, "departments", dept, "members")
@@ -196,9 +300,10 @@ export default function ChurchDetailPage() {
               const memberUid = docSnap.id;
               const deptMemberData = docSnap.data();
               const subroles = deptMemberData.roles || [];
-              
+
+              const normKey = normalizeMinistryKey(dept);
+
               if (!membersMap.has(memberUid)) {
-                // Fetch user profile for this department member
                 const userProfileSnap = await getDoc(doc(db, "users", memberUid));
                 if (userProfileSnap.exists()) {
                   const uData = userProfileSnap.data();
@@ -207,59 +312,51 @@ export default function ChurchDetailPage() {
                     ...uData,
                     roles: {
                       ...(uData.roles || {}),
-                      [dept]: subroles
-                    }
+                      [normKey]: subroles,
+                    },
                   });
                 }
               } else {
-                // Update roles with subcollection values if found
                 const existingUser = membersMap.get(memberUid);
                 existingUser.roles = {
                   ...(existingUser.roles || {}),
-                  [dept]: Array.from(new Set([...(existingUser.roles?.[dept] || []), ...subroles]))
+                  [normKey]: Array.from(
+                    new Set([...(existingUser.roles?.[normKey] || []), ...subroles])
+                  ),
                 };
                 membersMap.set(memberUid, existingUser);
               }
             }
-          } catch (err) {
-            console.error(`Error loading department ${dept} members in church page:`, err);
+          } catch {
+            // non-fatal
           }
         }
 
         const membersData = Array.from(membersMap.values()) as Musician[];
-
-        // Ensure members are sorted by name for UI mapping simplicity
         membersData.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
         setMembers(membersData);
 
-        // Fetch Services
+        // 4. Fetch Services
         const servicesQ = query(
           collection(db, "services"),
-          where("churchId", "==", id),
+          where("churchId", "==", id)
         );
         const servicesSnap = await getDocs(servicesQ);
         setServices(
-          servicesSnap.docs.map(
-            (doc) => {
-              const data = doc.data();
-              return {
-                id: doc.id,
-                ...data,
-                status: data.status === "inactive" ? "inactive" : "active",
-              } as ServiceType;
-            },
-          ),
+          servicesSnap.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              ...data,
+              status: data.status === "inactive" ? "inactive" : "active",
+            } as ServiceType;
+          })
         );
 
-        // Fetch Bands
-        const bandsQ = query(
-          collection(db, "bands"),
-          where("churchId", "==", id),
-        );
+        // 5. Fetch Bands
+        const bandsQ = query(collection(db, "bands"), where("churchId", "==", id));
         const bandsSnap = await getDocs(bandsQ);
-        setBands(
-          bandsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Band),
-        );
+        setBands(bandsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Band));
       } catch (err) {
         handleFirestoreError(err, OperationType.GET, `churches/${id}`);
       } finally {
@@ -270,76 +367,295 @@ export default function ChurchDetailPage() {
     if (id) fetchData();
   }, [id]);
 
-  const handleSaveBand = async (e: React.FormEvent) => {
+  // Compute members belonging to a specific ministry
+  const getMembersByMinistry = (ministryKey: string): Musician[] => {
+    const norm = normalizeMinistryKey(ministryKey);
+    return members.filter((m) => {
+      const rolesMap = m.roles || {};
+      const direct = rolesMap[norm] || [];
+      const legacyWorship = (norm === "louvor" && rolesMap.worship) || [];
+      const legacyMultimedia = (norm === "multimidia" && rolesMap.multimedia) || [];
+      const legacySecretariat = (norm === "secretaria" && rolesMap.secretariat) || [];
+      const legacyDance = (norm === "danca" && rolesMap.dance) || [];
+
+      // Check if user has instruments/vocal for louvor
+      const hasWorshipRole =
+        norm === "louvor" &&
+        (m.instrument || (m.instruments && m.instruments.length > 0) || m.vocalRange);
+
+      return (
+        direct.length > 0 ||
+        legacyWorship.length > 0 ||
+        legacyMultimedia.length > 0 ||
+        legacySecretariat.length > 0 ||
+        legacyDance.length > 0 ||
+        hasWorshipRole
+      );
+    });
+  };
+
+  // Get human-readable role tags for a member in a specific ministry
+  const getMemberRolesForMinistry = (member: Musician, ministryKey: string): string[] => {
+    const norm = normalizeMinistryKey(ministryKey);
+    const badges: string[] = [];
+    const rolesMap = member.roles || {};
+    const deptRoles = rolesMap[norm] || rolesMap[ministryKey] || [];
+
+    if (deptRoles.includes("leader") || deptRoles.includes("super_admin") || member.role === "pastor") {
+      badges.push("Líder");
+    }
+
+    if (norm === "louvor") {
+      if (member.vocalRange) badges.push(`Voz (${member.vocalRange})`);
+      else if (member.instruments?.includes("Voz") || member.instrument === "Voz") badges.push("Voz");
+
+      const otherInstruments = (member.instruments || []).filter((i) => i !== "Voz");
+      if (otherInstruments.length > 0) {
+        otherInstruments.forEach((i) => badges.push(i));
+      } else if (member.instrument && member.instrument !== "Voz") {
+        badges.push(member.instrument);
+      }
+    } else {
+      deptRoles.forEach((roleKey) => {
+        if (roleKey === "leader" || roleKey === "admin") return;
+        badges.push(
+          roleKey
+            .split(/[-_]/)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" ")
+        );
+      });
+    }
+
+    if (badges.length === 0) {
+      badges.push("Integrante");
+    }
+
+    return badges;
+  };
+
+  // Copy registration invite link
+  const handleCopyLink = () => {
+    const inviteUrl = `${window.location.origin}/register?churchId=${id}`;
+    navigator.clipboard.writeText(inviteUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 3000);
+  };
+
+  // Generate secure password helper
+  const handleGenerateSecurePassword = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$";
+    let pass = "Pr@";
+    for (let i = 0; i < 8; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setPastorFormData((prev) => ({ ...prev, password: pass }));
+  };
+
+  // Save Church Changes
+  const handleSaveChurch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bandName.trim()) return;
-    setSavingBand(true);
+    if (!church || !user) return;
+    setSavingChurch(true);
     try {
-      const docRef = await addDoc(collection(db, "bands"), {
-        name: bandName,
-        churchId: id,
-        memberIds: [],
-        leaderId: userData?.uid || "",
-        createdAt: serverTimestamp(),
-        createdBy: user?.uid,
+      const churchRef = doc(db, "churches", id as string);
+      const updates = {
+        name: churchFormData.name,
+        pastor: churchFormData.pastor,
+        address: churchFormData.address,
+        phone: churchFormData.phone,
+        email: churchFormData.email,
+        cnpj: churchFormData.cnpj,
+        updatedAt: serverTimestamp(),
+        updatedBy: user.uid,
+      };
+
+      await updateDoc(churchRef, updates);
+
+      // Audit log
+      auditUpdate("Church", id as string, churchFormData.name, church, updates, {
+        churchId: id as string,
+      }).catch(console.warn);
+
+      setChurch((prev) => (prev ? { ...prev, ...updates } : prev));
+      setIsEditChurchModalOpen(false);
+    } catch (err: any) {
+      console.error("Erro ao salvar igreja:", err);
+      alert("Erro ao salvar alterações da igreja: " + (err.message || err));
+    } finally {
+      setSavingChurch(false);
+    }
+  };
+
+  // Create Pastoral Account via server API
+  const handleCreatePastorAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPastorError("");
+    setSavingPastor(true);
+
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch("/api/admin/create-pastor", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: pastorFormData.name,
+          title: pastorFormData.title,
+          email: pastorFormData.email,
+          password: pastorFormData.password,
+          phone: pastorFormData.phone,
+          churchId: id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.details || "Falha ao criar conta pastoral.");
+      }
+
+      // Add to local state
+      const newPastorRecord: PastorRecord = {
+        uid: data.pastor.uid,
+        name: pastorFormData.name,
+        email: pastorFormData.email,
+        phone: pastorFormData.phone,
+        title: pastorFormData.title,
+        createdAt: new Date().toISOString(),
+      };
+
+      setChurch((prev) => {
+        if (!prev) return prev;
+        const currentPastors = prev.pastors || [];
+        const updated = [...currentPastors.filter((p) => p.email !== newPastorRecord.email), newPastorRecord];
+        return {
+          ...prev,
+          pastors: updated,
+          pastor:
+            newPastorRecord.title?.toLowerCase().includes("titular") || !prev.pastor
+              ? newPastorRecord.name
+              : prev.pastor,
+        };
+      });
+
+      setPastorSuccessInfo({
+        name: pastorFormData.name,
+        email: pastorFormData.email,
+        password: pastorFormData.password,
+        title: pastorFormData.title,
+      });
+
+      setPastorFormData({
+        name: "",
+        title: "Pastor Auxiliar",
+        email: "",
+        password: "",
+        phone: "",
+      });
+      setIsPastorModalOpen(false);
+    } catch (err: any) {
+      console.error("Erro ao criar conta pastoral:", err);
+      setPastorError(err.message || "Erro inesperado ao criar conta.");
+    } finally {
+      setSavingPastor(false);
+    }
+  };
+
+  // Create New Ministry
+  const handleCreateMinistry = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMinistryData.name.trim()) return;
+    setNewMinistryError("");
+    setSavingNewMinistry(true);
+
+    try {
+      const slug =
+        newMinistryData.shortName.trim().toLowerCase().replace(/[^a-z0-9]/g, "") ||
+        newMinistryData.name.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      const newDef: MinistryDefinition = {
+        id: slug,
+        name: newMinistryData.name.trim(),
+        shortName: newMinistryData.shortName.trim() || newMinistryData.name.trim(),
+        acronym: (
+          newMinistryData.acronym.trim() ||
+          newMinistryData.name.substring(0, 3).toUpperCase()
+        ).toUpperCase(),
+        description:
+          newMinistryData.description.trim() ||
+          `Frente de serviço do ministério ${newMinistryData.name}.`,
+        color: newMinistryData.color,
+        badgeColorClass: `bg-${newMinistryData.color}-100 dark:bg-${newMinistryData.color}-900/40 text-${newMinistryData.color}-800 dark:text-${newMinistryData.color}-300 border-${newMinistryData.color}-200 dark:border-${newMinistryData.color}-800`,
+        headerGradientClass: `bg-${newMinistryData.color}-50 dark:bg-${newMinistryData.color}-900/10`,
+        iconBgClass: `bg-${newMinistryData.color}-700 text-white shadow-${newMinistryData.color}-700/30`,
+        iconKey: newMinistryData.iconKey,
+        defaultRoles: [
+          { id: "leader", label: "Líder", isLeader: true },
+          { id: "vice_leader", label: "Vice-Líder", isLeader: true },
+          { id: "volunteer", label: "Voluntário(a)" },
+          { id: "support", label: "Apoio" },
+        ],
+        isCustom: true,
+      };
+
+      const churchRef = doc(db, "churches", id as string);
+      const currentCustom = church?.ministries || [];
+      const updatedCustom = [...currentCustom.filter((m) => m.id !== slug), newDef];
+
+      await updateDoc(churchRef, {
+        ministries: updatedCustom,
         updatedAt: serverTimestamp(),
         updatedBy: user?.uid,
       });
-      const newBand: Band = {
-        id: docRef.id,
-        name: bandName,
-        churchId: id as string,
-        memberIds: [],
-        leaderId: userData?.uid || "",
-      };
-      setBands([...bands, newBand]);
-      setBandName("");
-      setIsBandModalOpen(false);
-    } catch (err: any) {
-      alert("Erro ao salvar banda: " + err.message);
-    } finally {
-      setSavingBand(false);
-    }
-  };
 
-  const handleUpdateBandMembers = async (
-    bandId: string,
-    newMemberIds: string[],
-  ) => {
-    try {
-      const bandRef = doc(db, "bands", bandId);
-      await updateDoc(bandRef, { memberIds: newMemberIds });
-      setBands(
-        bands.map((b) =>
-          b.id === bandId ? { ...b, memberIds: newMemberIds } : b,
-        ),
+      // Also create department record
+      await setDoc(
+        doc(db, "churches", id as string, "departments", slug),
+        {
+          id: slug,
+          churchId: id,
+          name: newDef.name,
+          acronym: newDef.acronym,
+          description: newDef.description,
+          createdAt: serverTimestamp(),
+          createdBy: user?.uid,
+        },
+        { merge: true }
       );
-      if (selectedBand?.id === bandId) {
-        setSelectedBand({ ...selectedBand, memberIds: newMemberIds });
-      }
+
+      // Audit Log
+      auditCreate("Ministry", slug, newDef.name, newDef, { churchId: id as string }).catch(
+        console.warn
+      );
+
+      setChurch((prev) => (prev ? { ...prev, ministries: updatedCustom } : prev));
+      setIsNewMinistryModalOpen(false);
+      setNewMinistryData({
+        name: "",
+        shortName: "",
+        acronym: "",
+        description: "",
+        color: "blue",
+        iconKey: "sparkles",
+      });
     } catch (err: any) {
-      alert("Erro ao atualizar integrantes da banda: " + err.message);
+      console.error("Erro ao criar ministério:", err);
+      setNewMinistryError(err.message || "Erro ao salvar novo ministério.");
+    } finally {
+      setSavingNewMinistry(false);
     }
   };
 
-  const canManageServices = Boolean(
-    isSuperAdmin ||
-      user?.email === "pedrohenriqueribei@gmail.com" ||
-      ((userData?.roles?.worship?.includes("leader") ||
-        userData?.roles?.multimedia?.includes("leader") ||
-        userData?.roles?.multimedia?.includes("multimedia_leader") ||
-        userData?.roles?.secretariat?.includes("leader") ||
-        userData?.role === "líder") &&
-        (userData?.churchId === id || isSuperAdmin)),
-  );
-
+  // Services CRUD Handlers
   const handleOpenCreateService = () => {
     setEditingService(null);
     setServiceFormData({
       name: "",
       description: "",
-      startTime: "",
-      endTime: "",
+      startTime: "19:30",
+      endTime: "21:30",
       dayOfWeek: "Domingo",
       status: "active",
     });
@@ -361,108 +677,77 @@ export default function ChurchDetailPage() {
 
   const handleSaveService = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!serviceFormData.name.trim() || !user) return;
     setSavingService(true);
     try {
       if (editingService) {
         const serviceRef = doc(db, "services", editingService.id);
-        await updateDoc(serviceRef, {
+        const updates = {
           ...serviceFormData,
-          churchId: id,
           updatedAt: serverTimestamp(),
           updatedBy: user.uid,
-        });
+        };
+        await updateDoc(serviceRef, updates);
 
-        // Record Audit Update
-        auditUpdate(
-          "WorshipService",
-          editingService.id,
-          serviceFormData.name || editingService.name,
-          editingService,
-          serviceFormData,
-          { churchId: id as string }
-        ).catch((err) => console.warn("Audit service update error:", err));
+        auditUpdate("WorshipService", editingService.id, serviceFormData.name, editingService, updates, {
+          churchId: (editingService.churchId || id) as string,
+        }).catch(console.warn);
 
         setServices((prev) =>
-          prev.map((s) =>
-            s.id === editingService.id ? { ...s, ...serviceFormData } : s,
-          ),
+          prev.map((s) => (s.id === editingService.id ? { ...s, ...serviceFormData } : s))
         );
       } else {
-        const docRef = await addDoc(collection(db, "services"), {
+        const newRecord = {
           ...serviceFormData,
-          churchId: id,
+          churchId: id as string,
           createdAt: serverTimestamp(),
           createdBy: user.uid,
           updatedAt: serverTimestamp(),
           updatedBy: user.uid,
-        });
+        };
+        const docRef = await addDoc(collection(db, "services"), newRecord);
 
-        // Record Audit Create
-        auditCreate(
-          "WorshipService",
-          docRef.id,
-          serviceFormData.name,
-          { ...serviceFormData, churchId: id },
-          { churchId: id as string }
-        ).catch((err) => console.warn("Audit service create error:", err));
+        auditCreate("WorshipService", docRef.id, serviceFormData.name, newRecord, {
+          churchId: id as string,
+        }).catch(console.warn);
 
-        setServices((prev) => [
-          ...prev,
-          { id: docRef.id, churchId: id as string, ...serviceFormData },
-        ]);
+        setServices((prev) => [...prev, { id: docRef.id, ...serviceFormData, churchId: id as string }]);
       }
       setIsServiceModalOpen(false);
       setEditingService(null);
     } catch (err: any) {
       console.error("Error saving service:", err);
-      handleFirestoreError(
-        err,
-        editingService ? OperationType.UPDATE : OperationType.CREATE,
-        editingService ? `services/${editingService.id}` : "services",
-      );
       alert("Erro ao salvar culto: " + err.message);
     } finally {
       setSavingService(false);
     }
   };
 
-  const handleToggleServiceStatus = async (service: ServiceType, targetStatus?: "active" | "inactive") => {
-    if (!user || !canManageServices || togglingServiceId) return;
-    const currentStatus = service.status === "inactive" ? "inactive" : "active";
-    const nextStatus = targetStatus ?? (currentStatus === "active" ? "inactive" : "active");
-    if (nextStatus === currentStatus) return;
-
+  const handleToggleServiceStatus = async (service: ServiceType, newStatus: "active" | "inactive") => {
+    if (!user) return;
     setTogglingServiceId(service.id);
-    // Optimistic UI update
-    setServices((prev) =>
-      prev.map((s) => (s.id === service.id ? { ...s, status: nextStatus } : s)),
-    );
-
+    const currentStatus = service.status || "active";
+    setServices((prev) => prev.map((s) => (s.id === service.id ? { ...s, status: newStatus } : s)));
     try {
-      const serviceRef = doc(db, "services", service.id);
-      await updateDoc(serviceRef, {
-        status: nextStatus,
-        churchId: service.churchId || id,
+      await updateDoc(doc(db, "services", service.id), {
+        status: newStatus,
         updatedAt: serverTimestamp(),
         updatedBy: user.uid,
       });
+      auditUpdate(
+        "WorshipService",
+        service.id,
+        service.name,
+        { status: currentStatus },
+        { status: newStatus },
+        { churchId: (service.churchId || id) as string }
+      ).catch(console.warn);
     } catch (err: any) {
-      console.error("Error toggling service status:", err);
-      // Revert optimistic update
-      setServices((prev) =>
-        prev.map((s) => (s.id === service.id ? { ...s, status: currentStatus } : s)),
-      );
-      handleFirestoreError(err, OperationType.UPDATE, `services/${service.id}`);
+      setServices((prev) => prev.map((s) => (s.id === service.id ? { ...s, status: currentStatus } : s)));
       alert("Erro ao alterar status do culto: " + err.message);
     } finally {
       setTogglingServiceId(null);
     }
-  };
-
-  const handleOpenDeleteService = (service: ServiceType) => {
-    setServiceToDelete(service);
-    setIsDeleteServiceModalOpen(true);
   };
 
   const handleConfirmDeleteService = async () => {
@@ -470,53 +755,41 @@ export default function ChurchDetailPage() {
     setDeletingService(true);
     try {
       await deleteDoc(doc(db, "services", serviceToDelete.id));
-
-      // Record Audit Delete
-      auditDelete(
-        "WorshipService",
-        serviceToDelete.id,
-        serviceToDelete.name,
-        serviceToDelete,
-        { churchId: (serviceToDelete.churchId || id) as string }
-      ).catch((err) => console.warn("Audit service delete error:", err));
-
+      auditDelete("WorshipService", serviceToDelete.id, serviceToDelete.name, serviceToDelete, {
+        churchId: (serviceToDelete.churchId || id) as string,
+      }).catch(console.warn);
       setServices((prev) => prev.filter((s) => s.id !== serviceToDelete.id));
       setIsDeleteServiceModalOpen(false);
       setServiceToDelete(null);
     } catch (err: any) {
-      console.error("Error deleting service:", err);
-      handleFirestoreError(
-        err,
-        OperationType.DELETE,
-        `services/${serviceToDelete.id}`,
-      );
       alert("Erro ao excluir culto: " + err.message);
     } finally {
       setDeletingService(false);
     }
   };
 
-  const handleUpdateWorshipInfo = async () => {
-    if (!church || !user) return;
-    setSavingWorship(true);
+  const handleSaveBand = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bandName.trim() || !user) return;
+    setSavingBand(true);
     try {
-      const churchRef = doc(db, "churches", id as string);
-      await updateDoc(churchRef, {
-        worshipMinistryName: worshipEditData.name,
-        worshipMinistryAcronym: worshipEditData.acronym,
+      const docRef = await addDoc(collection(db, "bands"), {
+        name: bandName,
+        churchId: id,
+        memberIds: [],
+        leaderId: userData?.uid || "",
+        createdAt: serverTimestamp(),
+        createdBy: user.uid,
         updatedAt: serverTimestamp(),
         updatedBy: user.uid,
       });
-      setChurch({
-        ...church,
-        worshipMinistryName: worshipEditData.name,
-        worshipMinistryAcronym: worshipEditData.acronym,
-      });
-      setIsEditingWorship(false);
+      setBands([...bands, { id: docRef.id, name: bandName, churchId: id as string, memberIds: [], leaderId: userData?.uid || "" }]);
+      setBandName("");
+      setIsBandModalOpen(false);
     } catch (err: any) {
-      alert("Erro ao atualizar informações: " + err.message);
+      alert("Erro ao salvar banda: " + err.message);
     } finally {
-      setSavingWorship(false);
+      setSavingBand(false);
     }
   };
 
@@ -526,7 +799,7 @@ export default function ChurchDetailPage() {
         <div className="relative">
           <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-800 rounded-full animate-spin"></div>
           <div className="absolute inset-x-0 top-20 text-center text-xs font-black text-slate-400 uppercase tracking-widest">
-            Carregando...
+            Carregando Igreja...
           </div>
         </div>
       </div>
@@ -542,7 +815,7 @@ export default function ChurchDetailPage() {
         </h2>
         <button
           onClick={() => router.back()}
-          className="text-blue-800 dark:text-blue-400 font-bold flex items-center gap-2 mx-auto"
+          className="text-blue-800 dark:text-blue-400 font-bold flex items-center gap-2 mx-auto cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" /> Voltar
         </button>
@@ -550,184 +823,21 @@ export default function ChurchDetailPage() {
     );
   }
 
-  const getMemberWorshipRoles = (member: any) => {
-    const badges: string[] = [];
-    const deptRoles = member.roles?.worship || [];
+  // Filtered ministries for display
+  const displayedMinistries =
+    ministryFilter === "all"
+      ? allMinistries
+      : allMinistries.filter((m) => normalizeMinistryKey(m.id) === normalizeMinistryKey(ministryFilter));
 
-    if (deptRoles.includes("leader")) {
-      badges.push("Líder");
-    }
-
-    const isVocal = member.vocalRange || (member.instruments && member.instruments.includes("Voz")) || member.instrument === "Voz";
-    const hasInstruments = (member.instruments && member.instruments.filter((i: string) => i !== "Voz").length > 0) || (member.instrument && member.instrument !== "Voz");
-
-    if (isVocal) {
-      if (member.vocalRange) {
-        badges.push(`Vocalista (${member.vocalRange})`);
-      } else {
-        badges.push("Vocalista");
-      }
-    }
-
-    if (hasInstruments) {
-      if (member.instruments && member.instruments.length > 0) {
-        member.instruments.filter((i: string) => i !== "Voz").forEach((inst: string) => {
-          badges.push(inst);
-        });
-      } else if (member.instrument) {
-        badges.push(member.instrument);
-      }
-    }
-
-    if (badges.length === 0) {
-      if (deptRoles.includes("instrumentist")) {
-        badges.push("Instrumentista");
-      } else {
-        badges.push("Integrante");
-      }
-    }
-
-    return badges;
-  };
-
-  const getMemberMultimediaRoles = (member: any) => {
-    const badges: string[] = [];
-    const deptRoles = member.roles?.multimedia || [];
-
-    if (deptRoles.includes("leader") || deptRoles.includes("multimedia_leader")) {
-      badges.push("Líder");
-    }
-
-    deptRoles.forEach((role: string) => {
-      if (role === "leader" || role === "multimedia_leader") return;
-      
-      if (role === "audio_operator" || role === "audio" || role === "sound") {
-        badges.push("Áudio");
-      } else if (role === "pc_operator" || role === "projection") {
-        badges.push("Projeção");
-      } else if (role === "social_media_operator" || role === "social_media_manager") {
-        badges.push("Redes Sociais");
-      } else if (role === "camera_operator" || role === "camera" || role === "video") {
-        badges.push("Câmera / Vídeo");
-      } else if (role === "photography_operator" || role === "photography") {
-        badges.push("Fotografia");
-      } else if (role === "lights" || role === "illumination") {
-        badges.push("Iluminação");
-      } else {
-        badges.push(role.charAt(0).toUpperCase() + role.slice(1));
-      }
-    });
-
-    if (badges.length === 0) {
-      badges.push("Integrante");
-    }
-
-    return badges;
-  };
-
-  const getMemberSecretariatRoles = (member: any) => {
-    const badges: string[] = [];
-    const deptRoles = member.roles?.secretariat || [];
-
-    if (deptRoles.includes("leader") || deptRoles.includes("admin") || deptRoles.includes("secretariat_leader")) {
-      badges.push("Secretário");
-    }
-
-    deptRoles.forEach((role: string) => {
-      if (role === "leader" || role === "admin" || role === "secretariat_leader") return;
-      badges.push(role.charAt(0).toUpperCase() + role.slice(1));
-    });
-
-    if (badges.length === 0) {
-      badges.push("Integrante");
-    }
-
-    return badges;
-  };
-
-  const getMemberDanceRoles = (member: any) => {
-    const badges: string[] = [];
-    const deptRoles = member.roles?.dance || [];
-
-    if (deptRoles.includes("leader") || deptRoles.includes("dance_leader")) {
-      badges.push("Líder");
-    }
-
-    deptRoles.forEach((role: string) => {
-      if (role === "leader" || role === "dance_leader") return;
-
-      if (role === "choreographer" || role === "coreografo") {
-        badges.push("Coreografia");
-      } else if (role === "dancer" || role === "bailarino" || role === "dancarino") {
-        badges.push("Bailarino(a)");
-      } else if (role === "costume" || role === "figurino") {
-        badges.push("Figurino");
-      } else if (role === "support" || role === "apoio") {
-        badges.push("Apoio");
-      } else {
-        badges.push(role.charAt(0).toUpperCase() + role.slice(1));
-      }
-    });
-
-    if (badges.length === 0) {
-      badges.push("Integrante");
-    }
-
-    return badges;
-  };
-
-  // Define instruments and vocal ranges for grouping
-  const groupMembers = () => {
-    const groups: { [key: string]: Musician[] } = {};
-
-    members.forEach((m) => {
-      // If has instruments list
-      if (m.instruments && m.instruments.length > 0) {
-        m.instruments.forEach((inst) => {
-          if (!groups[inst]) groups[inst] = [];
-          groups[inst].push(m);
-        });
-      } else if (m.instrument) {
-        // Legacy single instrument
-        if (!groups[m.instrument]) groups[m.instrument] = [];
-        groups[m.instrument].push(m);
-      }
-
-      // Vocal range
-      if (m.vocalRange) {
-        if (!groups[m.vocalRange]) groups[m.vocalRange] = [];
-        // Prevent duplicate if already added by instrument?
-        // No, user requested "vocal type" to be visible too.
-        groups[m.vocalRange].push(m);
-      }
-
-      // If nothing defined
-      if (!m.instruments?.length && !m.instrument && !m.vocalRange) {
-        if (!groups["Outros"]) groups["Outros"] = [];
-        groups["Outros"].push(m);
-      }
-    });
-
-    return groups;
-  };
-
-  const groupedData = groupMembers();
-
-  const worshipMembers = members.filter(
-    (m) => m.roles?.worship && m.roles.worship.length > 0
-  );
-  const multimediaMembers = members.filter(
-    (m) => m.roles?.multimedia && m.roles.multimedia.length > 0
-  );
-  const danceMembers = members.filter(
-    (m) => m.roles?.dance && m.roles.dance.length > 0
-  );
-  const secretariatMembers = members.filter(
-    (m) => m.roles?.secretariat && m.roles.secretariat.length > 0
-  );
+  const allPastors = church.pastors && church.pastors.length > 0
+    ? church.pastors
+    : church.pastor
+      ? [{ uid: "primary_pastor", name: church.pastor, email: church.email || "Não informado", title: "Pastor Titular" }]
+      : [];
 
   return (
-    <div className="admin-church-details-container max-w-6xl space-y-12 pb-20 text-slate-800 dark:text-slate-100">
+    <div className="admin-church-details-container max-w-6xl mx-auto space-y-12 pb-24 text-slate-800 dark:text-slate-100">
+      {/* Top Navigation */}
       <div className="flex items-center justify-between">
         <button
           onClick={() => router.back()}
@@ -736,42 +846,182 @@ export default function ChurchDetailPage() {
           <ArrowLeft className="w-4 h-4 text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:-translate-x-0.5 transition-all" />
           <span>Voltar para Igrejas</span>
         </button>
+
+        {canManageChurch && (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsEditChurchModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:text-blue-700 dark:hover:text-blue-400 hover:border-blue-300 font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-95"
+            >
+              <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+              Editar Dados da Igreja
+            </button>
+          </div>
+        )}
       </div>
 
-      <section className="bg-white dark:bg-slate-900 rounded-[4rem] p-12 border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-50 dark:bg-blue-900/10 blur-[120px] -mr-48 -mt-48 opacity-50"></div>
-        <div className="relative z-10 flex flex-col md:flex-row gap-12 items-start md:items-center">
-          <div className="w-24 h-24 bg-blue-800 text-white rounded-[2rem] flex items-center justify-center shadow-2xl shadow-blue-800/30">
-            <Church size={40} />
+      {/* Hero Header Section */}
+      <section className="bg-white dark:bg-slate-900 rounded-[4rem] p-10 md:p-14 border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-50 dark:bg-blue-900/10 blur-[120px] -mr-48 -mt-48 opacity-60"></div>
+        <div className="relative z-10 flex flex-col md:flex-row gap-8 md:gap-12 items-start md:items-center">
+          <div className="w-24 h-24 bg-blue-800 text-white rounded-[2.2rem] flex items-center justify-center shadow-2xl shadow-blue-800/30 shrink-0">
+            <Church size={44} />
           </div>
+
           <div className="flex-1 space-y-4">
-            <div className="flex flex-wrap gap-3">
-              <span className="px-4 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100 dark:border-blue-900/50">
-                Ministério de Louvor
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="px-3.5 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100 dark:border-blue-900/50">
+                Congregação Cristã
               </span>
+              <span className="px-3.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-200/60 dark:border-emerald-800/60">
+                {allMinistries.length} Ministérios Ativos
+              </span>
+              {church.cnpj && (
+                <span className="px-3.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full text-[10px] font-mono font-bold border border-slate-200 dark:border-slate-700">
+                  CNPJ: {church.cnpj}
+                </span>
+              )}
             </div>
-            <h1 className="text-4xl md:text-5xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tighter leading-tight">
+
+            <h1 className="text-3xl md:text-5xl font-display font-black text-slate-800 dark:text-slate-100 tracking-tight leading-tight">
               {church.name}
             </h1>
-            <div className="flex flex-wrap gap-8 pt-4">
-              <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 font-medium">
-                <PastorIcon className="w-5 h-5 text-blue-400 dark:text-blue-500" />
-                <span>{church.pastor || "Pastor não informado"}</span>
+
+            <div className="flex flex-wrap gap-6 pt-2 text-slate-500 dark:text-slate-400 text-sm font-medium">
+              <div className="flex items-center gap-2.5">
+                <PastorIcon className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                <span>{church.pastor || "Pastor Titular não informado"}</span>
               </div>
-              <div className="flex items-start gap-3 text-slate-500 dark:text-slate-400 font-medium max-w-md">
-                <MapPin className="w-5 h-5 text-blue-400 dark:text-blue-500 mt-0.5 shrink-0" />
-                <span>{church.address || "Endereço não informado"}</span>
+              <div className="flex items-center gap-2.5 max-w-md">
+                <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                <span className="line-clamp-1">{church.address || "Endereço não informado"}</span>
+              </div>
+              {church.phone && (
+                <div className="flex items-center gap-2.5">
+                  <Phone className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{church.phone}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Metrics */}
+          <div className="w-full md:w-auto flex md:flex-col gap-4 items-center justify-center p-6 bg-slate-50 dark:bg-slate-800/80 rounded-[2.5rem] border border-slate-200/60 dark:border-slate-700/60 shadow-2xs">
+            <div className="text-center">
+              <div className="text-3xl font-display font-black text-blue-800 dark:text-blue-400">
+                {members.length}
+              </div>
+              <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                Membros
+              </div>
+            </div>
+            <div className="h-8 md:h-px w-px md:w-full bg-slate-200 dark:bg-slate-700" />
+            <div className="text-center">
+              <div className="text-3xl font-display font-black text-emerald-600 dark:text-emerald-400">
+                {services.filter((s) => s.status !== "inactive").length}
+              </div>
+              <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                Cultos
               </div>
             </div>
           </div>
-          <div className="w-full md:w-auto flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-800 rounded-[3rem] border border-white dark:border-slate-700">
-            <div className="text-4xl font-display font-black text-blue-800 dark:text-blue-400 mb-1">
-              {members.length}
+        </div>
+      </section>
+
+      {/* SEÇÃO ESPECIAL: LIDERANÇA PASTORAL (LOGIN E SENHA) */}
+      <section className="bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950 rounded-[3.5rem] p-10 md:p-14 text-white shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 blur-[100px] pointer-events-none"></div>
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 relative z-10">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold uppercase tracking-wider mb-3 border border-blue-400/20">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Governança & Pastoreio</span>
             </div>
-            <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-              Integrantes
-            </div>
+            <h2 className="text-2xl md:text-3xl font-display font-black text-white">
+              Pastores da Igreja
+            </h2>
+            <p className="text-slate-300 text-sm mt-1 max-w-xl">
+              Gerencie os pastores titulares e auxiliares com contas ativas (login e senha) para administração integral do ministério.
+            </p>
           </div>
+
+          {canManageChurch && (
+            <button
+              onClick={() => {
+                setPastorError("");
+                setIsPastorModalOpen(true);
+              }}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-3.5 rounded-2xl shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2.5 transition-all text-sm cursor-pointer active:scale-95 shrink-0"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Criar Conta para Pastor</span>
+            </button>
+          )}
+        </div>
+
+        {/* Lista de Pastores */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
+          {allPastors.map((p, idx) => (
+            <div
+              key={p.uid || `pastor-${idx}`}
+              className="bg-white/5 border border-white/10 hover:border-blue-400/40 rounded-3xl p-6 transition-all backdrop-blur-xs flex flex-col justify-between group"
+            >
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="w-12 h-12 bg-blue-500/20 text-blue-300 rounded-2xl flex items-center justify-center font-bold text-lg border border-blue-400/30">
+                    {p.name.charAt(0)}
+                  </div>
+                  <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase tracking-wider border border-emerald-400/30 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Conta Ativa
+                  </span>
+                </div>
+
+                <div>
+                  <h4 className="text-lg font-bold text-white group-hover:text-blue-300 transition-colors">
+                    {p.name}
+                  </h4>
+                  <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider mt-0.5">
+                    {p.title || "Pastor Titular"}
+                  </p>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-white/10 text-xs text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="truncate">{p.email}</span>
+                  </div>
+                  {p.phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{p.phone}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                <span className="flex items-center gap-1.5 text-emerald-400">
+                  <KeyRound className="w-3.5 h-3.5" /> Acesso Liberado
+                </span>
+                <span className="text-slate-500">ID: {p.uid.substring(0, 8)}...</span>
+              </div>
+            </div>
+          ))}
+
+          {allPastors.length === 0 && (
+            <div className="col-span-full bg-white/5 border border-dashed border-white/15 rounded-3xl p-8 text-center text-slate-400">
+              <PastorIcon className="w-10 h-10 mx-auto mb-3 opacity-40 text-blue-400" />
+              <p className="text-sm font-medium">Nenhuma conta de pastor cadastrada nesta igreja ainda.</p>
+              <button
+                onClick={() => setIsPastorModalOpen(true)}
+                className="mt-3 text-xs font-bold text-blue-400 hover:underline"
+              >
+                Cadastre o primeiro pastor com e-mail e senha
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -784,742 +1034,277 @@ export default function ChurchDetailPage() {
         />
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-        <div className="space-y-8">
-          <h2 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100 flex items-center gap-4">
-            <Users className="w-6 h-6 text-blue-800 dark:text-blue-400" />
-            Integrantes por Categoria
-          </h2>
-
-          <div className="space-y-6">
-            {Object.keys(groupedData).length > 0 ? (
-              Object.entries(groupedData).map(([group, list]) => (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  key={group}
-                  className="bg-white dark:bg-slate-900 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-800 shadow-sm"
-                >
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-slate-400">
-                      {group.includes("Soprano") ||
-                      group.includes("Contralto") ||
-                      group.includes("Mezzo") ||
-                      group.includes("Baixo") ||
-                      group.includes("Tenor") ||
-                      group.includes("Barítono") ? (
-                        <Mic2 className="w-5 h-5 text-emerald-500" />
-                      ) : (
-                        <Music className="w-5 h-5 text-blue-500 dark:text-blue-400" />
-                      )}
-                    </div>
-                    <h3 className="font-display font-black text-slate-800 dark:text-slate-100 text-lg capitalize">
-                      {group}
-                    </h3>
-                    <span className="ml-auto text-[10px] font-bold text-slate-300 dark:text-slate-600 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full">
-                      {list.length}
-                    </span>
-                  </div>
-
-                  <div className="space-y-4">
-                    {list.map((m, mIdx) => (
-                      <Link
-                        key={`${m.uid}-${mIdx}`}
-                        href={`/dashboard/members/${m.uid}`}
-                        className="group flex items-center gap-4 p-4 rounded-[2rem] hover:bg-slate-50 dark:hover:bg-slate-800 transition-all border border-transparent hover:border-slate-100 dark:hover:border-slate-700"
-                      >
-                        <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center font-bold text-slate-400 dark:text-slate-500 group-hover:bg-white dark:group-hover:bg-slate-900 group-hover:text-blue-800 dark:group-hover:text-blue-400 transition-colors">
-                          {m.name.charAt(0)}
-                        </div>
-                        <div className="flex-1">
-                          <div className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-800 dark:group-hover:text-blue-400 transition-colors">
-                            {m.name}
-                          </div>
-                          <div className="text-xs text-slate-400 dark:text-slate-500 capitalize">
-                            {(m.roles?.worship?.includes("leader") || m.roles?.multimedia?.includes("leader") || m.roles?.secretariat?.includes("leader")) ? "Líder" : "Integrante"}
-                            {m.level && ` • ${m.level}`}
-                          </div>
-                        </div>
-                        <div className="w-10 h-10 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-blue-800 dark:text-blue-400 shadow-sm">
-                          <ExternalLink className="w-4 h-4" />
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </motion.div>
-              ))
-            ) : (
-              <div className="bg-slate-50 dark:bg-slate-900 rounded-[3rem] p-12 text-center border border-dashed border-slate-200 dark:border-slate-800">
-                <Users className="w-12 h-12 text-slate-200 dark:text-slate-800 mx-auto mb-4" />
-                <p className="text-slate-500 dark:text-slate-400 font-medium">
-                  Nenhum integrante vinculado a esta igreja ainda.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-12">
-          <section className="bg-slate-900 rounded-[3.5rem] p-12 text-white shadow-2xl relative overflow-hidden">
-            <div className="absolute bottom-0 right-0 w-64 h-64 bg-blue-600/20 blur-[80px] -mb-32 -mr-32"></div>
-            <h3 className="text-xs font-black text-blue-400 uppercase tracking-[0.2em] mb-10">
-              Informações Rápidas
-            </h3>
-
-            <div className="space-y-8">
-              <div className="flex gap-6">
-                <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center shrink-0 border border-white/10">
-                  <PastorIcon className="w-6 h-6 text-blue-400" />
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                    Pastor Responsável
-                  </div>
-                  <div className="font-display font-bold text-lg">
-                    {church.pastor || "---"}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-6">
-                <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center shrink-0 border border-white/10">
-                  <MapPin className="w-6 h-6 text-blue-400" />
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                    Localização
-                  </div>
-                  <div className="font-display font-bold text-lg leading-snug">
-                    {church.address || "---"}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-6">
-                <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center shrink-0 border border-white/10">
-                  <Shield className="w-6 h-6 text-blue-400" />
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                    Líderes de Louvor
-                  </div>
-                  <div className="font-display font-bold text-lg">
-                    {members.filter((m) => m.roles?.worship?.includes("leader") || m.roles?.multimedia?.includes("leader") || m.roles?.secretariat?.includes("leader")).length}{" "}
-                    Integrantes
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="bg-blue-600 rounded-[3.5rem] p-12 text-white shadow-2xl shadow-blue-500/20 relative overflow-hidden">
-            <Waves
-              className="absolute right-0 bottom-0 text-white/5 transform translate-x-1/4 translate-y-1/4 scale-150"
-              size={300}
-            />
-            <div className="relative z-10">
-              <h3 className="text-2xl font-display font-black leading-tight mb-6">
-                Convite para
-                <br />
-                Integrantes
-              </h3>
-              <p className="text-blue-100 text-sm mb-10 leading-relaxed font-medium">
-                Deseja adicionar mais músicos ou vocalistas a esta igreja?
-                Compartilhe o link de convite ou realize o cadastro manual.
-              </p>
-              <div className="flex flex-wrap gap-4">
-                <Link
-                  href="/dashboard/members"
-                  className="inline-flex items-center gap-3 bg-white text-blue-800 px-8 py-4 rounded-[2rem] font-bold shadow-xl shadow-black/10 hover:scale-105 active:scale-95 transition-all"
-                >
-                  Cadastrar Manualmente
-                </Link>
-                <button
-                  onClick={handleCopyLink}
-                  className={`inline-flex items-center gap-3 px-8 py-4 rounded-[2rem] font-bold transition-all hover:scale-105 active:scale-95 border ${
-                    copied
-                      ? "bg-emerald-500 text-white border-emerald-400 shadow-xl shadow-emerald-500/20"
-                      : "bg-blue-700/50 text-white border-white/20 hover:bg-blue-700 shadow-xl shadow-black/10"
-                  }`}
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-5 h-5" /> Link Copiado
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-5 h-5" /> Copiar Link Convite
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </section>
-        </div>
-      </div>
-
-      <section className="bg-white dark:bg-slate-900 rounded-[4rem] p-12 border border-slate-100 dark:border-slate-800 shadow-sm relative mt-12">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
-          <div className="space-y-2">
-            <h2 className="text-3xl font-display font-black text-slate-800 dark:text-slate-100 flex items-center gap-4">
-              <Church className="w-8 h-8 text-blue-800 dark:text-blue-400" />
-              Cultos da Igreja
+      {/* SEÇÃO DE CULTOS DA IGREJA */}
+      <section className="bg-white dark:bg-slate-900 rounded-[4rem] p-10 md:p-14 border border-slate-100 dark:border-slate-800 shadow-sm relative">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+          <div className="space-y-1">
+            <h2 className="text-3xl font-display font-black text-slate-800 dark:text-slate-100 flex items-center gap-3">
+              <Calendar className="w-8 h-8 text-blue-800 dark:text-blue-400" />
+              Cultos da Congregação
             </h2>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">
-              Veja todos os cultos e horários associados a esta igreja.
+            <p className="text-slate-500 dark:text-slate-400 font-medium text-sm">
+              Horários e celebrações semanais associados à igreja.
             </p>
           </div>
+
           {canManageServices && (
             <button
-              id="create-service-btn"
               onClick={handleOpenCreateService}
-              className="bg-blue-800 hover:bg-blue-900 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-xl shadow-blue-800/20 active:scale-95 cursor-pointer"
+              className="bg-blue-800 hover:bg-blue-900 text-white px-6 py-3.5 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-xl shadow-blue-800/20 active:scale-95 cursor-pointer text-sm"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-4 h-4" />
               Cadastrar Culto
             </button>
           )}
         </div>
 
-        {/* Filter and Status Controls */}
-        {services.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1">
-                Filtrar:
-              </span>
-              <button
-                type="button"
-                id="filter-services-all"
-                onClick={() => setServiceStatusFilter("all")}
+        {/* Cultos Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {services.map((service) => {
+            const isInactive = service.status === "inactive";
+            return (
+              <div
+                key={service.id}
                 className={cn(
-                  "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
-                  serviceStatusFilter === "all"
-                    ? "bg-blue-800 text-white shadow-sm"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  "rounded-3xl p-7 border transition-all flex flex-col justify-between relative",
+                  isInactive
+                    ? "bg-slate-100/60 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 opacity-80"
+                    : "bg-slate-50 dark:bg-slate-800/80 border-slate-200/70 dark:border-slate-700/70 hover:shadow-lg"
                 )}
-              >
-                Todos ({services.length})
-              </button>
-              <button
-                type="button"
-                id="filter-services-active"
-                onClick={() => setServiceStatusFilter("active")}
-                className={cn(
-                  "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-                  serviceStatusFilter === "active"
-                    ? "bg-emerald-600 text-white shadow-sm"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                )}
-              >
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                Ativos ({services.filter((s) => s.status !== "inactive").length})
-              </button>
-              <button
-                type="button"
-                id="filter-services-inactive"
-                onClick={() => setServiceStatusFilter("inactive")}
-                className={cn(
-                  "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-                  serviceStatusFilter === "inactive"
-                    ? "bg-slate-700 text-white shadow-sm"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                )}
-              >
-                <span className="w-2 h-2 rounded-full bg-slate-400" />
-                Inativos ({services.filter((s) => s.status === "inactive").length})
-              </button>
-            </div>
-            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-              Cultos inativos continuam salvos e podem ser reativados a qualquer momento.
-            </span>
-          </div>
-        )}
-
-        {services.length === 0 ? (
-          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-[3rem] p-16 text-center border border-dashed border-slate-200 dark:border-slate-700">
-            <Calendar className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-6" />
-            <p className="text-lg text-slate-500 dark:text-slate-400 font-medium">
-              Nenhum culto cadastrado para esta igreja.
-            </p>
-          </div>
-        ) : services.filter((s) => {
-            if (serviceStatusFilter === "active") return s.status !== "inactive";
-            if (serviceStatusFilter === "inactive") return s.status === "inactive";
-            return true;
-          }).length === 0 ? (
-          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-[2.5rem] p-12 text-center border border-dashed border-slate-200 dark:border-slate-700">
-            <p className="text-base text-slate-500 dark:text-slate-400 font-medium mb-4">
-              Nenhum culto encontrado com o filtro &ldquo;{serviceStatusFilter === "active" ? "Ativos" : "Inativos"}&rdquo;.
-            </p>
-            <button
-              type="button"
-              onClick={() => setServiceStatusFilter("all")}
-              className="text-xs font-bold text-blue-700 dark:text-blue-400 hover:underline cursor-pointer"
-            >
-              Exibir todos os cultos
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {services
-              .filter((s) => {
-                if (serviceStatusFilter === "active") return s.status !== "inactive";
-                if (serviceStatusFilter === "inactive") return s.status === "inactive";
-                return true;
-              })
-              .map((service) => {
-                const isInactive = service.status === "inactive";
-                return (
-                  <div
-                    key={service.id}
-                    className={cn(
-                      "rounded-[2rem] p-8 border transition-all group flex flex-col justify-between relative",
-                      isInactive
-                        ? "bg-slate-100/70 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/80 opacity-90"
-                        : "bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:shadow-lg"
-                    )}
-                  >
-                    <div>
-                      {/* Top Bar: Icon, Day, and Action Icons */}
-                      <div className="flex justify-between items-start mb-5">
-                        <div
-                          className={cn(
-                            "w-14 h-14 rounded-2xl flex items-center justify-center shadow-xs transition-colors",
-                            isInactive
-                              ? "bg-slate-200/80 dark:bg-slate-900 text-slate-400 dark:text-slate-500"
-                              : "bg-white dark:bg-slate-900 text-blue-800 dark:text-blue-400"
-                          )}
-                        >
-                          <Clock className="w-7 h-7" />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={cn(
-                              "px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-widest",
-                              isInactive
-                                ? "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                                : "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300"
-                            )}
-                          >
-                            {service.dayOfWeek}
-                          </span>
-                          {canManageServices && (
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                id={`edit-service-icon-btn-${service.id}`}
-                                onClick={() => handleOpenEditService(service)}
-                                className="p-2 rounded-xl text-slate-400 hover:text-blue-800 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-700 transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-600 cursor-pointer"
-                                title="Editar Culto"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                id={`delete-service-icon-btn-${service.id}`}
-                                onClick={() => handleOpenDeleteService(service)}
-                                className="p-2 rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-slate-700 transition-all border border-transparent hover:border-rose-200 dark:hover:border-rose-900/50 cursor-pointer"
-                                title="Excluir Culto"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Status Selector Bar */}
-                      <div className="mb-5 p-2 rounded-2xl bg-white/90 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-2 shadow-2xs">
-                        <div className="flex items-center gap-2 pl-1.5">
-                          <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                            Status:
-                          </span>
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wide",
-                              isInactive
-                                ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
-                                : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/70"
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "w-1.5 h-1.5 rounded-full",
-                                isInactive ? "bg-slate-400" : "bg-emerald-500"
-                              )}
-                            />
-                            {isInactive ? "Inativo" : "Ativo"}
-                          </span>
-                        </div>
-
-                        {canManageServices ? (
-                          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                            <button
-                              type="button"
-                              id={`service-status-btn-active-${service.id}`}
-                              onClick={() => isInactive && handleToggleServiceStatus(service, "active")}
-                              disabled={togglingServiceId === service.id}
-                              className={cn(
-                                "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1",
-                                !isInactive
-                                  ? "bg-emerald-600 text-white shadow-xs"
-                                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                              )}
-                              title="Habilitar culto"
-                            >
-                              <Check className="w-3 h-3" />
-                              Ativo
-                            </button>
-                            <button
-                              type="button"
-                              id={`service-status-btn-inactive-${service.id}`}
-                              onClick={() => !isInactive && handleToggleServiceStatus(service, "inactive")}
-                              disabled={togglingServiceId === service.id}
-                              className={cn(
-                                "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1",
-                                isInactive
-                                  ? "bg-slate-600 text-white shadow-xs"
-                                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                              )}
-                              title="Desabilitar culto sem excluí-lo"
-                            >
-                              <Power className="w-3 h-3" />
-                              Inativo
-                            </button>
-                            {togglingServiceId === service.id && (
-                              <Loader2 className="w-3 h-3 animate-spin text-slate-400 ml-0.5" />
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      {/* Inactive notice if disabled */}
-                      {isInactive && (
-                        <div className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 rounded-xl px-3 py-2 mb-4 flex items-center gap-2">
-                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                          <span>Culto desabilitado (não aparecerá em novas escalas).</span>
-                        </div>
-                      )}
-
-                      <h3
-                        className={cn(
-                          "text-xl font-display font-black mb-2",
-                          isInactive
-                            ? "text-slate-600 dark:text-slate-300"
-                            : "text-slate-800 dark:text-slate-100"
-                        )}
-                      >
-                        {service.name}
-                      </h3>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px] line-clamp-2">
-                        {service.description || "Sem descrição"}
-                      </p>
-                      <div className="flex items-center gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
-                        <div className="flex-1">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
-                            Início
-                          </span>
-                          <span className="font-bold text-slate-700 dark:text-slate-300">
-                            {service.startTime}
-                          </span>
-                        </div>
-                        <div className="w-px h-8 bg-slate-200 dark:bg-slate-700"></div>
-                        <div className="flex-1">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
-                            Término
-                          </span>
-                          <span className="font-bold text-slate-700 dark:text-slate-300">
-                            {service.endTime}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {canManageServices && (
-                      <div className="pt-6 mt-6 border-t border-slate-200/60 dark:border-slate-700/60 space-y-2">
-                        <button
-                          type="button"
-                          id={`edit-service-btn-${service.id}`}
-                          onClick={() => handleOpenEditService(service)}
-                          className="w-full py-2.5 px-4 bg-white dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-700 dark:text-slate-200 hover:text-blue-800 dark:hover:text-blue-400 border border-slate-200 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-800 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 text-blue-800 dark:text-blue-400" />
-                          Editar Culto
-                        </button>
-                        <button
-                          type="button"
-                          id={`delete-service-btn-${service.id}`}
-                          onClick={() => handleOpenDeleteService(service)}
-                          className="w-full py-2.5 px-4 bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-900/50 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                          Excluir Culto
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
-        )}
-      </section>
-
-      {/* Seção de Ministérios */}
-      <section className="bg-white dark:bg-slate-900 rounded-[4rem] p-12 border border-slate-100 dark:border-slate-800 shadow-sm relative mt-12 overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-50 dark:bg-emerald-900/10 blur-[100px] -mr-32 -mt-32 opacity-50"></div>
-
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 relative z-10">
-          <div className="space-y-2">
-            <h2 className="text-3xl font-display font-black text-slate-800 dark:text-slate-100 flex items-center gap-4">
-              <LayoutGrid className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
-              Ministérios
-            </h2>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">
-              Explore as frentes de atuação e serviço desta comunidade.
-            </p>
-          </div>
-        </div>
-
-        {/* Conjunto de Botões de Filtro dos Ministérios */}
-        <div className="mb-8 relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-2.5 bg-slate-50/90 dark:bg-slate-800/80 rounded-[2rem] border border-slate-100 dark:border-slate-800 backdrop-blur-xs">
-          <div className="flex items-center gap-2 px-3 py-1 text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Filtrar Ministérios:</span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Todos */}
-            <button
-              type="button"
-              id="filter-ministerio-todos"
-              onClick={() => setMinistryFilter("all")}
-              className={cn(
-                "inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer active:scale-95",
-                ministryFilter === "all"
-                  ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-md shadow-slate-900/10 dark:shadow-white/10 scale-102"
-                  : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60"
-              )}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Todos</span>
-              <span
-                className={cn(
-                  "px-1.5 py-0.5 rounded-full text-[10px] font-black",
-                  ministryFilter === "all"
-                    ? "bg-white/20 dark:bg-slate-900/20 text-white dark:text-slate-900"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-500"
-                )}
-              >
-                4
-              </span>
-            </button>
-
-            {/* Louvor */}
-            <button
-              type="button"
-              id="filter-ministerio-louvor"
-              onClick={() =>
-                setMinistryFilter((prev) => (prev === "louvor" ? "all" : "louvor"))
-              }
-              className={cn(
-                "inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer active:scale-95",
-                ministryFilter === "louvor"
-                  ? "bg-blue-600 text-white shadow-md shadow-blue-600/25 scale-102"
-                  : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/60 dark:hover:bg-blue-950/30 border border-slate-200/60 dark:border-slate-700/60"
-              )}
-            >
-              <Mic2 className="w-3.5 h-3.5" />
-              <span>Louvor</span>
-              <span
-                className={cn(
-                  "px-1.5 py-0.5 rounded-full text-[10px] font-black",
-                  ministryFilter === "louvor"
-                    ? "bg-white/20 text-white"
-                    : "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400"
-                )}
-              >
-                {worshipMembers.length}
-              </span>
-            </button>
-
-            {/* Multimídia */}
-            <button
-              type="button"
-              id="filter-ministerio-multimidia"
-              onClick={() =>
-                setMinistryFilter((prev) =>
-                  prev === "multimidia" ? "all" : "multimidia"
-                )
-              }
-              className={cn(
-                "inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer active:scale-95",
-                ministryFilter === "multimidia"
-                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/25 scale-102"
-                  : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50/60 dark:hover:bg-purple-950/30 border border-slate-200/60 dark:border-slate-700/60"
-              )}
-            >
-              <Monitor className="w-3.5 h-3.5" />
-              <span>Multimídia</span>
-              <span
-                className={cn(
-                  "px-1.5 py-0.5 rounded-full text-[10px] font-black",
-                  ministryFilter === "multimidia"
-                    ? "bg-white/20 text-white"
-                    : "bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400"
-                )}
-              >
-                {multimediaMembers.length}
-              </span>
-            </button>
-
-            {/* Dança */}
-            <button
-              type="button"
-              id="filter-ministerio-danca"
-              onClick={() =>
-                setMinistryFilter((prev) => (prev === "danca" ? "all" : "danca"))
-              }
-              className={cn(
-                "inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer active:scale-95",
-                ministryFilter === "danca"
-                  ? "bg-rose-600 text-white shadow-md shadow-rose-600/25 scale-102"
-                  : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50/60 dark:hover:bg-rose-950/30 border border-slate-200/60 dark:border-slate-700/60"
-              )}
-            >
-              <BallerinaIcon className="w-3.5 h-3.5" />
-              <span>Dança</span>
-              <span
-                className={cn(
-                  "px-1.5 py-0.5 rounded-full text-[10px] font-black",
-                  ministryFilter === "danca"
-                    ? "bg-white/20 text-white"
-                    : "bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400"
-                )}
-              >
-                {danceMembers.length}
-              </span>
-            </button>
-
-            {/* Secretaria */}
-            <button
-              type="button"
-              id="filter-ministerio-secretaria"
-              onClick={() =>
-                setMinistryFilter((prev) =>
-                  prev === "secretaria" ? "all" : "secretaria"
-                )
-              }
-              className={cn(
-                "inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer active:scale-95",
-                ministryFilter === "secretaria"
-                  ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/25 scale-102"
-                  : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/30 border border-slate-200/60 dark:border-slate-700/60"
-              )}
-            >
-              <Briefcase className="w-3.5 h-3.5" />
-              <span>Secretaria</span>
-              <span
-                className={cn(
-                  "px-1.5 py-0.5 rounded-full text-[10px] font-black",
-                  ministryFilter === "secretaria"
-                    ? "bg-white/20 text-white"
-                    : "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400"
-                )}
-              >
-                {secretariatMembers.length}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* Indicador de filtro ativo */}
-        {ministryFilter !== "all" && (
-          <div className="mb-6 flex items-center justify-between px-5 py-2.5 bg-slate-50/90 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800 text-xs font-medium text-slate-600 dark:text-slate-400">
-            <span className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full animate-pulse bg-emerald-500"></span>
-              Exibindo apenas:{" "}
-              <strong className="text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[11px]">
-                {ministryFilter === "louvor" && "Ministério de Louvor"}
-                {ministryFilter === "multimidia" && "Ministério de Multimídia"}
-                {ministryFilter === "danca" && "Ministério de Dança"}
-                {ministryFilter === "secretaria" && "Secretaria"}
-              </strong>
-            </span>
-            <button
-              type="button"
-              onClick={() => setMinistryFilter("all")}
-              className="text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white underline cursor-pointer"
-            >
-              Ver todos os ministérios
-            </button>
-          </div>
-        )}
-
-        <div
-          id="grid-ministerios"
-          data-filtered={ministryFilter !== "all"}
-          className="grid-ministerios-scale-hover grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-6 items-stretch relative z-10 [&>*]:hover:scale-105 [&>*]:hover:shadow-2xl [&>*]:hover:z-20 [&>*]:transition-all [&>*]:duration-300 [&>*]:ease-out"
-        >
-          <AnimatePresence mode="popLayout">
-            {/* Ministério de Louvor */}
-            {(ministryFilter === "all" || ministryFilter === "louvor") && (
-              <motion.div
-                key="card-ministerio-louvor"
-                layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                whileHover={{ scale: 1.05 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                onClick={() =>
-                  router.push(`/dashboard/churches/${id}/ministries/louvor`)
-                }
-                className="h-full bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-2xl transition-all group cursor-pointer flex flex-col justify-between"
               >
                 <div>
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm group-hover:scale-110 transition-transform">
-                      <Mic2 className="w-8 h-8 group-hover:rotate-[5deg] transition-transform duration-300" />
-                    </div>
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-100/70 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold border border-blue-200/80 dark:border-blue-800/60 shadow-xs">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>{worshipMembers.length} {worshipMembers.length === 1 ? "membro" : "membros"}</span>
-                    </div>
+                  <div className="flex justify-between items-start mb-4">
+                    <span
+                      className={cn(
+                        "px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider",
+                        isInactive
+                          ? "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                          : "bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300"
+                      )}
+                    >
+                      {service.dayOfWeek}
+                    </span>
+
+                    {canManageServices && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleOpenEditService(service)}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-white dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors"
+                          title="Editar Culto"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setServiceToDelete(service);
+                            setIsDeleteServiceModalOpen(true);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-white dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors"
+                          title="Excluir Culto"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-blue-600 transition-colors">
-                    Ministério de Louvor
+
+                  <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">
+                    {service.name}
                   </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-                    Equipe dedicada à adoração através da música, instrumentos e vozes
-                    em nossos cultos.
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 line-clamp-2">
+                    {service.description || "Sem descrição"}
                   </p>
-                  <div className="flex items-center text-[10px] font-black text-blue-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0 mb-6">
-                    Ver Detalhes <ExternalLink className="w-3 h-3" />
-                  </div>
                 </div>
 
-                <div className="space-y-4">
-                  {/* Integrantes e Papéis */}
-                  <div className="mt-2 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 block mb-2">
-                      Integrantes da Equipe
-                    </span>
-                    {worshipMembers.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic">Sem integrantes cadastrados</p>
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-blue-600" />
+                    <span>{service.startTime} às {service.endTime}</span>
+                  </div>
+
+                  {canManageServices && (
+                    <button
+                      onClick={() => handleToggleServiceStatus(service, isInactive ? "active" : "inactive")}
+                      disabled={togglingServiceId === service.id}
+                      className={cn(
+                        "text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg transition-all cursor-pointer",
+                        isInactive
+                          ? "bg-slate-200 dark:bg-slate-700 text-slate-600 hover:bg-emerald-100 hover:text-emerald-700"
+                          : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 hover:bg-slate-200"
+                      )}
+                    >
+                      {isInactive ? "Ativar" : "Ativo"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {services.length === 0 && (
+            <div className="col-span-full bg-slate-50 dark:bg-slate-800/40 rounded-3xl p-10 text-center border border-dashed border-slate-200 dark:border-slate-800">
+              <Calendar className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+              <p className="text-sm text-slate-500 font-medium">Nenhum culto cadastrado ainda.</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* SEÇÃO PRINCIPAL DE MINISTÉRIOS (DINÂMICOS E ESCALÁVEIS) */}
+      <section id="grid-ministerios" className="bg-white dark:bg-slate-900 rounded-[4rem] p-10 md:p-14 border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-50 dark:bg-emerald-900/10 blur-[100px] pointer-events-none opacity-50"></div>
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 relative z-10">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-bold uppercase tracking-wider border border-emerald-200/60 dark:border-emerald-800/60">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Plataforma Escalável & Modular</span>
+            </div>
+            <h2 className="text-3xl font-display font-black text-slate-800 dark:text-slate-100 flex items-center gap-3">
+              <LayoutGrid className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+              Ministérios da Igreja
+            </h2>
+            <p className="text-slate-500 dark:text-slate-400 font-medium text-sm max-w-2xl">
+              Frentes de atuação ministerial da igreja. Crie novos ministérios no mesmo padrão para qualquer área de serviço da comunidade.
+            </p>
+          </div>
+
+          {canManageChurch && (
+            <button
+              onClick={() => {
+                setNewMinistryError("");
+                setIsNewMinistryModalOpen(true);
+              }}
+              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-3.5 rounded-2xl shadow-xl shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all text-sm cursor-pointer active:scale-95 shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Novo Ministério</span>
+            </button>
+          )}
+        </div>
+
+        {/* Conjunto de Botões de Filtro */}
+        <div className="mb-10 relative z-10 flex flex-wrap items-center gap-2 p-3 bg-slate-50/90 dark:bg-slate-800/80 rounded-[2rem] border border-slate-100 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={() => setMinistryFilter("all")}
+            className={cn(
+              "inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95",
+              ministryFilter === "all"
+                ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm"
+                : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60"
+            )}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span>Todos</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              {allMinistries.length}
+            </span>
+          </button>
+
+          {allMinistries.map((m) => {
+            const mMembers = getMembersByMinistry(m.id);
+            const isSelected = normalizeMinistryKey(ministryFilter) === normalizeMinistryKey(m.id);
+            return (
+              <button
+                key={`filter-${m.id}`}
+                type="button"
+                onClick={() => setMinistryFilter((prev) => (prev === m.id ? "all" : m.id))}
+                className={cn(
+                  "inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95",
+                  isSelected
+                    ? "bg-blue-800 text-white shadow-sm"
+                    : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-blue-50/60 dark:hover:bg-blue-950/30 border border-slate-200/60 dark:border-slate-700/60"
+                )}
+              >
+                <span>{m.shortName}</span>
+                <span
+                  className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-black",
+                    isSelected ? "bg-white/20 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                  )}
+                >
+                  {mMembers.length}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Grid de Cards dos Ministérios */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10 items-stretch">
+          <AnimatePresence mode="popLayout">
+            {displayedMinistries.map((ministry) => {
+              const ministryMembers = getMembersByMinistry(ministry.id);
+              const linkUrl = `/dashboard/churches/${id}/ministries/${ministry.id}`;
+
+              return (
+                <motion.div
+                  key={`card-ministry-${ministry.id}`}
+                  layout
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  whileHover={{ y: -4 }}
+                  transition={{ duration: 0.2 }}
+                  onClick={() => router.push(linkUrl)}
+                  className="bg-slate-50/80 dark:bg-slate-800/80 rounded-[2.8rem] p-7 border border-slate-200/70 dark:border-slate-700/70 hover:shadow-xl hover:border-blue-400 dark:hover:border-blue-600 transition-all group cursor-pointer flex flex-col justify-between"
+                >
+                  <div>
+                    {/* Header: Icon & Member Count */}
+                    <div className="flex items-center justify-between mb-5">
+                      <div className="w-14 h-14 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center text-blue-700 dark:text-blue-400 shadow-sm group-hover:scale-105 transition-transform">
+                        {getMinistryIconComponent(ministry.iconKey, 28, "text-blue-700 dark:text-blue-400")}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {ministry.acronym && (
+                          <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-white dark:bg-slate-900 text-slate-500 border border-slate-200/60 dark:border-slate-700/60">
+                            {ministry.acronym}
+                          </span>
+                        )}
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100/70 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs font-bold border border-blue-200/80 dark:border-blue-800/60">
+                          <Users className="w-3.5 h-3.5" />
+                          <span>{ministryMembers.length}</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Title & Description */}
+                    <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-2 group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">
+                      {ministry.name}
+                    </h3>
+
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-6 min-h-[48px] line-clamp-3">
+                      {ministry.description}
+                    </p>
+                  </div>
+
+                  {/* Integrantes List Preview */}
+                  <div className="mt-4 pt-4 border-t border-slate-200/70 dark:border-slate-700/70 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                        Equipe ({ministryMembers.length})
+                      </span>
+                      <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        Ver Detalhes <ChevronRight className="w-3 h-3" />
+                      </span>
+                    </div>
+
+                    {ministryMembers.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">Sem integrantes vinculados ainda</p>
                     ) : (
-                      <div className="space-y-2">
-                        {worshipMembers.slice(0, 4).map((member, mIdx) => (
+                      <div className="space-y-1.5">
+                        {ministryMembers.slice(0, 3).map((member, mIdx) => (
                           <div key={`${member.uid}-${mIdx}`} className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
+                            <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[130px]">
                               {member.name}
                             </span>
-                            <div className="flex flex-wrap gap-1 justify-end max-w-[180px]">
-                              {getMemberWorshipRoles(member).map((role, idx) => (
+                            <div className="flex flex-wrap gap-1 justify-end max-w-[150px]">
+                              {getMemberRolesForMinistry(member, ministry.id).slice(0, 2).map((role, rIdx) => (
                                 <span
-                                  key={`${role}-${idx}`}
-                                  className="text-[9px] font-black uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded"
+                                  key={`${role}-${rIdx}`}
+                                  className="text-[9px] font-bold uppercase tracking-wider bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded border border-slate-200/60 dark:border-slate-700/60"
                                 >
                                   {role}
                                 </span>
@@ -1527,587 +1312,676 @@ export default function ChurchDetailPage() {
                             </div>
                           </div>
                         ))}
-                        {worshipMembers.length > 4 && (
-                          <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 text-right mt-1">
-                            + {worshipMembers.length - 4} integrante(s)
+                        {ministryMembers.length > 3 && (
+                          <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 text-right">
+                            + {ministryMembers.length - 3} integrante(s)
                           </p>
                         )}
                       </div>
                     )}
                   </div>
-
-                  {bands.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-100 dark:border-slate-700">
-                      {bands.slice(0, 3).map((band) => (
-                        <span
-                          key={band.id}
-                          className="text-[9px] font-black uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded-md"
-                        >
-                          {band.name}
-                        </span>
-                      ))}
-                      {bands.length > 3 && (
-                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 py-1">
-                          +{bands.length - 3} mais
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-
-            {/* Ministério de Multimídia */}
-            {(ministryFilter === "all" || ministryFilter === "multimidia") && (
-              <motion.div
-                key="card-ministerio-multimidia"
-                layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                whileHover={{ scale: 1.05 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                onClick={() =>
-                  router.push(`/dashboard/churches/${id}/ministries/multimidia`)
-                }
-                className="h-full bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-2xl transition-all group cursor-pointer flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-purple-600 dark:text-purple-400 shadow-sm group-hover:scale-110 transition-transform">
-                      <Monitor className="w-8 h-8 group-hover:rotate-[5deg] transition-transform duration-300" />
-                    </div>
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-100/70 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-xs font-bold border border-purple-200/80 dark:border-purple-800/60 shadow-xs">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>{multimediaMembers.length} {multimediaMembers.length === 1 ? "membro" : "membros"}</span>
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-purple-600 transition-colors">
-                    Ministério de Multimídia
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-                    Gestão de som, projeção, transmissões ao vivo e toda a
-                    infraestrutura tecnológica da igreja.
-                  </p>
-                  <div className="flex items-center text-[10px] font-black text-purple-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0 mb-6">
-                    Ver Detalhes <ExternalLink className="w-3 h-3" />
-                  </div>
-                </div>
-
-                {/* Integrantes e Papéis */}
-                <div className="mt-2 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 block mb-2">
-                    Integrantes da Equipe
-                  </span>
-                  {multimediaMembers.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">Sem integrantes cadastrados</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {multimediaMembers.slice(0, 4).map((member, mIdx) => (
-                        <div key={`${member.uid}-${mIdx}`} className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
-                            {member.name}
-                          </span>
-                          <div className="flex flex-wrap gap-1 justify-end max-w-[180px]">
-                            {getMemberMultimediaRoles(member).map((role, idx) => (
-                              <span
-                                key={`${role}-${idx}`}
-                                className="text-[9px] font-black uppercase tracking-widest bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-1.5 py-0.5 rounded"
-                              >
-                                {role}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                      {multimediaMembers.length > 4 && (
-                        <p className="text-[10px] font-bold text-purple-600 dark:text-purple-400 text-right mt-1">
-                          + {multimediaMembers.length - 4} integrante(s)
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-
-            {/* Ministério de Dança */}
-            {(ministryFilter === "all" || ministryFilter === "danca") && (
-              <motion.div
-                key="card-ministerio-danca"
-                layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                whileHover={{ scale: 1.05 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                onClick={() =>
-                  router.push(`/dashboard/churches/${id}/ministries/danca`)
-                }
-                className="h-full bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-2xl transition-all group cursor-pointer flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-rose-600 dark:text-rose-400 shadow-sm group-hover:scale-110 transition-transform">
-                      <BallerinaIcon className="w-8 h-8 group-hover:rotate-[5deg] transition-transform duration-300" />
-                    </div>
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-100/70 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 text-xs font-bold border border-rose-200/80 dark:border-rose-800/60 shadow-xs">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>{danceMembers.length} {danceMembers.length === 1 ? "membro" : "membros"}</span>
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-rose-600 transition-colors">
-                    Ministério de Dança
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-                    Expressão de louvor e adoração através da dança, coreografias, teatro e artes corporais.
-                  </p>
-                  <div className="flex items-center text-[10px] font-black text-rose-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0 mb-6">
-                    Ver Detalhes <ExternalLink className="w-3 h-3" />
-                  </div>
-                </div>
-
-                {/* Integrantes e Papéis */}
-                <div className="mt-2 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 block mb-2">
-                    Integrantes da Equipe
-                  </span>
-                  {danceMembers.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">Sem integrantes cadastrados</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {danceMembers.slice(0, 4).map((member, mIdx) => (
-                        <div key={`${member.uid}-${mIdx}`} className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
-                            {member.name}
-                          </span>
-                          <div className="flex flex-wrap gap-1 justify-end max-w-[180px]">
-                            {getMemberDanceRoles(member).map((role, idx) => (
-                              <span
-                                key={`${role}-${idx}`}
-                                className="text-[9px] font-black uppercase tracking-widest bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 px-1.5 py-0.5 rounded"
-                              >
-                                {role}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                      {danceMembers.length > 4 && (
-                        <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400 text-right mt-1">
-                          + {danceMembers.length - 4} integrante(s)
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-
-            {/* Secretaria */}
-            {(ministryFilter === "all" || ministryFilter === "secretaria") && (
-              <motion.div
-                key="card-ministerio-secretaria"
-                layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                whileHover={{ scale: 1.05 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                onClick={() =>
-                  router.push(`/dashboard/churches/${id}/ministries/secretaria`)
-                }
-                className="h-full bg-slate-50 dark:bg-slate-800 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-700 hover:shadow-2xl transition-all group cursor-pointer flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[2rem] flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm group-hover:scale-110 transition-transform">
-                      <Briefcase className="w-8 h-8 group-hover:rotate-[5deg] transition-transform duration-300" />
-                    </div>
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100/70 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-200/80 dark:border-emerald-800/60 shadow-xs">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>{secretariatMembers.length} {secretariatMembers.length === 1 ? "membro" : "membros"}</span>
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-display font-black text-slate-800 dark:text-slate-100 mb-3 group-hover:text-emerald-600 transition-colors">
-                    Secretaria
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-                    Organização administrativa, cadastro de membros, atas e suporte
-                    pastoral estratégico.
-                  </p>
-                  <div className="flex items-center text-[10px] font-black text-emerald-600 uppercase tracking-widest gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0 mb-6">
-                    Ver Detalhes <ExternalLink className="w-3 h-3" />
-                  </div>
-                </div>
-
-                {/* Integrantes e Papéis */}
-                <div className="mt-2 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 block mb-2">
-                    Integrantes da Equipe
-                  </span>
-                  {secretariatMembers.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">Sem integrantes cadastrados</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {secretariatMembers.slice(0, 4).map((member, mIdx) => (
-                        <div key={`${member.uid}-${mIdx}`} className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
-                            {member.name}
-                          </span>
-                          <div className="flex flex-wrap gap-1 justify-end max-w-[180px]">
-                            {getMemberSecretariatRoles(member).map((role, idx) => (
-                              <span
-                                key={`${role}-${idx}`}
-                                className="text-[9px] font-black uppercase tracking-widest bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded"
-                              >
-                                {role}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                      {secretariatMembers.length > 4 && (
-                        <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 text-right mt-1">
-                          + {secretariatMembers.length - 4} integrante(s)
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         </div>
       </section>
 
-      {isServiceModalOpen && (
-        <div
-          onClick={() => {
-            setIsServiceModalOpen(false);
-            setEditingService(null);
-          }}
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-        >
+      {/* Convite & Compartilhamento */}
+      <section className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-[3.5rem] p-10 md:p-14 text-white shadow-xl relative overflow-hidden">
+        <Waves className="absolute right-0 bottom-0 text-white/5 transform translate-x-1/4 translate-y-1/4 scale-150 pointer-events-none" size={280} />
+        <div className="relative z-10 max-w-2xl space-y-4">
+          <h3 className="text-2xl md:text-3xl font-display font-black leading-tight">
+            Convide Novos Membros e Voluntários
+          </h3>
+          <p className="text-blue-100 text-sm leading-relaxed font-medium">
+            Compartilhe o link de cadastro da igreja para que novos voluntários e membros façam o auto-cadastro selecionando seus respectivos ministérios.
+          </p>
+          <div className="flex flex-wrap items-center gap-4 pt-2">
+            <button
+              onClick={handleCopyLink}
+              className={cn(
+                "inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl font-bold text-sm transition-all cursor-pointer shadow-lg active:scale-95",
+                copied
+                  ? "bg-emerald-500 text-white shadow-emerald-500/20"
+                  : "bg-white text-blue-900 hover:bg-blue-50 shadow-black/10"
+              )}
+            >
+              {copied ? (
+                <>
+                  <Check className="w-4 h-4" /> Link Copiado!
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" /> Copiar Link de Cadastro da Igreja
+                </>
+              )}
+            </button>
+            <Link
+              href="/dashboard/members"
+              className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold text-sm bg-blue-900/60 hover:bg-blue-900 border border-white/20 text-white transition-all active:scale-95"
+            >
+              <Users className="w-4 h-4" /> Cadastrar Membro Manualmente
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* MODAL: CRIAR CONTA PARA PASTOR (LOGIN E SENHA) */}
+      {isPastorModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <motion.div
-            onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white dark:bg-slate-800 rounded-[3rem] w-full max-w-xl overflow-hidden shadow-2xl relative"
+            className="bg-white dark:bg-slate-900 rounded-[2.8rem] w-full max-w-lg p-8 md:p-10 shadow-2xl relative border border-slate-100 dark:border-slate-800"
           >
-            <div className="p-8 md:p-12">
-              <div className="flex justify-between items-center mb-8">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                  Acesso Pastoral
+                </span>
                 <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100">
-                  {editingService ? "Editar Culto" : "Cadastrar Culto"}
+                  Criar Conta para Pastor
                 </h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsServiceModalOpen(false);
-                    setEditingService(null);
-                  }}
-                  className="w-10 h-10 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full flex items-center justify-center text-slate-500 transition-colors cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPastorModalOpen(false)}
+                className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {pastorError && (
+              <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-semibold">
+                {pastorError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreatePastorAccount} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nome Completo do Pastor *
+                </label>
+                <input
+                  required
+                  type="text"
+                  placeholder="Ex: Pr. Marcos Oliveira"
+                  value={pastorFormData.name}
+                  onChange={(e) => setPastorFormData({ ...pastorFormData, name: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                />
               </div>
 
-              <form onSubmit={handleSaveService} className="space-y-6">
-                <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
-                    Nome do Culto *
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Cargo / Título Pastoral *
+                </label>
+                <select
+                  value={pastorFormData.title}
+                  onChange={(e) => setPastorFormData({ ...pastorFormData, title: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                >
+                  <option value="Pastor Titular">Pastor Titular (Presidente)</option>
+                  <option value="Pastor Auxiliar">Pastor Auxiliar</option>
+                  <option value="Pastor de Jovens">Pastor de Jovens</option>
+                  <option value="Pastor de Ensino">Pastor de Ensino & Teologia</option>
+                  <option value="Pastor de Famílias">Pastor de Famílias / Casais</option>
+                  <option value="Pastora">Pastora</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  E-mail de Login *
+                </label>
+                <input
+                  required
+                  type="email"
+                  placeholder="pastor@igreja.com"
+                  value={pastorFormData.email}
+                  onChange={(e) => setPastorFormData({ ...pastorFormData, email: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Senha de Acesso *
                   </label>
-                  <input
-                    required
-                    type="text"
-                    value={serviceFormData.name}
-                    onChange={(e) =>
-                      setServiceFormData({
-                        ...serviceFormData,
-                        name: e.target.value,
-                      })
-                    }
-                    placeholder="Ex: Culto de Celebração"
-                    className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
-                    Descrição
-                  </label>
-                  <input
-                    type="text"
-                    value={serviceFormData.description}
-                    onChange={(e) =>
-                      setServiceFormData({
-                        ...serviceFormData,
-                        description: e.target.value,
-                      })
-                    }
-                    placeholder="Opcional"
-                    className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
-                      Hora de Início *
-                    </label>
-                    <input
-                      required
-                      type="time"
-                      value={serviceFormData.startTime}
-                      onChange={(e) =>
-                        setServiceFormData({
-                          ...serviceFormData,
-                          startTime: e.target.value,
-                        })
-                      }
-                      className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
-                      Hora de Término *
-                    </label>
-                    <input
-                      required
-                      type="time"
-                      value={serviceFormData.endTime}
-                      onChange={(e) =>
-                        setServiceFormData({
-                          ...serviceFormData,
-                          endTime: e.target.value,
-                        })
-                      }
-                      className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
-                    Dia da Semana *
-                  </label>
-                  <select
-                    required
-                    value={serviceFormData.dayOfWeek}
-                    onChange={(e) =>
-                      setServiceFormData({
-                        ...serviceFormData,
-                        dayOfWeek: e.target.value,
-                      })
-                    }
-                    className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium appearance-none"
-                  >
-                    {[
-                      "Domingo",
-                      "Segunda-feira",
-                      "Terça-feira",
-                      "Quarta-feira",
-                      "Quinta-feira",
-                      "Sexta-feira",
-                      "Sábado",
-                    ].map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Status Selector in Modal */}
-                <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
-                    Status do Culto *
-                  </label>
-                  <div className="grid grid-cols-2 gap-3 p-1.5 bg-slate-100 dark:bg-slate-900/80 rounded-2xl border border-slate-200 dark:border-slate-700">
-                    <button
-                      type="button"
-                      id="service-form-status-active-btn"
-                      onClick={() =>
-                        setServiceFormData({
-                          ...serviceFormData,
-                          status: "active",
-                        })
-                      }
-                      className={cn(
-                        "py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer",
-                        serviceFormData.status === "active"
-                          ? "bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 shadow-sm border border-emerald-200/60 dark:border-emerald-800/60"
-                          : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                      )}
-                    >
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      Ativo
-                    </button>
-                    <button
-                      type="button"
-                      id="service-form-status-inactive-btn"
-                      onClick={() =>
-                        setServiceFormData({
-                          ...serviceFormData,
-                          status: "inactive",
-                        })
-                      }
-                      className={cn(
-                        "py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer",
-                        serviceFormData.status === "inactive"
-                          ? "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-sm border border-slate-300 dark:border-slate-700"
-                          : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                      )}
-                    >
-                      <span className="w-2 h-2 rounded-full bg-slate-400" />
-                      Inativo
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5">
-                    Cultos inativos continuam salvos, permitindo desabilitá-los temporariamente sem excluí-los.
-                  </p>
-                </div>
-
-                <div className="pt-6">
                   <button
-                    disabled={savingService}
-                    type="submit"
-                    className="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-blue-800/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    type="button"
+                    onClick={handleGenerateSecurePassword}
+                    className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
                   >
-                    {savingService
-                      ? "Salvando..."
-                      : editingService
-                        ? "Salvar Alterações"
-                        : "Salvar Culto"}
+                    Gerar Senha Segura
                   </button>
                 </div>
-              </form>
-            </div>
+                <div className="relative">
+                  <input
+                    required
+                    type={showPastorPassword ? "text" : "password"}
+                    placeholder="Mínimo 6 caracteres"
+                    value={pastorFormData.password}
+                    onChange={(e) => setPastorFormData({ ...pastorFormData, password: e.target.value })}
+                    className="w-full pl-4 pr-10 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPastorPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPastorPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Telefone / WhatsApp (Opcional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="(11) 98765-4321"
+                  value={pastorFormData.phone}
+                  onChange={(e) => setPastorFormData({ ...pastorFormData, phone: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsPastorModalOpen(false)}
+                  className="flex-1 py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingPastor}
+                  className="flex-1 py-3 px-4 rounded-xl bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  {savingPastor ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar Conta Pastoral"}
+                </button>
+              </div>
+            </form>
           </motion.div>
         </div>
       )}
-      {/* Modal de Confirmação para Excluir Culto */}
-      {isDeleteServiceModalOpen && serviceToDelete && (
-        <div
-          onClick={() => {
-            if (!deletingService) {
-              setIsDeleteServiceModalOpen(false);
-              setServiceToDelete(null);
-            }
-          }}
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-        >
+
+      {/* MODAL: SUCESSO CREDENCIAIS DO PASTOR */}
+      {pastorSuccessInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <motion.div
-            onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white dark:bg-slate-800 rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl relative border border-slate-100 dark:border-slate-700 p-8"
+            className="bg-white dark:bg-slate-900 rounded-[2.8rem] w-full max-w-md p-8 md:p-10 shadow-2xl relative text-center border border-slate-100 dark:border-slate-800"
           >
-            <div className="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-6">
-              <AlertTriangle className="w-7 h-7" />
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="w-8 h-8" />
             </div>
 
-            <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100 text-center mb-2">
-              Excluir Culto?
+            <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100 mb-1">
+              Conta Pastoral Criada!
             </h3>
-
-            <p className="text-sm text-slate-500 dark:text-slate-400 text-center mb-6 leading-relaxed">
-              Tem certeza que deseja excluir o culto{" "}
-              <span className="font-bold text-slate-800 dark:text-slate-200">
-                &ldquo;{serviceToDelete.name}&rdquo;
-              </span>
-              ? Esta ação removerá o culto desta congregação.
+            <p className="text-xs text-slate-500 mb-6">
+              Envie as credenciais abaixo para o pastor realizar o primeiro login em <strong>/login</strong>.
             </p>
 
-            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 mb-6 space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-              <div className="flex justify-between">
-                <span className="font-medium text-slate-400">Dia:</span>
-                <span className="font-bold">{serviceToDelete.dayOfWeek}</span>
+            <div className="bg-slate-50 dark:bg-slate-800 p-5 rounded-2xl text-left space-y-3 mb-6 border border-slate-200/80 dark:border-slate-700/80">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Nome</span>
+                <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{pastorSuccessInfo.name} ({pastorSuccessInfo.title})</span>
               </div>
-              <div className="flex justify-between">
-                <span className="font-medium text-slate-400">Horário:</span>
-                <span className="font-bold">
-                  {serviceToDelete.startTime} - {serviceToDelete.endTime}
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">E-mail</span>
+                <span className="font-mono text-sm text-blue-700 dark:text-blue-400 font-bold">{pastorSuccessInfo.email}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Senha</span>
+                <span className="font-mono text-sm text-slate-800 dark:text-slate-200 font-bold bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 inline-block">
+                  {pastorSuccessInfo.password}
                 </span>
               </div>
             </div>
 
             <div className="flex gap-3">
               <button
-                type="button"
-                disabled={deletingService}
                 onClick={() => {
-                  setIsDeleteServiceModalOpen(false);
-                  setServiceToDelete(null);
+                  const text = `Olá ${pastorSuccessInfo.name},\nSeu acesso pastoral foi liberado na plataforma Applaine!\n\nIgreja: ${church.name}\nE-mail: ${pastorSuccessInfo.email}\nSenha: ${pastorSuccessInfo.password}\n\nAcesse: ${window.location.origin}/login`;
+                  navigator.clipboard.writeText(text);
+                  setCopiedPastorCredentials(true);
+                  setTimeout(() => setCopiedPastorCredentials(false), 2500);
                 }}
-                className="flex-1 py-3.5 px-4 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-sm transition-all cursor-pointer disabled:opacity-50"
+                className={cn(
+                  "flex-1 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all",
+                  copiedPastorCredentials ? "bg-emerald-600 text-white" : "bg-blue-800 text-white hover:bg-blue-900"
+                )}
               >
-                Cancelar
+                {copiedPastorCredentials ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copiedPastorCredentials ? "Copiado!" : "Copiar Credenciais"}
               </button>
               <button
-                type="button"
-                id="confirm-delete-service-btn"
-                disabled={deletingService}
-                onClick={handleConfirmDeleteService}
-                className="flex-1 py-3.5 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-rose-600/20 active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                onClick={() => setPastorSuccessInfo(null)}
+                className="py-3 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
               >
-                {deletingService ? (
-                  <span>Excluindo...</span>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4" />
-                    <span>Sim, Excluir</span>
-                  </>
-                )}
+                Fechar
               </button>
             </div>
           </motion.div>
         </div>
       )}
 
-      {isBandModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      {/* MODAL: CRIAR NOVO MINISTÉRIO */}
+      {isNewMinistryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white dark:bg-slate-800 rounded-[3rem] w-full max-w-md overflow-hidden shadow-2xl relative"
+            className="bg-white dark:bg-slate-900 rounded-[2.8rem] w-full max-w-lg p-8 md:p-10 shadow-2xl relative border border-slate-100 dark:border-slate-800"
           >
-            <div className="p-8 md:p-12">
-              <div className="flex justify-between items-center mb-8">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600">
+                  Estrutura Ministerial Escalável
+                </span>
                 <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100">
-                  Nova Banda
+                  Novo Ministério
                 </h3>
-                <button
-                  onClick={() => setIsBandModalOpen(false)}
-                  className="w-10 h-10 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full flex items-center justify-center text-slate-500 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNewMinistryModalOpen(false)}
+                className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {newMinistryError && (
+              <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-semibold">
+                {newMinistryError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateMinistry} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nome do Ministério *
+                </label>
+                <input
+                  required
+                  type="text"
+                  placeholder="Ex: Ministério de Jovens / Diaconia"
+                  value={newMinistryData.name}
+                  onChange={(e) => setNewMinistryData({ ...newMinistryData, name: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-emerald-600"
+                />
               </div>
 
-              <form onSubmit={handleSaveBand} className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
-                    Nome da Banda *
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Nome Curto
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Jovens"
+                    value={newMinistryData.shortName}
+                    onChange={(e) => setNewMinistryData({ ...newMinistryData, shortName: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-emerald-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Sigla (Acrônimo)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: MJ"
+                    value={newMinistryData.acronym}
+                    onChange={(e) => setNewMinistryData({ ...newMinistryData, acronym: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-emerald-600 uppercase"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Descrição do Ministério
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Descreva as frentes de atuação e o propósito deste ministério..."
+                  value={newMinistryData.description}
+                  onChange={(e) => setNewMinistryData({ ...newMinistryData, description: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-emerald-600 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Ícone Representativo
+                  </label>
+                  <select
+                    value={newMinistryData.iconKey}
+                    onChange={(e) => setNewMinistryData({ ...newMinistryData, iconKey: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-emerald-600"
+                  >
+                    <option value="book">Bíblia / Ensino</option>
+                    <option value="heart">Acolhimento / Amor</option>
+                    <option value="flame">Fogo / Oração & Intercessão</option>
+                    <option value="globe">Globo / Missões & Evangelismo</option>
+                    <option value="coins">Moeda / Tesouraria & Finanças</option>
+                    <option value="building">Prédio / Patrimônio & Zeladoria</option>
+                    <option value="mic">Microfone / Música</option>
+                    <option value="monitor">Computador / Multimídia</option>
+                    <option value="briefcase">Maleta / Secretaria</option>
+                    <option value="sparkles">Estrela / Geral</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Cor Temática
+                  </label>
+                  <select
+                    value={newMinistryData.color}
+                    onChange={(e) => setNewMinistryData({ ...newMinistryData, color: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-emerald-600 capitalize"
+                  >
+                    <option value="blue">Azul</option>
+                    <option value="purple">Roxo</option>
+                    <option value="rose">Rosa</option>
+                    <option value="emerald">Verde Esmeralda</option>
+                    <option value="amber">Âmbar / Dourado</option>
+                    <option value="indigo">Índigo</option>
+                    <option value="teal">Verde Petróleo</option>
+                    <option value="orange">Laranja</option>
+                    <option value="cyan">Ciano</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsNewMinistryModalOpen(false)}
+                  className="flex-1 py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingNewMinistry}
+                  className="flex-1 py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  {savingNewMinistry ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar Ministério"}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* MODAL: EDITAR DADOS DA IGREJA */}
+      {isEditChurchModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white dark:bg-slate-900 rounded-[2.8rem] w-full max-w-lg p-8 md:p-10 shadow-2xl relative border border-slate-100 dark:border-slate-800"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100">
+                Editar Dados da Igreja
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsEditChurchModalOpen(false)}
+                className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveChurch} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nome da Igreja *
+                </label>
+                <input
+                  required
+                  type="text"
+                  value={churchFormData.name}
+                  onChange={(e) => setChurchFormData({ ...churchFormData, name: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Pastor Titular
+                </label>
+                <input
+                  type="text"
+                  value={churchFormData.pastor}
+                  onChange={(e) => setChurchFormData({ ...churchFormData, pastor: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Endereço Completo
+                </label>
+                <input
+                  type="text"
+                  value={churchFormData.address}
+                  onChange={(e) => setChurchFormData({ ...churchFormData, address: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Telefone
+                  </label>
+                  <input
+                    type="text"
+                    value={churchFormData.phone}
+                    onChange={(e) => setChurchFormData({ ...churchFormData, phone: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    CNPJ
+                  </label>
+                  <input
+                    type="text"
+                    value={churchFormData.cnpj}
+                    onChange={(e) => setChurchFormData({ ...churchFormData, cnpj: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsEditChurchModalOpen(false)}
+                  className="flex-1 py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingChurch}
+                  className="flex-1 py-3 px-4 rounded-xl bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  {savingChurch ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar Alterações"}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* MODAL: CRIAR / EDITAR CULTO */}
+      {isServiceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white dark:bg-slate-900 rounded-[2.8rem] w-full max-w-lg p-8 md:p-10 shadow-2xl relative border border-slate-100 dark:border-slate-800"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100">
+                {editingService ? "Editar Culto" : "Cadastrar Culto"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsServiceModalOpen(false)}
+                className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveService} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nome do Culto *
+                </label>
+                <input
+                  required
+                  type="text"
+                  placeholder="Ex: Culto da Família"
+                  value={serviceFormData.name}
+                  onChange={(e) => setServiceFormData({ ...serviceFormData, name: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Dia da Semana *
+                </label>
+                <select
+                  value={serviceFormData.dayOfWeek}
+                  onChange={(e) => setServiceFormData({ ...serviceFormData, dayOfWeek: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                >
+                  <option value="Domingo">Domingo</option>
+                  <option value="Segunda-feira">Segunda-feira</option>
+                  <option value="Terça-feira">Terça-feira</option>
+                  <option value="Quarta-feira">Quarta-feira</option>
+                  <option value="Quinta-feira">Quinta-feira</option>
+                  <option value="Sexta-feira">Sexta-feira</option>
+                  <option value="Sábado">Sábado</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Horário Início *
                   </label>
                   <input
                     required
-                    type="text"
-                    value={bandName}
-                    onChange={(e) => setBandName(e.target.value)}
-                    placeholder="Ex: Banda Alpha"
-                    className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-6 py-4 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 transition-all font-medium"
+                    type="time"
+                    value={serviceFormData.startTime}
+                    onChange={(e) => setServiceFormData({ ...serviceFormData, startTime: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Horário Término *
+                  </label>
+                  <input
+                    required
+                    type="time"
+                    value={serviceFormData.endTime}
+                    onChange={(e) => setServiceFormData({ ...serviceFormData, endTime: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
+                  />
+                </div>
+              </div>
 
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Descrição (Opcional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Informações adicionais sobre o culto..."
+                  value={serviceFormData.description}
+                  onChange={(e) => setServiceFormData({ ...serviceFormData, description: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600 resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
                 <button
-                  disabled={savingBand}
-                  type="submit"
-                  className="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-blue-800/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest text-xs"
+                  type="button"
+                  onClick={() => setIsServiceModalOpen(false)}
+                  className="flex-1 py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
                 >
-                  {savingBand ? "Salvando..." : "Criar Banda"}
+                  Cancelar
                 </button>
-              </form>
+                <button
+                  type="submit"
+                  disabled={savingService}
+                  className="flex-1 py-3 px-4 rounded-xl bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  {savingService ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar Culto"}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRMAR EXCLUSÃO DE CULTO */}
+      {isDeleteServiceModalOpen && serviceToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-sm p-6 text-center border border-slate-100 dark:border-slate-800"
+          >
+            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h4 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">
+              Excluir este Culto?
+            </h4>
+            <p className="text-xs text-slate-500 mb-5">
+              Tem certeza que deseja excluir <strong>{serviceToDelete.name}</strong>?
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDeleteServiceModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteService}
+                disabled={deletingService}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 text-white font-bold text-xs cursor-pointer disabled:opacity-50"
+              >
+                {deletingService ? "Excluindo..." : "Sim, Excluir"}
+              </button>
             </div>
           </motion.div>
         </div>
