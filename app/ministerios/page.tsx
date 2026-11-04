@@ -25,6 +25,7 @@ import {
   Users,
 } from "lucide-react";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface MinistryDetail {
   id: string;
@@ -483,32 +484,43 @@ export default function MinisteriosExplicacaoPage() {
   }, [selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900 pb-24">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 selection:bg-blue-100 selection:text-blue-900 pb-24 transition-colors duration-300">
       {/* Top Navbar */}
-      <nav className="fixed top-0 w-full z-50 bg-white/95 backdrop-blur-md border-b border-slate-200">
+      <nav className="fixed top-0 w-full z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link
               href="/"
-              className="flex items-center gap-2 text-slate-600 hover:text-blue-800 transition-colors font-semibold text-sm group"
+              className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors font-semibold text-sm group"
             >
               <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
               <span>Voltar ao Início</span>
             </Link>
-            <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
+            <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block"></div>
             <Link href="/" className="flex items-center">
               <img
                 src="/logo_aplane_transparent.png"
                 alt="Applane Logo"
-                className="h-10 w-auto object-contain"
+                className="h-10 w-auto object-contain dark:brightness-110"
               />
             </Link>
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Seletor de Tema */}
+            <ThemeToggle
+              variant="segmented"
+              className="hidden sm:inline-flex"
+            />
+            <ThemeToggle
+              variant="icon"
+              className="sm:hidden p-2 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-blue-700 dark:hover:text-blue-400 shadow-xs"
+              iconClassName="w-4 h-4"
+            />
+
             <Link
               href="/login"
-              className="text-slate-600 font-bold hover:text-blue-800 transition-colors px-4 py-2 rounded-lg hover:bg-slate-50 text-sm"
+              className="text-slate-600 dark:text-slate-300 font-bold hover:text-blue-800 dark:hover:text-blue-400 transition-colors px-4 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 text-sm"
             >
               Entrar
             </Link>
@@ -524,7 +536,7 @@ export default function MinisteriosExplicacaoPage() {
       </nav>
 
       {/* Hero Header */}
-      <header className="pt-36 pb-12 px-6 bg-gradient-to-b from-blue-50/70 via-slate-50 to-slate-50 border-b border-slate-100">
+      <header className="pt-36 pb-12 px-6 bg-gradient-to-b from-blue-50/70 via-slate-50 to-slate-50 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 border-b border-slate-100 dark:border-slate-800/80">
         <div className="max-w-5xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-blue-100/70 text-blue-800 rounded-full text-xs font-bold mb-5 border border-blue-200">
             <Sparkles className="w-3.5 h-3.5 text-blue-700" />

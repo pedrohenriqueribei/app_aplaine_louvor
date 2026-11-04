@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { formatPhone, formatCep, fetchAddressByCep } from "@/lib/utils";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface ChurchMeta {
   id: string;
@@ -274,10 +275,19 @@ function VisitorFormContent() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            <ThemeToggle
+              variant="segmented"
+              className="hidden sm:inline-flex"
+            />
+            <ThemeToggle
+              variant="icon"
+              className="sm:hidden p-2 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 shadow-xs"
+              iconClassName="w-4 h-4"
+            />
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Você é nosso convidado</span>
+              <span>Convidado</span>
             </span>
           </div>
         </div>

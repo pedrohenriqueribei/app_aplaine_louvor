@@ -23,6 +23,7 @@ import {
   Cake,
 } from "lucide-react";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { auth, db } from "@/lib/firebase";
 import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { formatPhone, parseBirthDateToTimestamp, formatBirthDateInput } from "@/lib/utils";
@@ -303,7 +304,7 @@ function RegisterForm() {
   ];
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
       {/* Visual Side */}
       <div className="hidden lg:flex lg:w-1/2 bg-blue-900 relative overflow-hidden items-center justify-center p-12">
         <div className="absolute inset-0 opacity-20">
@@ -346,14 +347,17 @@ function RegisterForm() {
       </div>
 
       {/* Form Side */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 md:p-12 overflow-y-auto relative">
-        <button
-          onClick={() => router.push("/")}
-          className="absolute top-8 left-8 flex items-center gap-2 text-slate-500 hover:text-blue-800 font-bold transition-all group"
-        >
-          <Home className="w-5 h-5 group-hover:-translate-y-0.5 transition-transform" />
-          <span>Voltar para Início</span>
-        </button>
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 md:p-12 overflow-y-auto relative pt-20">
+        <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
+          <button
+            onClick={() => router.push("/")}
+            className="flex items-center gap-2 text-slate-500 hover:text-blue-800 dark:text-slate-400 dark:hover:text-blue-400 font-bold transition-all group text-sm cursor-pointer"
+          >
+            <Home className="w-4 h-4 group-hover:-translate-y-0.5 transition-transform" />
+            <span>Voltar para Início</span>
+          </button>
+          <ThemeToggle variant="segmented" />
+        </div>
 
         <motion.div
           initial={{ opacity: 0, x: 20 }}

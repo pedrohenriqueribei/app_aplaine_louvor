@@ -452,6 +452,28 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "churchId", "type", "category", "amount", "date", "description", "paymentMethod", "status"]
+    },
+    "ContactMessage": {
+      "title": "Mensagem Fale Conosco",
+      "description": "Mensagens e chamados enviados via Fale Conosco direcionados à área admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "churchName": { "type": "string" },
+        "category": { "type": "string", "enum": ["duvida", "suporte", "sugestao", "elogio", "parceria", "outro"] },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["new", "read", "in_progress", "resolved", "archived"] },
+        "adminNotes": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "resolvedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "email", "subject", "message", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -477,6 +499,7 @@
     "password_resets/{userId}": { "schema": "PasswordReset", "description": "Códigos numéricos para recuperação de senha (acesso seguro restrito)" },
     "verification_codes/{userId}": { "schema": "VerificationCode", "description": "Códigos numéricos para verificação de e-mail de usuários" },
     "audit_logs/{auditId}": { "schema": "AuditLog", "description": "Logs de auditoria centralizados para operações CREATE, UPDATE e DELETE" },
-    "system_settings/{settingId}": { "schema": "SystemSetting", "description": "Configurações de segurança e políticas do sistema" }
+    "system_settings/{settingId}": { "schema": "SystemSetting", "description": "Configurações de segurança e políticas do sistema" },
+    "contact_messages/{messageId}": { "schema": "ContactMessage", "description": "Mensagens e chamados de Fale Conosco direcionados para a área admin" }
   }
 }

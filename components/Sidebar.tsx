@@ -28,11 +28,13 @@ import {
   Flame,
   Globe,
   Building2,
-  CalendarDays
+  CalendarDays,
+  MessageSquare
 } from 'lucide-react';
 import { BallerinaIcon } from '@/components/BallerinaIcon';
 import { UserAvatar } from '@/components/UserAvatar';
 import { cn } from '@/lib/utils';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { getAllChurchMinistries } from '@/lib/ministryUtils';
 import { auth, db } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
@@ -336,6 +338,23 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
           </Link>
         )}
+
+        {/* Seletor de Tema na Navegação Lateral */}
+        <div className="px-3 py-2 flex items-center justify-between gap-2 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 my-1">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 pl-1">
+            Tema
+          </span>
+          <ThemeToggle variant="segmented" />
+        </div>
+
+        <Link
+          href="/fale-conosco"
+          onClick={onClose}
+          className="w-full flex items-center gap-4 px-5 py-2 rounded-2xl text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/60 dark:hover:bg-blue-900/20 transition-all font-semibold group cursor-pointer text-xs mb-1"
+        >
+          <MessageSquare className="w-4 h-4 text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
+          <span>Fale Conosco</span>
+        </Link>
 
         <button 
           onClick={() => signOut(auth)}

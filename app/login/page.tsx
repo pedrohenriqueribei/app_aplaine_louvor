@@ -5,7 +5,8 @@ import { useAuth } from "@/components/AuthProvider";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { Mail, Lock, User as UserIcon, ArrowRight, AlertCircle, X, HelpCircle, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, User as UserIcon, ArrowRight, ArrowLeft, AlertCircle, X, HelpCircle, CheckCircle2 } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface AuthErrorInfo {
   title: string;
@@ -231,7 +232,7 @@ function LoginForm() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
       {/* Left Side - Visual/Hero */}
       <div className="hidden lg:flex lg:w-1/2 bg-blue-900 relative overflow-hidden items-center justify-center p-12">
         <div className="absolute inset-0 opacity-20">
@@ -258,6 +259,7 @@ function LoginForm() {
               />
             </Link>
           </motion.div>
+
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -282,26 +284,40 @@ function LoginForm() {
       </div>
 
       {/* Right Side - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 md:p-12">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 md:p-12 relative">
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           className="w-full max-w-md"
         >
+          {/* Top Bar with Back Link and Theme Selector */}
+          <div className="flex items-center justify-between gap-3 mb-8">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Voltar ao Início</span>
+            </Link>
+            <ThemeToggle variant="segmented" />
+          </div>
+
           <div className="mb-10 text-center lg:text-left">
             <div className="lg:hidden flex justify-center mb-6">
               <Link href="/" prefetch={false} className="flex items-center">
-                <img
-                  src="/logo_aplane.png"
-                  alt="Applane Logo"
-                  className="h-12 w-auto object-contain"
-                />
+                <div className="bg-white p-2 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <img
+                    src="/logo_aplane.png"
+                    alt="Applane Logo"
+                    className="h-10 w-auto object-contain"
+                  />
+                </div>
               </Link>
             </div>
-            <h1 className="text-4xl font-display font-black text-slate-900 mb-2 tracking-tight">
+            <h1 className="text-4xl font-display font-black text-slate-900 dark:text-slate-100 mb-2 tracking-tight">
               {isLogin ? "Bem-vindo de volta" : "Criar conta"}
             </h1>
-            <p className="text-slate-500 font-medium">
+            <p className="text-slate-500 dark:text-slate-400 font-medium">
               {isLogin
                 ? "Acesse o sistema do seu ministério"
                 : "Comece a gerir seu ministério hoje"}
@@ -389,7 +405,7 @@ function LoginForm() {
                   exit={{ opacity: 0, height: 0 }}
                   className="space-y-2"
                 >
-                  <label className="text-sm font-bold text-slate-700 ml-1">
+                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">
                     Nome Completo
                   </label>
                   <div className="relative">
@@ -403,7 +419,7 @@ function LoginForm() {
                         if (errorInfo) setErrorInfo(null);
                       }}
                       required={!isLogin}
-                      className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 outline-none transition-all font-medium"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 outline-none transition-all font-medium"
                     />
                   </div>
                 </motion.div>
@@ -411,7 +427,7 @@ function LoginForm() {
             </AnimatePresence>
 
             <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 ml-1">
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">
                 E-mail
               </label>
               <div className="relative">
@@ -425,21 +441,21 @@ function LoginForm() {
                     if (errorInfo) setErrorInfo(null);
                   }}
                   required
-                  className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 outline-none transition-all font-medium"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 outline-none transition-all font-medium"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between ml-1">
-                <label className="text-sm font-bold text-slate-700">
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">
                   Senha
                 </label>
                 {isLogin && (
                   <Link
                     href={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`}
                     prefetch={false}
-                    className="text-xs font-bold text-blue-800 hover:text-blue-950 hover:underline cursor-pointer"
+                    className="text-xs font-bold text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:underline cursor-pointer"
                   >
                     Esqueceu a senha?
                   </Link>
@@ -456,7 +472,7 @@ function LoginForm() {
                     if (errorInfo) setErrorInfo(null);
                   }}
                   required
-                  className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 outline-none transition-all font-medium"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-blue-800/20 focus:border-blue-800 outline-none transition-all font-medium"
                 />
               </div>
             </div>
@@ -464,7 +480,7 @@ function LoginForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-800 text-white py-4 rounded-2xl font-bold hover:bg-blue-900 transition-all shadow-xl shadow-blue-800/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full bg-blue-800 hover:bg-blue-900 text-white py-4 rounded-2xl font-bold transition-all shadow-xl shadow-blue-800/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
             >
               {loading
                 ? "Processando..."
@@ -475,7 +491,7 @@ function LoginForm() {
             </button>
           </form>
 
-          <p className="mt-10 text-center text-slate-600 font-medium">
+          <p className="mt-10 text-center text-slate-600 dark:text-slate-400 font-medium">
             {isLogin ? "Não tem uma conta?" : "Já tem uma conta?"}
             <button
               onClick={() => {
@@ -488,7 +504,7 @@ function LoginForm() {
                   setIsLogin(true);
                 }
               }}
-              className="ml-2 text-blue-800 font-bold hover:underline cursor-pointer"
+              className="ml-2 text-blue-700 dark:text-blue-400 font-bold hover:underline cursor-pointer"
             >
               {isLogin ? "Cadastre-se" : "Faça login"}
             </button>

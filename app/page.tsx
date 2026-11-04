@@ -23,6 +23,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { BallerinaIcon } from "@/components/BallerinaIcon";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function HomePage() {
   const { user, loading } = useAuth();
@@ -51,9 +52,9 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 selection:bg-blue-100 selection:text-blue-900 transition-colors duration-300">
       {/* Navigation */}
-      <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md border-b border-slate-200">
+      <nav className="fixed top-0 w-full z-50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <Link
             href="/"
@@ -64,14 +65,34 @@ export default function HomePage() {
             <img
               src="/logo_aplane_transparent.png"
               alt="Applane Logo"
-              className="h-10 md:h-12 w-auto object-contain bg-transparent"
+              className="h-10 md:h-12 w-auto object-contain bg-transparent dark:brightness-110"
             />
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-4">
+            {/* Seletor de Tema: Segmented no desktop, botão compacto no mobile */}
+            <div className="flex items-center">
+              <ThemeToggle
+                variant="segmented"
+                className="hidden sm:inline-flex"
+              />
+              <ThemeToggle
+                variant="icon"
+                className="sm:hidden p-2 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-xs"
+                iconClassName="w-4 h-4"
+              />
+            </div>
+
+            <Link
+              href="/fale-conosco"
+              prefetch={false}
+              className="text-slate-600 dark:text-slate-300 font-bold hover:text-blue-800 dark:hover:text-blue-400 transition-colors px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all text-sm hidden md:inline-block"
+            >
+              Fale Conosco
+            </Link>
             <Link
               href="/login"
               prefetch={false}
-              className="text-slate-600 font-bold hover:text-blue-800 transition-colors px-4 py-2 rounded-lg hover:bg-slate-50 transition-all active:scale-95"
+              className="text-slate-600 dark:text-slate-300 font-bold hover:text-blue-800 dark:hover:text-blue-400 transition-colors px-4 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all active:scale-95 text-sm"
               id="nav-login-btn"
             >
               Entrar
@@ -79,7 +100,7 @@ export default function HomePage() {
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsRegisterMenuOpen(!isRegisterMenuOpen)}
-                className="bg-blue-800 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-blue-900 transition-all shadow-lg shadow-blue-800/10 active:scale-95 hover:shadow-blue-800/20 inline-flex items-center gap-2 cursor-pointer"
+                className="bg-blue-800 hover:bg-blue-900 text-white px-5 sm:px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-800/10 active:scale-95 hover:shadow-blue-800/20 inline-flex items-center gap-2 cursor-pointer text-sm"
                 id="nav-register-btn"
               >
                 <span>Criar conta</span>
@@ -93,16 +114,16 @@ export default function HomePage() {
                   <Link
                     href="/register?role=musico"
                     prefetch={false}
-                    className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-250 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     onClick={() => setIsRegisterMenuOpen(false)}
                   >
-                    <Music className="w-4 h-4 text-blue-800" />
+                    <Music className="w-4 h-4 text-blue-800 dark:text-blue-400" />
                     <span>Músico</span>
                   </Link>
                   <Link
                     href="/register?role=multimidia"
                     prefetch={false}
-                    className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-250 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     onClick={() => setIsRegisterMenuOpen(false)}
                   >
                     <Video className="w-4 h-4 text-amber-500" />
@@ -111,7 +132,7 @@ export default function HomePage() {
                   <Link
                     href="/register?role=danca"
                     prefetch={false}
-                    className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-250 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     onClick={() => setIsRegisterMenuOpen(false)}
                   >
                     <BallerinaIcon className="w-4 h-4 text-rose-500" />
@@ -120,7 +141,7 @@ export default function HomePage() {
                   <Link
                     href="/register?role=secretaria"
                     prefetch={false}
-                    className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-250 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     onClick={() => setIsRegisterMenuOpen(false)}
                   >
                     <Briefcase className="w-4 h-4 text-emerald-500" />
@@ -137,18 +158,18 @@ export default function HomePage() {
       <section className="pt-40 pb-20 px-6">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-start">
           <div className="lg:sticky lg:top-28">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-bold mb-6 border border-blue-100">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 rounded-full text-sm font-bold mb-6 border border-blue-100 dark:border-blue-900/60">
               <Music className="w-4 h-4" />
               Chegou o App que a sua igreja esperava!
             </div>
-            <h1 className="text-6xl lg:text-7xl font-display font-black text-slate-900 mb-6 leading-[1.1] tracking-tight">
+            <h1 className="text-6xl lg:text-7xl font-display font-black text-slate-900 dark:text-slate-50 mb-6 leading-[1.1] tracking-tight">
               Sua igreja em{" "}
-              <span className="bg-gradient-to-r from-blue-700 via-blue-500 to-blue-900 bg-clip-text text-transparent italic drop-shadow-[0_2px_2px_rgba(0,0,0,0.05)]">
+              <span className="bg-gradient-to-r from-blue-700 via-blue-500 to-blue-900 dark:from-blue-400 dark:via-blue-300 dark:to-blue-500 bg-clip-text text-transparent italic drop-shadow-[0_2px_2px_rgba(0,0,0,0.05)]">
                 harmonia
               </span>{" "}
               perfeita.
             </h1>
-            <p className="text-xl text-[#6b6a90] mb-10 leading-relaxed max-w-lg">
+            <p className="text-xl text-[#6b6a90] dark:text-slate-400 mb-10 leading-relaxed max-w-lg">
               A plataforma definitiva para gerir ministérios de louvor,
               multimídia, escalas, músicas e equipe de forma integrada e
               intuitiva.
@@ -165,7 +186,7 @@ export default function HomePage() {
               <Link
                 href="/login"
                 prefetch={false}
-                className="bg-white text-slate-700 border border-slate-200 px-8 py-4 rounded-2xl font-bold text-lg hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center"
+                className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 px-8 py-4 rounded-2xl font-bold text-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 flex items-center justify-center shadow-xs"
                 id="hero-secondary-btn"
               >
                 Já tenho conta
@@ -174,18 +195,18 @@ export default function HomePage() {
           </div>
 
           <div className="relative" id="hero-visual">
-            <div className="bg-gradient-to-tr from-blue-100 to-indigo-50/50 rounded-[3rem] p-5 lg:p-7 border border-blue-100/70 shadow-xl shadow-blue-900/5">
+            <div className="bg-gradient-to-tr from-blue-100 to-indigo-50/50 dark:from-slate-900 dark:to-blue-950/40 rounded-[3rem] p-5 lg:p-7 border border-blue-100/70 dark:border-slate-800 shadow-xl shadow-blue-900/5 dark:shadow-black/40">
               {/* Header inside hero visual */}
               <div className="flex items-center justify-between mb-4 px-1">
                 <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-blue-900">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600 dark:bg-blue-400 animate-pulse"></span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300">
                     Ministérios & Gestão
                   </span>
                 </div>
                 <Link
                   href="/ministerios"
-                  className="text-[11px] font-semibold text-blue-700 bg-blue-50/80 hover:bg-blue-100 px-2.5 py-0.5 rounded-full border border-blue-200/60 transition-colors inline-flex items-center gap-1 group"
+                  className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 bg-blue-50/80 dark:bg-blue-900/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 px-2.5 py-0.5 rounded-full border border-blue-200/60 dark:border-blue-800/60 transition-colors inline-flex items-center gap-1 group"
                 >
                   <span>12 Áreas Integradas</span>
                   <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
@@ -615,18 +636,29 @@ export default function HomePage() {
       </section>
 
       {/* Footer with Applane logo */}
-      <footer className="bg-white border-t border-slate-200 py-10 px-6">
+      <footer className="bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 py-10 px-6 transition-colors">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <Link href="/" prefetch={false} className="flex items-center hover:opacity-90 transition-opacity">
-            <img
-              src="/logo_aplane.png"
-              alt="Applane Logo"
-              className="h-9 w-auto object-contain"
-            />
+            <div className="bg-white p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+              <img
+                src="/logo_aplane.png"
+                alt="Applane Logo"
+                className="h-8 w-auto object-contain"
+              />
+            </div>
           </Link>
-          <p suppressHydrationWarning className="text-sm font-medium text-slate-500 text-center md:text-right">
-            © {new Date().getFullYear()} Applane. Gestão ministerial com excelência.
-          </p>
+          <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+            <ThemeToggle
+              variant="segmented"
+              className="text-xs"
+            />
+            <Link href="/fale-conosco" className="text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-blue-800 dark:hover:text-blue-400 transition-colors">
+              Fale Conosco
+            </Link>
+            <p suppressHydrationWarning className="text-sm font-medium text-slate-500 dark:text-slate-500 text-center md:text-right">
+              © {new Date().getFullYear()} Applane. Gestão ministerial com excelência.
+            </p>
+          </div>
         </div>
       </footer>
     </div>

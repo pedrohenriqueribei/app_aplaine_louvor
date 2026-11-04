@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { Building2, Users, Loader2, Plus, Edit2, ShieldCheck, CheckCircle2, AlertTriangle, Play, Pause, Settings } from 'lucide-react';
+import { Building2, Users, Loader2, Plus, Edit2, ShieldCheck, CheckCircle2, AlertTriangle, Play, Pause, Settings, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
 import { TreasurySummaryWidget } from '@/components/TreasurySummaryWidget';
@@ -20,6 +20,8 @@ export default function AdminDashboard() {
   const { user } = useAuth();
   const [churches, setChurches] = useState<Church[]>([]);
   const [usersCount, setUsersCount] = useState(0);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+  const [totalMessagesCount, setTotalMessagesCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   // Modal State
@@ -50,6 +52,17 @@ export default function AdminDashboard() {
       setUsersCount(usersSnap.size);
     } catch (error) {
       console.error('Error fetching users data:', error);
+    }
+
+    try {
+      const res = await fetch('/api/contact');
+      if (res.ok) {
+        const json = await res.json();
+        setTotalMessagesCount(json.total || 0);
+        setUnreadMessagesCount(json.unreadCount || 0);
+      }
+    } catch (error) {
+      console.warn('Error fetching contact messages for admin dashboard:', error);
     } finally {
       setLoading(false);
     }
@@ -118,7 +131,7 @@ export default function AdminDashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
         <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-start gap-4">
           <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center shrink-0">
             <Building2 className="w-6 h-6" />
@@ -149,9 +162,28 @@ export default function AdminDashboard() {
           </div>
           <div>
             <p className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
-              Usuários Cadastrados
+              Usuários
             </p>
             <p className="text-3xl font-black text-slate-800 dark:text-slate-100">{usersCount}</p>
+          </div>
+        </Link>
+
+        <Link href="/admin/dashboard/messages" className="p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-start gap-4 hover:border-blue-300 dark:hover:border-blue-700 transition-colors cursor-pointer block group relative overflow-hidden">
+          <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+            <MessageSquare className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <p className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                Fale Conosco
+              </p>
+              {unreadMessagesCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-600 text-white animate-pulse">
+                  {unreadMessagesCount} novas
+                </span>
+              )}
+            </div>
+            <p className="text-3xl font-black text-slate-800 dark:text-slate-100">{totalMessagesCount}</p>
           </div>
         </Link>
       </div>

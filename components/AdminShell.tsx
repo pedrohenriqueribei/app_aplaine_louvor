@@ -3,7 +3,7 @@
 import React from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useRouter, usePathname } from "next/navigation";
-import { LogOut, LayoutDashboard, Users, ShieldCheck } from "lucide-react";
+import { LogOut, LayoutDashboard, Users, ShieldCheck, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { auth } from "@/lib/firebase";
@@ -19,6 +19,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const getAdminPageTitle = () => {
     if (pathname.includes("/users")) return "Gestão de Usuários";
     if (pathname.includes("/security")) return "Segurança & Auditoria";
+    if (pathname.includes("/messages")) return "Fale Conosco • Mensagens";
     return "Painel Administrativo";
   };
 
@@ -46,6 +47,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       label: "Visão Geral",
       icon: <LayoutDashboard className="w-5 h-5" />,
       href: "/admin/dashboard",
+    },
+    {
+      label: "Fale Conosco",
+      icon: <MessageSquare className="w-5 h-5" />,
+      href: "/admin/dashboard/messages",
     },
     {
       label: "Usuários",
@@ -112,10 +118,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
 
-        <div className="mt-auto p-4 border-t border-slate-200 dark:border-slate-800">
+        <div className="mt-auto p-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
+          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Tema</span>
+            <ThemeToggle variant="segmented" />
+          </div>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 w-full rounded-xl font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all"
+            className="flex items-center gap-3 px-4 py-3 w-full rounded-xl font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all cursor-pointer"
           >
             <LogOut className="w-5 h-5" />
             Sair
