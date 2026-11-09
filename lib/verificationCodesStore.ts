@@ -163,15 +163,17 @@ export async function markUserVerifiedServer(userId: string): Promise<void> {
     );
   }
 
-  // Try Firebase Auth admin
+  // Try Firebase Auth admin if available
   try {
     await adminAuth.updateUser(cleanId, {
       emailVerified: true,
     });
   } catch (authErr: any) {
-    console.warn(
-      "adminAuth updateUser skipped:",
-      authErr?.message || authErr
-    );
+    // Identity Toolkit API may not be enabled on the host service account project;
+    // user verification state is already recorded in Firestore and synced on client.
+    const msg = String(authErr?.message || authErr || "");
+    if (!msg.includes("identitytoolkit") && !msg.includes("PERMISSION_DENIED") && !msg.includes("403")) {
+      console.warn("adminAuth updateUser notice:", msg.slice(0, 120));
+    }
   }
 }

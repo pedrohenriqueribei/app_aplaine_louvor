@@ -65,7 +65,45 @@ export const adminAuth = new Proxy({} as Auth, {
       _auth = getAuth(app);
     }
     const val = Reflect.get(_auth, prop);
-    return typeof val === 'function' ? val.bind(_auth) : val;
+    if (typeof val === 'function') {
+      return function (...args: any[]) {
+        try {
+          const result = val.apply(_auth, args);
+          if (result && typeof result.then === 'function') {
+            return result.catch((err: any) => {
+              const msg = String(err?.message || err || '');
+              // If Identity Toolkit API is disabled on the host Cloud project
+              if (
+                msg.includes('identitytoolkit.googleapis.com') ||
+                (err?.code === 403 && msg.includes('PERMISSION_DENIED')) ||
+                err?.errorInfo?.code === 'auth/configuration-not-found'
+              ) {
+                const safeErr = new Error('Identity Toolkit API is not available on this host environment.');
+                (safeErr as any).code = 'auth/service-disabled';
+                (safeErr as any).isServiceDisabled = true;
+                throw safeErr;
+              }
+              throw err;
+            });
+          }
+          return result;
+        } catch (err: any) {
+          const msg = String(err?.message || err || '');
+          if (
+            msg.includes('identitytoolkit.googleapis.com') ||
+            (err?.code === 403 && msg.includes('PERMISSION_DENIED')) ||
+            err?.errorInfo?.code === 'auth/configuration-not-found'
+          ) {
+            const safeErr = new Error('Identity Toolkit API is not available on this host environment.');
+            (safeErr as any).code = 'auth/service-disabled';
+            (safeErr as any).isServiceDisabled = true;
+            throw safeErr;
+          }
+          throw err;
+        }
+      };
+    }
+    return val;
   }
 });
 

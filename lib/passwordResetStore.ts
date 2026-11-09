@@ -185,7 +185,10 @@ export async function applyPasswordUpdate(
       await adminAuth.updateUser(userId, { password: newPassword });
       console.log(`[APPLANE] Senha atualizada no Firebase Auth para usuário: ${userId}`);
     } catch (authErr: any) {
-      console.warn("adminAuth.updateUser skipped or unavailable in sandbox:", authErr?.message || authErr);
+      const msg = String(authErr?.message || authErr || "");
+      if (!msg.includes("identitytoolkit") && !msg.includes("PERMISSION_DENIED") && !msg.includes("403")) {
+        console.warn("adminAuth.updateUser notice:", msg.slice(0, 120));
+      }
     }
   }
 

@@ -40,6 +40,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { cn } from "@/lib/utils";
+import { createPastorAccount } from "@/lib/pastorService";
 
 interface ChurchType {
   id: string;
@@ -210,31 +211,22 @@ export default function ChurchesPage() {
         targetChurchId
       ) {
         try {
-          const token = await auth.currentUser?.getIdToken();
-          const res = await fetch("/api/admin/create-pastor", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              name: formData.pastor,
-              title: formData.pastorTitle || "Pastor Titular",
-              email: formData.pastorEmail,
-              password: formData.pastorPassword,
-              phone: formData.pastorPhone || formData.phone,
-              churchId: targetChurchId,
-            }),
+          await createPastorAccount({
+            churchId: targetChurchId,
+            name: formData.pastor,
+            pastoralTitle: formData.pastorTitle || "Pastor Titular",
+            email: formData.pastorEmail,
+            password: formData.pastorPassword,
+            phone: formData.pastorPhone || formData.phone,
+            sendInviteLink: true,
           });
 
-          if (res.ok) {
-            setCreatedCredentials({
-              churchName: formData.name,
-              pastorName: formData.pastor,
-              pastorEmail: formData.pastorEmail,
-              pastorPass: formData.pastorPassword,
-            });
-          }
+          setCreatedCredentials({
+            churchName: formData.name,
+            pastorName: formData.pastor,
+            pastorEmail: formData.pastorEmail,
+            pastorPass: formData.pastorPassword,
+          });
         } catch (pastorErr) {
           console.warn("Erro ao provisionar conta pastoral:", pastorErr);
         }

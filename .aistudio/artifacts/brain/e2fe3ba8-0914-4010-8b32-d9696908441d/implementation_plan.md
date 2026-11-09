@@ -1,123 +1,138 @@
-# Funcionalidade de Foto de Perfil com Recorte e Compressão Otimizada
+# Plano de Implementação: Perfil do Pastor e Cadastro Restrito
 
-Plano de arquitetura e design para permitir que integrantes e líderes façam o envio, ajuste interativo e exibição de suas fotos de perfil na plataforma Applaine, integrando compressão client-side de alto desempenho, pré-visualização com corte circular e persistência no Firebase Auth e Firestore.
+Implementação do perfil de acesso ministerial **Pastor** (`pastor`, `pastor_titular`, `pastor_auxiliar`) com isolamento multi-tenant estrito por `churchId`, centralização da criação de contas pastorais exclusivamente no ambiente `/admin/dashboard/churches/[id]`, e blindagem contra acesso cruzado de dados entre diferentes congregações.
 
-### User Review & Critical Decisions
+---
+
+## Decisões Confirmadas com o Usuário
 
 > [!IMPORTANT]
-> As decisões de produto e experiência do usuário foram confirmadas na fase de esclarecimento e nortearão toda a implementação:
-
--   **Método de Envio**: Upload direto do dispositivo do usuário (suportando arquivos JPEG, PNG e WebP, além da câmera do smartphone), com processamento e compressão automática no cliente para garantir carregamento instantâneo e leveza de dados.
--   **Ferramenta de Ajuste e Recorte**: Modal interativo com pré-visualização em tempo real, máscara de corte circular/quadrado, controle deslizante de zoom (1x a 3x) e reposicionamento por arraste (pan), além de opção para remover a foto existente.
--   **Pontos de Acesso na Interface**:
-    1.  Diretamente no cartão de perfil do integrante (`/dashboard/members/[id]`), com botão de câmera dedicado sobre o avatar.
-    2.  No avatar do usuário na barra flutuante superior (`FloatingTopBar`), com menu de ação rápida para visualização/troca imediata de foto.
-    3.  No modal administrativo de edição de integrante (`/dashboard/members`).
+> Decisões alinhadas na Fase de Planejamento:
+> - **Entrega de Credenciais**: Gerar senha provisória aleatória e segura com botão de cópia de alta visibilidade e acionamento de e-mail de redefinição/convite.
+> - **Localização na Interface**: Aba dedicada **"Pastores Responsáveis"** integrada na página da igreja (`/admin/dashboard/churches/[id]`), ao lado das seções de Departamentos e Membros.
+> - **Classificação Ministerial**: Seletor permitindo escolher entre **Pastor Titular** e **Pastor Auxiliar** com status Ativo/Inativo.
 
 ---
 
-### 1. Overview & Core Concept
+## 1. Visão Geral e Conceito Central
 
--   **What It Does**: Oferece aos integrantes e líderes uma experiência visual moderna e humanizada para gerenciar sua identidade na igreja. Ao selecionar uma imagem, o usuário visualiza um modal com recorte circular, ajusta o enquadramento através de zoom e arraste suave, e ao salvar, a imagem é processada e armazenada como imagem otimizada em WebP/JPEG com resolução ideal (300x300px), atualizando o perfil do Firebase Authentication (`updateProfile`) e o documento do usuário no Firestore (`users/{userId}.photoURL`).
--   **Target Audience / Persona**: Músicos, cantores, equipe de multimídia, grupo de dança, pastores e líderes ministeriais que precisam de reconhecimento visual rápido em escalas, chamadas e relatórios.
--   **Key Value**: Proporciona reconhecimento visual imediato nas escalas de domingo, listas ministeriais e barras de navegação, elevando a identidade comunitária e a usabilidade em dispositivos móveis e desktops.
-
----
-
-### 2. User Experience & Visual Design
-
--   **Key User Flows**:
-    1.  *Acionamento*:
-        -   O usuário clica no botão com ícone de câmera posicionado no canto inferior do avatar do seu perfil (`/dashboard/members/[id]`) ou clica diretamente no avatar da barra flutuante (`FloatingTopBar`).
-    2.  *Seleção do Arquivo*:
-        -   Abre o seletor nativo de fotos do dispositivo (ou permite arrastar e soltar a imagem).
-    3.  *Ajuste e Recorte Interativo*:
-        -   Um modal elegante é aberto exibindo a foto selecionada com máscara circular iluminada, guias de alinhamento sutis, botões de zoom (`-` e `+`) com controle deslizante, e opção de reposicionar a imagem arrastando com o dedo ou mouse.
-    4.  *Confirmação e Processamento*:
-        -   Ao clicar em "Salvar Foto", um canvas invisível renderiza o recorte exato nas dimensões otimizadas ($300 \times 300\text{px}$, formato WebP/JPEG com compressão de 82%), gerando uma imagem ultraleve (< 40KB).
-        -   O sistema salva simultaneamente no Firebase Auth (`updateProfile`) e no Firestore (`users/{uid}`), atualizando o estado do `AuthProvider` sem recarregar a tela.
-    5.  *Remoção*:
-        -   Opção clara de "Remover foto" para restaurar a inicial do nome com badge padrão.
-
--   **Visual Identity & Theme**:
-    -   *Modal de Edição*: `bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800/80 rounded-[2.5rem] shadow-2xl`.
-    -   *Área de Pré-Visualização*: Área com fundo escurecido contrastante, círculo centralizador com contorno de alta precisão (`ring-2 ring-blue-500/80 shadow-2xl`), suporte a gestos de toque em smartphones.
-    -   *Controles de Zoom*: Barra deslizante com botões de micro-passo (`ZoomIn` e `ZoomOut`) e valor percentual discreto em números tabulares (`tabular-nums font-mono`).
-    -   *Propagação Global*: Exibição da foto com cantos arredondados contínuos e fallback resiliente (se a foto falhar no carregamento, exibe a letra inicial com fundo estilizado, sem quebrar o layout).
+- **O que faz**: Oferece aos administradores gerais (`super_admin`) um módulo seguro e dedicado dentro de `/admin/dashboard/churches/[id]` para listar, cadastrar e gerenciar os Pastores Responsáveis pela igreja. Garante que os pastores tenham acesso pleno de liderança aos dados de sua própria igreja (escalas, membros, departamentos, repertório, eventos), mas com bloqueio absoluto e redirecionamento caso tentem consultar ou manipular congregações alheias.
+- **Público-Alvo**:
+  - **Admin Geral (Super Admin)**: Único perfil autorizado a cadastrar pastores e definir a congregação correspondente.
+  - **Pastor Titular / Auxiliar**: Líder espiritual e operacional da igreja local, com visão completa dos dados da sua congregação.
+- **Valor Agregado**: Conformidade com a LGPD e princípios de isolamento multi-tenant, eliminando qualquer risco de vazamento de informações entre igrejas irmãs ou independentes.
 
 ---
 
-### 3. Key Product Decisions & Trade-Offs
+## 2. Experiência do Usuário e Design Visual
 
--   **Decisão 1: Compressão e Otimização no Cliente via Canvas HTML5**
-    -   *Chosen Approach*: Processar o corte e a compressão diretamente no navegador do usuário gerando WebP (com fallback JPEG) de tamanho compacto ($300 \times 300\text{px}$, ~35KB).
-    -   *Why*: Elimina dependência de infraestrutura externa de processamento pesado, garante upload ultrarrápido mesmo em conexões 3G/4G móveis, não gera custos extras de cloud functions e mantém a foto imediatamente disponível na nuvem.
-    -   *Alternatives Considered*: Enviar a foto bruta de 8MB para o servidor redimensionar, descartado por latência excessiva no celular e alto consumo de banda.
+### Fluxos Principais
 
--   **Decisão 2: Persistência Híbrida (Firebase Auth `photoURL` + Firestore `users/{uid}.photoURL`)**
-    -   *Chosen Approach*: Atualizar o perfil do Firebase Auth (`updateProfile`) e o documento do usuário no Firestore (`photoURL`).
-    -   *Why*: O Firebase Auth mantém a foto associada ao token de autenticação (disponível instantaneamente no `user.photoURL`), enquanto o Firestore permite que outros membros vejam a foto na lista de integrantes, escalas e perfis públicos sem exigir chamadas extras.
-    -   *Alternatives Considered*: Apenas no Firebase Auth, descartado pois outros usuários na congregação não teriam acesso às fotos uns dos outros nas escalas.
+1. **Navegação do Admin Geral até a Igreja**:
+   - O Admin Geral acessa `/admin/dashboard/churches/[id]`.
+   - Na barra de abas superiores da tela, visualiza: `[Departamentos]` · `[Pastores Responsáveis]` · `[Visão Geral & Escalas]`.
+   - Clicando em `Pastores Responsáveis`, visualiza a listagem de pastores já associados à igreja atual e o botão de ação primária **"+ Cadastrar Pastor"**.
 
--   **Decisão 3: Componente Dedicado de Avatar com Fallback Gracioso (`UserAvatar`)**
-    -   *Chosen Approach*: Criar um componente unificado `components/UserAvatar.tsx` com tratamento de estados (carregamento, imagem quebrada, inicial do nome e tamanho customizável `sm`, `md`, `lg`, `xl`).
-    -   *Why*: Centraliza a estilização e evita duplicação de tags `<img onError=...>` espalhadas pelo projeto, prevenindo qualquer ocorrência de imagem quebrada.
+2. **Cadastro do Novo Pastor**:
+   - O Admin clica em **"+ Cadastrar Pastor"**.
+   - Abre-se o modal contendo:
+     - **Igreja Vinculada**: Campo bloqueado/desabilitado com o nome e ID da igreja atual (`churchId`).
+     - **Classificação**: Seletor ("Pastor Titular" / "Pastor Auxiliar").
+     - **Nome Completo**: Input obrigatório.
+     - **E-mail**: Input obrigatório com validação de formato e unicidade.
+     - **Telefone / WhatsApp**: Input com formatação visual para contato rápido.
+     - **Credenciais**: Senha temporária sugerida gerada dinamicamente (mínimo 8 caracteres alfanuméricos com símbolos), campo editável com alternador de visibilidade (olho), botão "Copiar Credenciais" e checkbox "Enviar e-mail com link de primeiro acesso".
+     - **Status**: Seletor Ativo / Inativo.
+   - Ao salvar, a API cria o usuário no Firebase Auth com `customClaims: { role: 'pastor', churchId }`, registra o documento em `users/{uid}` com liderança atribuída em todos os ministérios da igreja, e anexa o pastor à lista `churches/{churchId}.pastors`.
+   - O modal exibe um banner de confirmação com resumo das credenciais e atalho para copiar mensagem de boas-vindas formatada para envio via WhatsApp ou e-mail.
+
+3. **Bloqueio e Isolamento no Dashboard do Pastor**:
+   - Quando um usuário com perfil `pastor` faz login:
+     - O sistema carrega os dados vinculados exclusivamente ao seu `churchId`.
+     - Caso o pastor digite manualmente na URL `/dashboard/churches/{outra_igreja_id}` ou `/admin/*`, o middleware e os componentes de guarda interceptam a requisição, redirecionam imediatamente para `/dashboard/churches/${pastor.churchId}` e exibem um alerta de acesso negado.
+     - O botão de cadastro de pastores **não é exibido** no painel regular `/dashboard/churches/[id]`.
 
 ---
 
-### 4. Technical Architecture & Data Strategy *(Technical Reference)*
+## 3. Decisões Técnicas e Trade-Offs
 
-#### Architecture & Component Diagram
+- **Decisão 1: Restrição Estrita do Endpoint `/api/admin/create-pastor`**:
+  - *Abordagem*: Permitir requisições ao endpoint **exclusivamente** para `super_admin`. Pastores ou líderes que tentarem disparar POST para esta rota receberão `HTTP 403 Forbidden`.
+  - *Motivo*: Evita escalonamento de privilégios e cumpre o requisito explícito de que apenas o Admin Geral cadastra pastores.
+
+- **Decisão 2: Remoção do Modal de Cadastro Pastoral de `/dashboard/churches/[id]`**:
+  - *Abordagem*: Eliminar a interface de cadastro de pastor de rotas acessíveis a membros ou pastores locais, mantendo-a unicamente em `/admin/dashboard/churches/[id]`.
+  - *Motivo*: Garante uma única fonte de verdade administrativa e previne acessos indevidos.
+
+- **Decisão 3: Associação Automática de Liderança Pastoral**:
+  - *Abordagem*: Ao ser criado, o perfil pastoral recebe automaticamente permissões de líder em todos os departamentos padrão da igreja local (`worship`, `multimedia`, `secretariat`, `dance`, etc.) com `churchId` obrigatório.
+  - *Motivo*: Permite ao pastor atuar imediatamente na gestão de escalas, repertório e membros da sua igreja sem necessidade de configurações manuais adicionais.
+
+---
+
+## 4. Arquitetura do Sistema e Fluxo de Dados
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Fluxo de Foto de Perfil                         │
-│                                                                        │
-│   ┌────────────────────────────────────────────────────────────────┐   │
-│   │ FloatingTopBar / MemberProfilePage / MembersList               │   │
-│   │  [Avatar com acionador de clique / botão de câmera]            │   │
-│   └───────────────────────────────┬────────────────────────────────┘   │
-│                                   │                                    │
-│                                   ▼                                    │
-│   ┌────────────────────────────────────────────────────────────────┐   │
-│   │ ProfilePhotoCropModal.tsx                                      │   │
-│   │  - Seletor de arquivo (input file / drag-drop)                 │   │
-│   │  - Preview com máscara circular e pan/drag                     │   │
-│   │  - Controle de zoom slider (1x - 3x)                           │   │
-│   │  - Compressão via HTML5 Canvas (300x300 WebP/JPEG, ~35KB)      │   │
-│   └───────────────────────────────┬────────────────────────────────┘   │
-│                                   │                                    │
-│                                   ▼                                    │
-│   ┌────────────────────────────────────────────────────────────────┐   │
-│   │ Sincronização & Persistência                                   │   │
-│   │  ├─ Firebase Auth: updateProfile(auth.currentUser, {photoURL}) │   │
-│   │  ├─ Firestore: updateDoc(doc(db, 'users', uid), {photoURL})    │   │
-│   │  └─ AuthProvider: setUserData / refreshUserData()              │   │
-│   └───────────────────────────────┬────────────────────────────────┘   │
-│                                   │                                    │
-│                                   ▼                                    │
-│   ┌────────────────────────────────────────────────────────────────┐   │
-│   │ Exibição Atualizada em Tempo Real                              │   │
-│   │  ├─ FloatingTopBar.tsx (perfil superior compacto)              │   │
-│   │  ├─ app/dashboard/members/[id]/page.tsx (cabeçalho de perfil) │   │
-│   │  ├─ app/dashboard/members/page.tsx (tabela e cards mobile)     │   │
-│   │  └─ components/Sidebar.tsx (perfil da barra lateral)           │   │
-│   └────────────────────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      Painel Admin Geral (Super Admin)                       │
+│                     /admin/dashboard/churches/[id]                          │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                      [Aba: Pastores Responsáveis]
+                                       │
+                        Botão "+ Cadastrar Pastor"
+                                       │
+                                       ▼
+                     ┌──────────────────────────────────┐
+                     │   Modal "Cadastrar Novo Pastor"   │
+                     │  - churchId (Locked from URL)    │
+                     │  - Nome & Classificação          │
+                     │  - Email & WhatsApp              │
+                     │  - Senha com Copiar & Link Conv. │
+                     └─────────────────┬────────────────┘
+                                       │ POST (Bearer Token Super Admin)
+                                       ▼
+                     ┌──────────────────────────────────┐
+                     │  /api/admin/create-pastor        │
+                     │  (Enforce isSuperAdmin === true) │
+                     └─────────────────┬────────────────┘
+                                       │
+         ┌─────────────────────────────┴─────────────────────────────┐
+         ▼                                                           ▼
+┌───────────────────────────────┐               ┌────────────────────────────────┐
+│         Firebase Auth         │               │       Firestore Database       │
+│ - Cria/Atualiza Auth User     │               │ - users/{uid}                  │
+│ - Set Custom Claims:          │               │   (role: pastor, churchId)     │
+│   { role: 'pastor', churchId }│               │ - churches/{id}.pastors[]      │
+└───────────────────────────────┘               └────────────────────────────────┘
+                                                                 ▲
+                                                                 │
+                                                       [Tenant Guard / RLS]
+                                                                 │
+┌────────────────────────────────────────────────────────────────┴───────────────┐
+│                           Dashboard do Pastor Local                           │
+│     Acesso total a escalas, membros e dados de {churchId} da sua igreja       │
+│      Tentativa de acesso a outra igreja -> 403 / Redirecionamento com Aviso   │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Blueprint & Security Rules Strategy
+---
 
-1.  **`firebase-blueprint.json`**:
-    -   Atualizar a entidade `User` para incluir a propriedade opcional `photoURL: { "type": "string", "description": "URL ou payload otimizado da foto de perfil" }`.
-2.  **`firestore.rules`**:
-    -   Atualizar o helper `isValidUser(data)` para validar `(!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 200000))`.
-    -   Incluir `'photoURL'` nas chaves permitidas para atualização pelo próprio usuário (`affectedKeys().hasOnly([...])`).
-    -   Executar validação e deploy das regras de segurança com o RPC `DeployRules`.
-3.  **Componentes e Modificações**:
-    -   `components/ProfilePhotoCropModal.tsx`: Novo componente interativo para seleção, corte e compressão.
-    -   `components/UserAvatar.tsx`: Novo componente unificado com fallback automático por inicial e estilos responsivos.
-    -   `components/FloatingTopBar.tsx`: Renderização do avatar atualizado e gatilho direto para alterar foto.
-    -   `app/dashboard/members/[id]/page.tsx`: Inclusão do botão de câmera sobre o avatar principal e acoplamento ao modal de recorte.
-    -   `app/dashboard/members/page.tsx`: Integração da exibição de fotos na listagem geral de integrantes e no modal de edição.
-    -   `components/AuthProvider.tsx`: Exposição do método de sincronização instantânea de avatar.
+## Etapas de Execução
+
+1. **Ajustar API Backend (`/app/api/admin/create-pastor/route.ts`)**:
+   - Reconfigurar autorização para exigir estritamente `super_admin`.
+   - Adicionar suporte a `status: 'active' | 'inactive'` e registro de data de vinculação.
+   - Gerar link de redefinição de senha via Firebase Admin se solicitado.
+
+2. **Aprimorar Tela da Igreja no Admin (`/app/admin/dashboard/churches/[id]/page.tsx`)**:
+   - Adicionar abas de navegação visual: `[Departamentos & Membros]`, `[Pastores Responsáveis]`, `[Calendário de Escalas]`.
+   - Criar seção e tabela/cards de Pastores Responsáveis com indicadores de status, classificação pastoral e ações rápidas.
+   - Implementar o modal "Cadastrar Pastor" com `churchId` bloqueado, gerador de senha provisória, botão de cópia de credenciais e validações.
+
+3. **Restringir Painel de Membros (`/app/dashboard/churches/[id]/page.tsx`)**:
+   - Remover botão/modal de cadastro de pastor para usuários não-superadmin.
+   - Reforçar o guard de redirecionamento caso um pastor tente acessar a URL de outra igreja.
+
+4. **Verificação de Compilação & Lint**:
+   - Executar `compile_applet` e `lint_applet` para assegurar integridade completa do build.

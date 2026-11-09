@@ -241,7 +241,7 @@ export function DashboardMainGrid({
                 className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                   alertsFilter === "all"
                     ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                 }`}
               >
                 Todos ({activeAlerts.length})
@@ -250,7 +250,7 @@ export function DashboardMainGrid({
                 onClick={() => setAlertsFilter("urgency")}
                 className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   alertsFilter === "urgency"
-                    ? "bg-rose-600 text-white shadow-xs"
+                    ? "bg-rose-600 text-white shadow-xs dark:bg-rose-600 dark:text-white"
                     : "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"
                 }`}
               >
@@ -261,8 +261,8 @@ export function DashboardMainGrid({
                 onClick={() => setAlertsFilter("attention")}
                 className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                   alertsFilter === "attention"
-                    ? "bg-amber-600 text-white shadow-xs"
-                    : "text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                    ? "bg-amber-500 text-slate-950 dark:bg-amber-400 dark:text-slate-950 shadow-xs font-black"
+                    : "text-amber-700 dark:text-amber-300 hover:bg-amber-100/70 dark:hover:bg-amber-950/50 hover:text-amber-900 dark:hover:text-amber-200"
                 }`}
               >
                 Atenção ({countAttention})
@@ -271,7 +271,7 @@ export function DashboardMainGrid({
                 onClick={() => setAlertsFilter("goal")}
                 className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                   alertsFilter === "goal"
-                    ? "bg-emerald-600 text-white shadow-xs"
+                    ? "bg-emerald-600 text-white shadow-xs dark:bg-emerald-600 dark:text-white"
                     : "text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
                 }`}
               >
@@ -309,7 +309,7 @@ export function DashboardMainGrid({
                   const btnStyle = isUrgent
                     ? "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20 shadow-md"
                     : isAttention
-                      ? "bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20 shadow-md"
+                      ? "bg-amber-500 hover:bg-amber-600 text-slate-950 dark:bg-amber-400 dark:hover:bg-amber-300 dark:text-slate-950 shadow-amber-500/20 shadow-md font-bold"
                       : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 shadow-md";
 
                   return (

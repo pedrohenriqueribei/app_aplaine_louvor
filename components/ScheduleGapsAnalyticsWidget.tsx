@@ -700,7 +700,7 @@ export function ScheduleGapsAnalyticsWidget({
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
               activeTab === "chart"
                 ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
             }`}
           >
             📊 Gráfico
@@ -710,7 +710,7 @@ export function ScheduleGapsAnalyticsWidget({
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
               activeTab === "turnover"
                 ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
             }`}
           >
             📉 Rotatividade
@@ -720,7 +720,7 @@ export function ScheduleGapsAnalyticsWidget({
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
               activeTab === "roles"
                 ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
             }`}
           >
             🎯 Funções Carentes
@@ -730,7 +730,7 @@ export function ScheduleGapsAnalyticsWidget({
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
               activeTab === "actions"
                 ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
             }`}
           >
             💡 Ações & Soluções

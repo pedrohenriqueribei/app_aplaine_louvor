@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 import {
@@ -139,6 +139,8 @@ interface ServiceType {
 export default function ChurchDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const accessDenied = searchParams?.get("access_denied");
   const { userData, isSuperAdmin, user } = useAuth();
   const [church, setChurch] = useState<ChurchType | null>(null);
   const [members, setMembers] = useState<Musician[]>([]);
@@ -161,26 +163,6 @@ export default function ChurchDetailPage() {
     cnpj: "",
   });
   const [savingChurch, setSavingChurch] = useState(false);
-
-  // Pastoral Account Creation State
-  const [isPastorModalOpen, setIsPastorModalOpen] = useState(false);
-  const [pastorFormData, setPastorFormData] = useState({
-    name: "",
-    title: "Pastor Titular",
-    email: "",
-    password: "",
-    phone: "",
-  });
-  const [showPastorPassword, setShowPastorPassword] = useState(false);
-  const [savingPastor, setSavingPastor] = useState(false);
-  const [pastorError, setPastorError] = useState("");
-  const [pastorSuccessInfo, setPastorSuccessInfo] = useState<{
-    name: string;
-    email: string;
-    password: string;
-    title: string;
-  } | null>(null);
-  const [copiedPastorCredentials, setCopiedPastorCredentials] = useState(false);
 
   // New Ministry Creation State
   const [isNewMinistryModalOpen, setIsNewMinistryModalOpen] = useState(false);
@@ -225,12 +207,27 @@ export default function ChurchDetailPage() {
   const [bandName, setBandName] = useState("");
   const [savingBand, setSavingBand] = useState(false);
 
+  // Validação Estrita de Isolamento Multi-tenant (Cross-Tenant & Usuário Órfão)
+  const isOrphan = Boolean(user && userData && !userData.churchId && !isSuperAdmin);
+  const isCrossTenant = Boolean(
+    user &&
+    userData &&
+    userData.churchId &&
+    id &&
+    userData.churchId !== id &&
+    !isSuperAdmin
+  );
+
   const canManageChurch = Boolean(
     isSuperAdmin ||
-      userData?.role === "pastor" ||
-      userData?.role === "pastor_titular" ||
-      userData?.role === "líder" ||
-      userData?.churchId === id
+      (userData?.churchId === id &&
+        (userData?.role === "pastor" ||
+          userData?.role === "pastor_titular" ||
+          userData?.role === "líder" ||
+          userData?.roles?.worship?.includes("leader") ||
+          userData?.roles?.multimedia?.includes("leader") ||
+          userData?.roles?.secretariat?.includes("leader") ||
+          userData?.roles?.dance?.includes("leader")))
   );
 
   const canManageServices = canManageChurch;
@@ -241,6 +238,18 @@ export default function ChurchDetailPage() {
   }, [church]);
 
   useEffect(() => {
+    // Bloqueio imediato no lado cliente para evitar queries cross-tenant não autorizadas
+    if (isOrphan || isCrossTenant) {
+      setLoading(false);
+      if (isCrossTenant && userData?.churchId) {
+        // Redireciona o perfil Pastor ou membro para sua igreja vinculada com aviso
+        router.replace(`/dashboard/churches/${userData.churchId}?access_denied=1`);
+      } else if (isOrphan) {
+        router.replace("/dashboard?access_denied=orphan");
+      }
+      return;
+    }
+
     async function fetchData() {
       try {
         // 1. Fetch Church Data
@@ -443,15 +452,6 @@ export default function ChurchDetailPage() {
   };
 
   // Generate secure password helper
-  const handleGenerateSecurePassword = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$";
-    let pass = "Pr@";
-    for (let i = 0; i < 8; i++) {
-      pass += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setPastorFormData((prev) => ({ ...prev, password: pass }));
-  };
-
   // Save Church Changes
   const handleSaveChurch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -484,82 +484,6 @@ export default function ChurchDetailPage() {
       alert("Erro ao salvar alterações da igreja: " + (err.message || err));
     } finally {
       setSavingChurch(false);
-    }
-  };
-
-  // Create Pastoral Account via server API
-  const handleCreatePastorAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPastorError("");
-    setSavingPastor(true);
-
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch("/api/admin/create-pastor", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name: pastorFormData.name,
-          title: pastorFormData.title,
-          email: pastorFormData.email,
-          password: pastorFormData.password,
-          phone: pastorFormData.phone,
-          churchId: id,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || data.details || "Falha ao criar conta pastoral.");
-      }
-
-      // Add to local state
-      const newPastorRecord: PastorRecord = {
-        uid: data.pastor.uid,
-        name: pastorFormData.name,
-        email: pastorFormData.email,
-        phone: pastorFormData.phone,
-        title: pastorFormData.title,
-        createdAt: new Date().toISOString(),
-      };
-
-      setChurch((prev) => {
-        if (!prev) return prev;
-        const currentPastors = prev.pastors || [];
-        const updated = [...currentPastors.filter((p) => p.email !== newPastorRecord.email), newPastorRecord];
-        return {
-          ...prev,
-          pastors: updated,
-          pastor:
-            newPastorRecord.title?.toLowerCase().includes("titular") || !prev.pastor
-              ? newPastorRecord.name
-              : prev.pastor,
-        };
-      });
-
-      setPastorSuccessInfo({
-        name: pastorFormData.name,
-        email: pastorFormData.email,
-        password: pastorFormData.password,
-        title: pastorFormData.title,
-      });
-
-      setPastorFormData({
-        name: "",
-        title: "Pastor Auxiliar",
-        email: "",
-        password: "",
-        phone: "",
-      });
-      setIsPastorModalOpen(false);
-    } catch (err: any) {
-      console.error("Erro ao criar conta pastoral:", err);
-      setPastorError(err.message || "Erro inesperado ao criar conta.");
-    } finally {
-      setSavingPastor(false);
     }
   };
 
@@ -806,6 +730,89 @@ export default function ChurchDetailPage() {
     );
   }
 
+  // BLOQUEIO DE SEGURANÇA 1: Tentativa de Acesso Cross-Tenant via URL
+  if (isCrossTenant) {
+    return (
+      <div className="max-w-2xl mx-auto my-16 bg-white dark:bg-slate-900 rounded-[3rem] p-10 md:p-14 border border-rose-200 dark:border-rose-900/40 shadow-xl text-center space-y-6">
+        <div className="w-20 h-20 bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 rounded-3xl flex items-center justify-center mx-auto shadow-lg shadow-rose-600/10">
+          <Shield className="w-10 h-10" />
+        </div>
+        <div className="space-y-2">
+          <span className="px-3.5 py-1 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded-full text-[10px] font-black uppercase tracking-widest border border-rose-200 dark:border-rose-800">
+            Bloqueio de Segurança Multi-tenant
+          </span>
+          <h2 className="text-2xl md:text-3xl font-display font-black text-slate-800 dark:text-slate-100">
+            Acesso Cross-Tenant Bloqueado
+          </h2>
+          <p className="text-slate-600 dark:text-slate-300 text-sm max-w-lg mx-auto leading-relaxed">
+            É estritamente proibido o vazamento ou visualização de dados entre congregações distintas. Sua conta pertence à congregação ativa cadastrada no seu perfil.
+          </p>
+        </div>
+
+        <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 text-xs font-mono text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 max-w-md mx-auto space-y-1">
+          <div className="flex justify-between">
+            <span className="text-slate-400">Sua Igreja:</span>
+            <span className="font-bold text-blue-600 dark:text-blue-400">{userData?.churchId}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">Igreja Solicitada:</span>
+            <span className="font-bold text-rose-600 dark:text-rose-400">{id}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+          <button
+            onClick={() => router.push(`/dashboard/churches/${userData?.churchId}`)}
+            className="w-full sm:w-auto px-6 py-3.5 bg-blue-800 hover:bg-blue-900 text-white rounded-2xl font-bold text-sm shadow-xl shadow-blue-800/20 transition-all cursor-pointer"
+          >
+            Acessar Minha Igreja
+          </button>
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="w-full sm:w-auto px-6 py-3.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl font-bold text-sm transition-all cursor-pointer"
+          >
+            Ir para o Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // BLOQUEIO DE SEGURANÇA 2: Usuário Órfão (Sem Igreja Vinculada)
+  if (isOrphan) {
+    return (
+      <div className="max-w-2xl mx-auto my-16 bg-white dark:bg-slate-900 rounded-[3rem] p-10 md:p-14 border border-amber-200 dark:border-amber-900/40 shadow-xl text-center space-y-6">
+        <div className="w-20 h-20 bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 rounded-3xl flex items-center justify-center mx-auto shadow-lg shadow-amber-600/10">
+          <AlertTriangle className="w-10 h-10" />
+        </div>
+        <div className="space-y-2">
+          <span className="px-3.5 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full text-[10px] font-black uppercase tracking-widest border border-amber-200 dark:border-amber-800">
+            Vínculo Congregacional Obrigatório
+          </span>
+          <h2 className="text-2xl md:text-3xl font-display font-black text-slate-800 dark:text-slate-100">
+            Sem Acesso Global / Vínculo Pendente
+          </h2>
+          <p className="text-slate-600 dark:text-slate-300 text-sm max-w-lg mx-auto leading-relaxed">
+            Usuários sem congregação ativa vinculada (<code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">churchId IS NULL</code>) não possuem autorização para visualizar ou manipular dados de nenhuma igreja.
+          </p>
+        </div>
+
+        <div className="p-4 bg-amber-50/60 dark:bg-amber-950/30 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-300">
+          Solicite ao pastor ou líder da sua congregação o link exclusivo de convite para associar seu perfil.
+        </div>
+
+        <div className="pt-2">
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="px-6 py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl font-bold text-sm transition-all cursor-pointer"
+          >
+            Voltar ao Início
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!church) {
     return (
       <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-100 dark:border-slate-800">
@@ -837,6 +844,19 @@ export default function ChurchDetailPage() {
 
   return (
     <div className="admin-church-details-container max-w-6xl mx-auto space-y-12 pb-24 text-slate-800 dark:text-slate-100">
+      {/* Aviso de Acesso Negado Cross-Tenant para Perfil Pastor */}
+      {accessDenied && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start sm:items-center gap-3 text-amber-900 dark:text-amber-200 text-xs font-semibold shadow-xs">
+          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5 sm:mt-0" />
+          <div className="flex-1">
+            <span className="font-bold block text-sm">Acesso Restrito: Redirecionado para sua congregação</span>
+            <span className="text-amber-800 dark:text-amber-300/80 font-normal">
+              O seu perfil pastoral possui escopo exclusivo e restrito aos dados da sua própria congregação. Tentativas de consulta ou modificação em outras congregações são bloqueadas.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Top Navigation */}
       <div className="flex items-center justify-between">
         <button
@@ -946,17 +966,14 @@ export default function ChurchDetailPage() {
             </p>
           </div>
 
-          {canManageChurch && (
-            <button
-              onClick={() => {
-                setPastorError("");
-                setIsPastorModalOpen(true);
-              }}
-              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-3.5 rounded-2xl shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2.5 transition-all text-sm cursor-pointer active:scale-95 shrink-0"
+          {isSuperAdmin && (
+            <Link
+              href={`/admin/dashboard/churches/${id}?tab=pastors`}
+              className="bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 font-bold px-5 py-3 rounded-2xl flex items-center justify-center gap-2 transition-all text-xs cursor-pointer active:scale-95 shrink-0"
             >
-              <UserPlus className="w-4 h-4" />
-              <span>Criar Conta para Pastor</span>
-            </button>
+              <Shield className="w-4 h-4 text-amber-400" />
+              <span>Gerenciar Pastores no Painel Admin</span>
+            </Link>
           )}
         </div>
 
@@ -1013,13 +1030,17 @@ export default function ChurchDetailPage() {
           {allPastors.length === 0 && (
             <div className="col-span-full bg-white/5 border border-dashed border-white/15 rounded-3xl p-8 text-center text-slate-400">
               <PastorIcon className="w-10 h-10 mx-auto mb-3 opacity-40 text-blue-400" />
-              <p className="text-sm font-medium">Nenhuma conta de pastor cadastrada nesta igreja ainda.</p>
-              <button
-                onClick={() => setIsPastorModalOpen(true)}
-                className="mt-3 text-xs font-bold text-blue-400 hover:underline"
-              >
-                Cadastre o primeiro pastor com e-mail e senha
-              </button>
+              <p className="text-sm font-medium">Nenhum pastor cadastrado nesta igreja ainda.</p>
+              {isSuperAdmin ? (
+                <Link
+                  href={`/admin/dashboard/churches/${id}?tab=pastors`}
+                  className="mt-3 inline-block text-xs font-bold text-amber-400 hover:underline"
+                >
+                  Cadastrar pastor no painel administrativo
+                </Link>
+              ) : (
+                <p className="mt-1 text-xs text-slate-500">Apenas o Administrador Geral pode cadastrar a liderança pastoral.</p>
+              )}
             </div>
           )}
         </div>
@@ -1366,214 +1387,6 @@ export default function ChurchDetailPage() {
           </div>
         </div>
       </section>
-
-      {/* MODAL: CRIAR CONTA PARA PASTOR (LOGIN E SENHA) */}
-      {isPastorModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white dark:bg-slate-900 rounded-[2.8rem] w-full max-w-lg p-8 md:p-10 shadow-2xl relative border border-slate-100 dark:border-slate-800"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                  Acesso Pastoral
-                </span>
-                <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100">
-                  Criar Conta para Pastor
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsPastorModalOpen(false)}
-                className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-800 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {pastorError && (
-              <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-semibold">
-                {pastorError}
-              </div>
-            )}
-
-            <form onSubmit={handleCreatePastorAccount} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Nome Completo do Pastor *
-                </label>
-                <input
-                  required
-                  type="text"
-                  placeholder="Ex: Pr. Marcos Oliveira"
-                  value={pastorFormData.name}
-                  onChange={(e) => setPastorFormData({ ...pastorFormData, name: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Cargo / Título Pastoral *
-                </label>
-                <select
-                  value={pastorFormData.title}
-                  onChange={(e) => setPastorFormData({ ...pastorFormData, title: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
-                >
-                  <option value="Pastor Titular">Pastor Titular (Presidente)</option>
-                  <option value="Pastor Auxiliar">Pastor Auxiliar</option>
-                  <option value="Pastor de Jovens">Pastor de Jovens</option>
-                  <option value="Pastor de Ensino">Pastor de Ensino & Teologia</option>
-                  <option value="Pastor de Famílias">Pastor de Famílias / Casais</option>
-                  <option value="Pastora">Pastora</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  E-mail de Login *
-                </label>
-                <input
-                  required
-                  type="email"
-                  placeholder="pastor@igreja.com"
-                  value={pastorFormData.email}
-                  onChange={(e) => setPastorFormData({ ...pastorFormData, email: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Senha de Acesso *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleGenerateSecurePassword}
-                    className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
-                  >
-                    Gerar Senha Segura
-                  </button>
-                </div>
-                <div className="relative">
-                  <input
-                    required
-                    type={showPastorPassword ? "text" : "password"}
-                    placeholder="Mínimo 6 caracteres"
-                    value={pastorFormData.password}
-                    onChange={(e) => setPastorFormData({ ...pastorFormData, password: e.target.value })}
-                    className="w-full pl-4 pr-10 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPastorPassword((prev) => !prev)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    {showPastorPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Telefone / WhatsApp (Opcional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="(11) 98765-4321"
-                  value={pastorFormData.phone}
-                  onChange={(e) => setPastorFormData({ ...pastorFormData, phone: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsPastorModalOpen(false)}
-                  className="flex-1 py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingPastor}
-                  className="flex-1 py-3 px-4 rounded-xl bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
-                >
-                  {savingPastor ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar Conta Pastoral"}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
-
-      {/* MODAL: SUCESSO CREDENCIAIS DO PASTOR */}
-      {pastorSuccessInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white dark:bg-slate-900 rounded-[2.8rem] w-full max-w-md p-8 md:p-10 shadow-2xl relative text-center border border-slate-100 dark:border-slate-800"
-          >
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="w-8 h-8" />
-            </div>
-
-            <h3 className="text-2xl font-display font-black text-slate-800 dark:text-slate-100 mb-1">
-              Conta Pastoral Criada!
-            </h3>
-            <p className="text-xs text-slate-500 mb-6">
-              Envie as credenciais abaixo para o pastor realizar o primeiro login em <strong>/login</strong>.
-            </p>
-
-            <div className="bg-slate-50 dark:bg-slate-800 p-5 rounded-2xl text-left space-y-3 mb-6 border border-slate-200/80 dark:border-slate-700/80">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Nome</span>
-                <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{pastorSuccessInfo.name} ({pastorSuccessInfo.title})</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">E-mail</span>
-                <span className="font-mono text-sm text-blue-700 dark:text-blue-400 font-bold">{pastorSuccessInfo.email}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Senha</span>
-                <span className="font-mono text-sm text-slate-800 dark:text-slate-200 font-bold bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 inline-block">
-                  {pastorSuccessInfo.password}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  const text = `Olá ${pastorSuccessInfo.name},\nSeu acesso pastoral foi liberado na plataforma Applaine!\n\nIgreja: ${church.name}\nE-mail: ${pastorSuccessInfo.email}\nSenha: ${pastorSuccessInfo.password}\n\nAcesse: ${window.location.origin}/login`;
-                  navigator.clipboard.writeText(text);
-                  setCopiedPastorCredentials(true);
-                  setTimeout(() => setCopiedPastorCredentials(false), 2500);
-                }}
-                className={cn(
-                  "flex-1 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all",
-                  copiedPastorCredentials ? "bg-emerald-600 text-white" : "bg-blue-800 text-white hover:bg-blue-900"
-                )}
-              >
-                {copiedPastorCredentials ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                {copiedPastorCredentials ? "Copiado!" : "Copiar Credenciais"}
-              </button>
-              <button
-                onClick={() => setPastorSuccessInfo(null)}
-                className="py-3 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
-              >
-                Fechar
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
 
       {/* MODAL: CRIAR NOVO MINISTÉRIO */}
       {isNewMinistryModalOpen && (

@@ -151,7 +151,7 @@ export function BirthdayCarousel({
               className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
                 filterTab === "today"
                   ? "bg-pink-600 text-white shadow-xs font-black"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
               }`}
             >
               <span>Hoje</span>
@@ -164,7 +164,7 @@ export function BirthdayCarousel({
               className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 filterTab === "week"
                   ? "bg-pink-600 text-white shadow-xs font-black"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
               }`}
             >
               Esta Semana ({countWeek})
@@ -174,7 +174,7 @@ export function BirthdayCarousel({
               className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 filterTab === "month"
                   ? "bg-pink-600 text-white shadow-xs font-black"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
               }`}
             >
               Mês Completo ({birthdays.length})

@@ -213,6 +213,7 @@
         "tags": { "type": "array", "items": { "type": "string" } },
         "observations": { "type": "string" },
         "ownerId": { "type": "string", "description": "UID do usuário que cadastrou" },
+        "churchId": { "type": "string", "description": "ID da igreja/congregação associada à música" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "title", "artist", "key", "link", "ownerId"]

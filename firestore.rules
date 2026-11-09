@@ -2,8 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Identity helpers ---
-
     function isSignedIn() {
       return request.auth != null;
     }
@@ -37,6 +35,14 @@ service cloud.firestore {
       return myData().get('churchId', '');
     }
 
+    function hasChurch() {
+      return isSignedIn() && myChurch() != '';
+    }
+
+    function inChurch(churchId) {
+      return hasChurch() && churchId is string && churchId != '' && myChurch() == churchId;
+    }
+
     function myRoles() {
       return myData().get('roles', {});
     }
@@ -50,7 +56,6 @@ service cloud.firestore {
       );
     }
 
-    // Privileged role names. Anything listed here cannot be self-assigned.
     function leaderRoles() {
       return ['leader', 'main_minister', 'mainMinister', 'multimedia_leader', 'dance_leader'];
     }
@@ -66,10 +71,6 @@ service cloud.firestore {
         myRoles().get('tesouraria', []).hasAny(leaderRoles()) ||
         myRoles().get('treasury', []).hasAny(leaderRoles())
       );
-    }
-
-    function inChurch(churchId) {
-      return isSignedIn() && churchId is string && churchId != '' && myChurch() == churchId;
     }
 
     function leadsChurch(churchId) {
@@ -158,16 +159,14 @@ service cloud.firestore {
              data.read is bool;
     }
 
-    // --- Collections ---
-
     match /churches/{churchId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() || inChurch(churchId);
       allow create: if isSuperAdmin();
       allow update: if leadsChurch(churchId);
       allow delete: if isSuperAdmin();
 
       match /departments/{departmentId} {
-        allow read: if isSignedIn() && (isSuperAdmin() || inChurch(churchId));
+        allow read: if isSuperAdmin() || inChurch(churchId);
         allow write: if leadsChurch(churchId);
 
         match /members/{memberUid} {
@@ -179,13 +178,10 @@ service cloud.firestore {
                    (!('joinedAt' in data) || data.joinedAt is string || data.joinedAt is timestamp);
           }
 
-          allow read: if isSignedIn() && (
-            isSuperAdmin() ||
-            memberUid == request.auth.uid ||
-            inChurch(churchId)
-          );
+          allow read: if isSuperAdmin() ||
+                         memberUid == request.auth.uid ||
+                         inChurch(churchId);
 
-          // Self-enrolment is allowed, but never with a leadership role.
           allow create: if isValidMember(incoming()) &&
                         incoming().userId == memberUid && (
                           leadsChurch(churchId) ||
@@ -198,6 +194,7 @@ service cloud.firestore {
                         incoming().userId == existing().userId && (
                           leadsChurch(churchId) ||
                           (isOwner(memberUid) &&
+                           inChurch(churchId) &&
                            !incoming().roles.hasAny(leaderRoles()) &&
                            !existing().roles.hasAny(leaderRoles()))
                         );
@@ -207,15 +204,17 @@ service cloud.firestore {
       }
 
       match /financial_records/{recordId} {
-        allow read: if isSignedIn() && (isSuperAdmin() || leadsChurch(churchId));
-        allow create: if isSignedIn() && (isSuperAdmin() || leadsChurch(churchId));
-        allow update: if isSignedIn() && (isSuperAdmin() || leadsChurch(churchId));
-        allow delete: if isSignedIn() && (isSuperAdmin() || leadsChurch(churchId));
+        allow read: if isSuperAdmin() || leadsChurch(churchId);
+        allow create: if isSuperAdmin() || leadsChurch(churchId);
+        allow update: if isSuperAdmin() || leadsChurch(churchId);
+        allow delete: if isSuperAdmin() || leadsChurch(churchId);
       }
     }
 
     match /users/{userId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() ||
+                     isOwner(userId) ||
+                     (hasChurch() && existing().get('churchId', '') == myChurch());
 
       allow create: if isValidUser(incoming()) && (
         isSuperAdmin() ||
@@ -227,24 +226,20 @@ service cloud.firestore {
          !grantsLeadership(incoming().get('roles', {})))
       );
 
-      // A leader may only act on members already in their church, or on
-      // unlinked users they are pulling into it.
       allow update: if isValidUser(incoming()) && (
         isSuperAdmin() ||
         (isLeader() &&
          (existing().get('churchId', '') == myChurch() || existing().get('churchId', '') == '') &&
          (incoming().get('churchId', '') == myChurch() || incoming().get('churchId', '') == '')) ||
         (isOwner(userId) && (
-          // Action 1: Owner updating notification push tokens or settings
           incoming().diff(existing()).affectedKeys().hasOnly(['fcmTokens', 'notificationSettings', 'updatedAt']) ||
-          // Action 2: Owner updating standard personal profile attributes (cannot self-elevate role or church)
           incoming().diff(existing()).affectedKeys().hasOnly([
             'fcmTokens', 'notificationSettings', 'name', 'phone', 'dataNascimento', 'instruments',
             'vocalRange', 'danceStyles', 'danceGroups', 'level', 'photoURL', 'updatedAt', 'uid',
             'emailVerified', 'email_verified', 'emailVerifiedAt'
           ]) ||
-          // Action 3: Initial account setup without privileged roles
           (
+            existing().get('churchId', '') == '' &&
             !grantsLeadership(incoming().get('roles', {})) &&
             incoming().get('role', '') != 'líder' &&
             incoming().get('role', '') != 'super_admin'
@@ -256,11 +251,16 @@ service cloud.firestore {
                     (isLeader() && inChurch(existing().get('churchId', '')));
     }
 
+    // 3. Repertório Musical: Isolamento por congregação ou criador
     match /songs/{songId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() ||
+                     (isSignedIn() && existing().ownerId == request.auth.uid) ||
+                     (hasChurch() && (existing().get('churchId', '') == myChurch() || existing().get('churchId', '') == ''));
 
       allow create: if isSignedIn() && isValidId(songId) && isValidSong(incoming()) &&
                     incoming().id == songId &&
+                    incoming().ownerId == request.auth.uid &&
+                    (isSuperAdmin() || inChurch(incoming().get('churchId', ''))) &&
                     incoming().createdAt == request.time &&
                     incoming().updatedAt == request.time;
 
@@ -269,14 +269,16 @@ service cloud.firestore {
                     incoming().ownerId == existing().ownerId &&
                     incoming().id == existing().id &&
                     incoming().createdAt == existing().createdAt &&
-                    incoming().updatedAt == request.time;
+                    incoming().updatedAt == request.time &&
+                    incoming().get('churchId', '') == existing().get('churchId', '');
 
       allow delete: if isSignedIn() && (existing().ownerId == request.auth.uid || isSuperAdmin());
     }
 
-    // Scale-config documents are read anonymously by the public registration form.
+    // 4. Cultos
     match /services/{serviceId} {
-      allow read: if isSignedIn() ||
+      allow read: if isSuperAdmin() ||
+                     inChurch(existing().get('churchId', '')) ||
                      serviceId.matches('^(worship|multimedia)_scale_config_.+');
       allow create: if leadsChurch(incoming().get('churchId', ''));
       allow update: if leadsChurch(existing().get('churchId', '')) &&
@@ -284,16 +286,18 @@ service cloud.firestore {
       allow delete: if leadsChurch(existing().get('churchId', ''));
     }
 
+    // 5. Bandas
     match /bands/{bandId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() || inChurch(existing().get('churchId', ''));
       allow create: if leadsChurch(incoming().get('churchId', ''));
       allow update: if leadsChurch(existing().get('churchId', '')) &&
                     incoming().get('churchId', '') == existing().get('churchId', '');
       allow delete: if leadsChurch(existing().get('churchId', ''));
     }
 
+    // 6. Dança: Grupos, Coreografias, Ensaios
     match /dance_groups/{groupId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() || inChurch(existing().get('churchId', ''));
       allow create: if leadsChurch(incoming().get('churchId', ''));
       allow update: if leadsChurch(existing().get('churchId', '')) &&
                     incoming().get('churchId', '') == existing().get('churchId', '');
@@ -301,21 +305,24 @@ service cloud.firestore {
     }
 
     match /choreographies/{choreographyId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() || inChurch(existing().get('churchId', ''));
       allow create: if isSignedIn() && (leadsChurch(incoming().get('churchId', '')) || inChurch(incoming().get('churchId', '')));
-      allow update: if isSignedIn() && (leadsChurch(existing().get('churchId', '')) || inChurch(existing().get('churchId', '')));
-      allow delete: if isSignedIn() && (leadsChurch(existing().get('churchId', '')) || inChurch(existing().get('churchId', '')));
+      allow update: if isSignedIn() && (leadsChurch(existing().get('churchId', '')) || inChurch(existing().get('churchId', ''))) &&
+                    incoming().get('churchId', '') == existing().get('churchId', '');
+      allow delete: if isSignedIn() && leadsChurch(existing().get('churchId', ''));
     }
 
     match /dance_rehearsals/{rehearsalId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() || inChurch(existing().get('churchId', ''));
       allow create: if isSignedIn() && (leadsChurch(incoming().get('churchId', '')) || inChurch(incoming().get('churchId', '')));
-      allow update: if isSignedIn() && (leadsChurch(existing().get('churchId', '')) || inChurch(existing().get('churchId', '')));
-      allow delete: if isSignedIn() && (leadsChurch(existing().get('churchId', '')) || inChurch(existing().get('churchId', '')));
+      allow update: if isSignedIn() && (leadsChurch(existing().get('churchId', '')) || inChurch(existing().get('churchId', ''))) &&
+                    incoming().get('churchId', '') == existing().get('churchId', '');
+      allow delete: if isSignedIn() && leadsChurch(existing().get('churchId', ''));
     }
 
+    // 7. Visitantes: Isolamento Estrito
     match /visitors/{visitorId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() || inChurch(existing().get('churchId', ''));
       allow create: if isValidId(visitorId) &&
                     incoming().id == visitorId &&
                     (isSuperAdmin() || inChurch(incoming().get('churchId', '')));
@@ -326,8 +333,9 @@ service cloud.firestore {
       allow delete: if leadsChurch(existing().get('churchId', ''));
     }
 
+    // 8. Atendimentos Pastorais
     match /appointments/{appointmentId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() || inChurch(existing().get('churchId', ''));
       allow create: if isValidId(appointmentId) &&
                     incoming().id == appointmentId &&
                     (isSuperAdmin() || inChurch(incoming().get('churchId', '')));
@@ -338,8 +346,9 @@ service cloud.firestore {
       allow delete: if leadsChurch(existing().get('churchId', ''));
     }
 
+    // 9. Eventos / Agenda
     match /events/{eventId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() || inChurch(existing().get('churchId', ''));
       allow create: if isValidId(eventId) &&
                     incoming().id == eventId &&
                     (isSuperAdmin() || inChurch(incoming().get('churchId', '')));
@@ -350,19 +359,21 @@ service cloud.firestore {
       allow delete: if isSuperAdmin() || leadsChurch(existing().get('churchId', ''));
     }
 
+    // 10. Escalas
     match /schedules/{scheduleId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() || inChurch(existing().get('churchId', ''));
       allow create: if isValidId(scheduleId) && isValidSchedule(incoming()) &&
                     incoming().id == scheduleId &&
                     (isSuperAdmin() || inChurch(incoming().churchId) || leadsChurch(incoming().churchId));
       allow update: if isValidId(scheduleId) && isValidSchedule(incoming()) &&
                     incoming().churchId == existing().churchId &&
-                    (isSuperAdmin() || inChurch(existing().churchId) || leadsChurch(existing().churchId) || existing().members.hasAny([request.auth.uid]));
+                    (isSuperAdmin() || inChurch(existing().churchId) || leadsChurch(existing().churchId) || (existing().members.hasAny([request.auth.uid]) && inChurch(existing().churchId)));
       allow delete: if leadsChurch(existing().get('churchId', '')) || isSuperAdmin();
     }
 
+    // 11. Playlists
     match /playlists/{playlistId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() || inChurch(existing().get('churchId', ''));
       allow create: if isValidId(playlistId) && isValidPlaylist(incoming()) &&
                     incoming().id == playlistId &&
                     (isSuperAdmin() || inChurch(incoming().churchId) || leadsChurch(incoming().churchId));
@@ -372,6 +383,7 @@ service cloud.firestore {
       allow delete: if leadsChurch(existing().get('churchId', '')) || isSuperAdmin();
     }
 
+    // 12. Tokens FCM e códigos
     match /fcm_tokens/{tokenId} {
       allow read, write: if isSignedIn() && (tokenId == request.auth.uid || isSuperAdmin());
     }
@@ -381,10 +393,10 @@ service cloud.firestore {
     }
 
     match /password_resets/{userId} {
-      // Password resets must only be accessed and modified via secure server-side API routes
       allow read, write: if false;
     }
 
+    // 13. Disponibilidade
     match /availability/{availId} {
       function isValidAvailability(data) {
         return data.keys().hasAll(['id', 'userId', 'churchId', 'month', 'year', 'days']) &&
@@ -396,23 +408,25 @@ service cloud.firestore {
                data.days is list && data.days.size() <= 40;
       }
 
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() ||
+                     (isSignedIn() && ('userId' in existing()) && existing().userId == request.auth.uid) ||
+                     inChurch(existing().get('churchId', ''));
 
-      // The document id is namespaced by uid, so a member can only write their own.
       allow write: if isSignedIn() && (
         isSuperAdmin() ||
         (isValidAvailability(incoming()) &&
          availId == incoming().id &&
          incoming().userId == request.auth.uid &&
-         availId.split('_')[0] == request.auth.uid)
+         inChurch(incoming().churchId))
       );
 
       allow delete: if isSignedIn() && (
         isSuperAdmin() ||
-        availId.split('_')[0] == request.auth.uid
+        (('userId' in existing()) && existing().userId == request.auth.uid)
       );
     }
 
+    // 14. Transmissões (Broadcasts)
     match /broadcasts/{broadcastId} {
       function isValidBroadcast(data) {
         return data.keys().hasAll(['id', 'churchId', 'senderId', 'title', 'body', 'status', 'createdAt']) &&
@@ -424,27 +438,24 @@ service cloud.firestore {
                data.status in ['sent', 'cancelled'];
       }
 
-      allow read: if isSignedIn() && (
-        isSuperAdmin() ||
-        existing().senderId == request.auth.uid ||
-        leadsChurch(existing().churchId) ||
-        inChurch(existing().churchId)
-      );
+      allow read: if isSuperAdmin() ||
+                     (isSignedIn() && ('senderId' in existing()) && existing().senderId == request.auth.uid) ||
+                     inChurch(existing().get('churchId', ''));
 
       allow create: if isSignedIn() && isValidBroadcast(incoming()) &&
                     incoming().id == broadcastId &&
                     incoming().senderId == request.auth.uid &&
-                    (isSuperAdmin() || leadsChurch(incoming().churchId) || inChurch(incoming().churchId));
+                    inChurch(incoming().churchId);
 
       allow update: if isSignedIn() && isValidBroadcast(incoming()) &&
                     incoming().id == existing().id &&
                     incoming().churchId == existing().churchId &&
                     incoming().senderId == existing().senderId &&
-                    (isSuperAdmin() || existing().senderId == request.auth.uid || leadsChurch(existing().churchId));
+                    (isSuperAdmin() || (existing().senderId == request.auth.uid && inChurch(existing().churchId)) || leadsChurch(existing().churchId));
 
       allow delete: if isSignedIn() && (
         isSuperAdmin() ||
-        existing().senderId == request.auth.uid ||
+        (existing().senderId == request.auth.uid && inChurch(existing().churchId)) ||
         leadsChurch(existing().churchId)
       );
 
@@ -454,6 +465,7 @@ service cloud.firestore {
       }
     }
 
+    // 15. Feed de Comunicados
     match /announcements/{announcementId} {
       function isValidAnnouncement(data) {
         return data.keys().hasAll(['id', 'churchId', 'authorId', 'title', 'content', 'createdAt']) &&
@@ -471,34 +483,35 @@ service cloud.firestore {
                (!('tags' in data) || data.tags is list);
       }
 
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin() || inChurch(existing().get('churchId', ''));
 
       allow create: if isSignedIn() &&
                     isValidAnnouncement(incoming()) &&
                     incoming().id == announcementId &&
-                    (incoming().authorId == request.auth.uid || isSuperAdmin()) &&
-                    (isSuperAdmin() || leadsChurch(incoming().churchId) || isLeader() || inChurch(incoming().churchId));
+                    inChurch(incoming().churchId) &&
+                    (incoming().authorId == request.auth.uid || isSuperAdmin());
 
       allow update: if isSignedIn() &&
                     isValidAnnouncement(incoming()) &&
                     incoming().id == existing().id &&
                     incoming().churchId == existing().churchId &&
-                    (isSuperAdmin() || existing().authorId == request.auth.uid || leadsChurch(existing().churchId) || isLeader());
+                    inChurch(existing().churchId) &&
+                    (isSuperAdmin() || existing().authorId == request.auth.uid || leadsChurch(existing().churchId));
 
       allow delete: if isSignedIn() && (
         isSuperAdmin() ||
-        existing().authorId == request.auth.uid ||
-        leadsChurch(existing().churchId) ||
-        isLeader()
+        (existing().authorId == request.auth.uid && inChurch(existing().churchId)) ||
+        leadsChurch(existing().churchId)
       );
     }
 
+    // 16. Notificações
     match /notifications/{notificationId} {
       allow read: if isSignedIn() && (
         isSuperAdmin() ||
-        existing().userId == request.auth.uid ||
-        existing().get('senderId', '') == request.auth.uid ||
-        leadsChurch(existing().get('churchId', ''))
+        (('userId' in existing()) && existing().userId == request.auth.uid) ||
+        (('senderId' in existing()) && existing().senderId == request.auth.uid) ||
+        (('churchId' in existing()) && existing().churchId != '' && leadsChurch(existing().churchId))
       );
 
       allow create: if isSignedIn() &&
@@ -515,12 +528,13 @@ service cloud.firestore {
 
       allow delete: if isSignedIn() && (
         isSuperAdmin() ||
-        existing().userId == request.auth.uid ||
-        existing().get('senderId', '') == request.auth.uid ||
-        leadsChurch(existing().get('churchId', ''))
+        (('userId' in existing()) && existing().userId == request.auth.uid) ||
+        (('senderId' in existing()) && existing().senderId == request.auth.uid) ||
+        (('churchId' in existing()) && existing().churchId != '' && leadsChurch(existing().churchId))
       );
     }
 
+    // 17. Logs de Auditoria
     match /audit_logs/{auditId} {
       function isValidAuditLog(data) {
         return data.keys().hasAll(['id', 'actor_user_id', 'action', 'entity_type', 'entity_id', 'church_id', 'created_at']) &&
@@ -532,25 +546,24 @@ service cloud.firestore {
                data.church_id is string;
       }
 
-      allow read: if isSignedIn() && (
-        isSuperAdmin() ||
-        leadsChurch(existing().church_id) ||
-        (inChurch(existing().church_id) && isLeader())
-      );
+      allow read: if isSuperAdmin() ||
+                     (('church_id' in existing()) && inChurch(existing().church_id) && isLeader());
 
       allow create: if isSignedIn() &&
                     isValidAuditLog(incoming()) &&
                     incoming().id == auditId &&
-                    (incoming().actor_user_id == request.auth.uid || isSuperAdmin() || isLeader());
+                    (isSuperAdmin() || (inChurch(incoming().church_id) && (incoming().actor_user_id == request.auth.uid || isLeader())));
 
-      allow update, delete: false;
+      allow update, delete: if false;
     }
 
+    // 18. Configurações Globais
     match /system_settings/{settingId} {
-      allow read: if isSignedIn();
+      allow read: if isSuperAdmin();
       allow write: if isSuperAdmin();
     }
 
+    // 19. Mensagens de Contato
     match /contact_messages/{messageId} {
       function isValidContactMessage(data) {
         return data.keys().hasAll(['id', 'name', 'email', 'subject', 'message', 'status']) &&

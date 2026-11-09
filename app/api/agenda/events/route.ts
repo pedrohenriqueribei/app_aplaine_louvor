@@ -6,33 +6,45 @@ import {
   deleteEventFromStore,
   EventRecord,
 } from '@/lib/eventsStore';
+import {
+  requireTenantAuth,
+  validateTenantAccess,
+  enforceTenantPayload,
+  TenantAuthError,
+} from '@/lib/tenant-guard';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/agenda/events?churchId=...
- * Returns all agenda events for the specified church or all churches.
+ * Retorna os eventos da congregação do usuário autenticado.
+ * Aplica ISOLAMENTO ESTRITO: Rejeita usuários órfãos e bloqueia acessos cross-tenant.
  */
 export async function GET(req: NextRequest) {
   try {
+    const tenant = await requireTenantAuth(req);
     const { searchParams } = new URL(req.url);
-    const churchId = searchParams.get('churchId');
+    const requestedChurchId = searchParams.get('churchId');
+
+    // Validação de isolamento: usuário não pode acessar congregação diferente da sua
+    validateTenantAccess(requestedChurchId, tenant);
+
+    const activeChurchId = tenant.isSuperAdmin && requestedChurchId
+      ? requestedChurchId
+      : tenant.churchId;
 
     let items: EventRecord[] = [];
 
-    // 1. Tentar ler do Firestore via adminDb
+    // 1. Ler estritamente filtrado por churchId no Firestore adminDb
     try {
-      let q: FirebaseFirestore.Query = adminDb.collection('events');
-      if (churchId && churchId.trim() !== '') {
-        q = q.where('churchId', '==', churchId);
-      }
+      const q = adminDb.collection('events').where('churchId', '==', activeChurchId);
       const snap = await q.get();
       if (!snap.empty) {
         items = snap.docs.map((docSnap) => {
           const d = docSnap.data();
           return {
             id: docSnap.id,
-            churchId: d.churchId || churchId || '',
+            churchId: d.churchId || activeChurchId,
             title: d.title || 'Evento',
             date: d.date || '',
             time: d.time || '',
@@ -48,15 +60,13 @@ export async function GET(req: NextRequest) {
         });
       }
     } catch (dbErr: any) {
-      console.warn('[Agenda Events API] adminDb query notice (using fallback store):', dbErr?.message || dbErr);
+      console.warn('[Agenda Events API] adminDb query notice (using isolated fallback):', dbErr?.message || dbErr);
     }
 
-    // 2. Se o Firestore adminDb não retornou registros ou falhou, usar o store resiliente
+    // 2. Se vazio, usar store em memória estritamente filtrado pelo tenant
     if (items.length === 0) {
       const allStore = getEventsStore();
-      items = churchId && churchId.trim() !== ''
-        ? allStore.filter((e) => !e.churchId || e.churchId === churchId || e.churchId === '')
-        : allStore;
+      items = allStore.filter((e) => e.churchId === activeChurchId);
     }
 
     // Ordenar cronologicamente por data e horário
@@ -66,21 +76,28 @@ export async function GET(req: NextRequest) {
       return (a.time || '').localeCompare(b.time || '');
     });
 
-    return NextResponse.json({ events: items });
+    return NextResponse.json({ events: items, tenantChurchId: activeChurchId });
   } catch (error: any) {
+    if (error instanceof TenantAuthError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.status }
+      );
+    }
     console.error('[Agenda Events API] Unexpected error in GET:', error);
-    return NextResponse.json({ events: getEventsStore() });
+    return NextResponse.json({ error: 'Erro ao consultar eventos da igreja.' }, { status: 500 });
   }
 }
 
 /**
  * POST /api/agenda/events
- * Creates a new agenda event
+ * Criação de evento com tenant garantido pela sessão autenticada.
  */
 export async function POST(req: NextRequest) {
   try {
+    const tenant = await requireTenantAuth(req);
     const body = await req.json();
-    const { title, date, churchId } = body;
+    const { title, date } = body;
 
     if (!title || !date) {
       return NextResponse.json(
@@ -89,11 +106,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Bloqueio Cross-Tenant: impede criar evento forjando outra igreja no payload
+    validateTenantAccess(body.churchId, tenant);
+
+    const safePayload = enforceTenantPayload(body, tenant);
     const eventId = body.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
     const eventRecord: EventRecord = {
       id: eventId,
-      churchId: churchId || '',
+      churchId: safePayload.churchId,
       title: title.trim(),
       date,
       time: body.time || '',
@@ -101,8 +122,8 @@ export async function POST(req: NextRequest) {
       category: body.category || 'outro',
       location: body.location || '',
       description: body.description || '',
-      createdBy: body.createdBy || '',
-      createdByName: body.createdByName || '',
+      createdBy: tenant.uid,
+      createdByName: tenant.name || body.createdByName || '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -123,6 +144,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, event: eventRecord });
   } catch (error: any) {
+    if (error instanceof TenantAuthError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.status }
+      );
+    }
     console.error('[Agenda Events API] Error creating event:', error);
     return NextResponse.json({ error: error.message || 'Erro ao criar evento' }, { status: 500 });
   }
@@ -130,10 +157,11 @@ export async function POST(req: NextRequest) {
 
 /**
  * PUT /api/agenda/events
- * Updates an existing agenda event
+ * Atualiza um evento garantindo isolamento da igreja dona do registro.
  */
 export async function PUT(req: NextRequest) {
   try {
+    const tenant = await requireTenantAuth(req);
     const body = await req.json();
     const { id, title, date } = body;
 
@@ -144,9 +172,29 @@ export async function PUT(req: NextRequest) {
       );
     }
 
+    // Verificar se o evento pertence à igreja do usuário
+    try {
+      const existingSnap = await adminDb.collection('events').doc(id).get();
+      if (existingSnap.exists) {
+        const existingData = existingSnap.data();
+        if (existingData?.churchId && !tenant.isSuperAdmin && existingData.churchId !== tenant.churchId) {
+          throw new TenantAuthError(
+            403,
+            'CROSS_TENANT_VIOLATION',
+            'Tentativa de atualizar evento pertencente a outra congregação foi bloqueada.'
+          );
+        }
+      }
+    } catch (checkErr: any) {
+      if (checkErr instanceof TenantAuthError) throw checkErr;
+    }
+
+    validateTenantAccess(body.churchId, tenant);
+    const safePayload = enforceTenantPayload(body, tenant);
+
     const eventRecord: EventRecord = {
       id,
-      churchId: body.churchId || '',
+      churchId: safePayload.churchId,
       title: title.trim(),
       date,
       time: body.time || '',
@@ -154,8 +202,8 @@ export async function PUT(req: NextRequest) {
       category: body.category || 'outro',
       location: body.location || '',
       description: body.description || '',
-      createdBy: body.createdBy || '',
-      createdByName: body.createdByName || '',
+      createdBy: body.createdBy || tenant.uid,
+      createdByName: body.createdByName || tenant.name || '',
       createdAt: body.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -175,6 +223,12 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({ success: true, event: eventRecord });
   } catch (error: any) {
+    if (error instanceof TenantAuthError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.status }
+      );
+    }
     console.error('[Agenda Events API] Error updating event:', error);
     return NextResponse.json({ error: error.message || 'Erro ao atualizar evento' }, { status: 500 });
   }
@@ -182,15 +236,33 @@ export async function PUT(req: NextRequest) {
 
 /**
  * DELETE /api/agenda/events?id=...
- * Deletes an event
+ * Exclui um evento garantindo isolamento da congregação.
  */
 export async function DELETE(req: NextRequest) {
   try {
+    const tenant = await requireTenantAuth(req);
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 
     if (!id) {
       return NextResponse.json({ error: 'ID do evento é obrigatório' }, { status: 400 });
+    }
+
+    // Verificar posse do registro por tenancy
+    try {
+      const existingSnap = await adminDb.collection('events').doc(id).get();
+      if (existingSnap.exists) {
+        const existingData = existingSnap.data();
+        if (existingData?.churchId && !tenant.isSuperAdmin && existingData.churchId !== tenant.churchId) {
+          throw new TenantAuthError(
+            403,
+            'CROSS_TENANT_VIOLATION',
+            'Tentativa de excluir evento pertencente a outra congregação foi bloqueada.'
+          );
+        }
+      }
+    } catch (checkErr: any) {
+      if (checkErr instanceof TenantAuthError) throw checkErr;
     }
 
     // 1. Excluir no Firestore via adminDb
@@ -205,6 +277,12 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true, id });
   } catch (error: any) {
+    if (error instanceof TenantAuthError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.status }
+      );
+    }
     console.error('[Agenda Events API] Error deleting event:', error);
     return NextResponse.json({ error: error.message || 'Erro ao excluir evento' }, { status: 500 });
   }

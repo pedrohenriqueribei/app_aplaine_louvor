@@ -510,9 +510,38 @@ export function DashboardShell({
           churchName={resolvedChurchName}
         />
 
-        <div key="dashboard-page-content" className="w-full">
-          {children}
-        </div>
+        {!isSuperAdmin && !userData?.churchId ? (
+          <div className="my-8 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-3xl p-8 sm:p-10 text-center max-w-2xl mx-auto space-y-4 shadow-sm">
+            <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 rounded-2xl flex items-center justify-center mx-auto">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="space-y-1">
+              <span className="px-3 py-1 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 rounded-full text-[10px] font-black uppercase tracking-wider">
+                Isolamento Multi-tenant Ativo
+              </span>
+              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                Conta Sem Vínculo Congregacional
+              </h3>
+              <p className="text-sm text-slate-600 dark:text-slate-300 max-w-md mx-auto leading-relaxed">
+                Em respeito à política de <strong>Sem Acesso Global/Órfão</strong>, você só terá acesso às escalas, repertórios e integrantes após ter sua congregação associada ao seu perfil.
+              </p>
+            </div>
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link
+                href="/fale-conosco"
+                className="w-full sm:w-auto px-5 py-2.5 bg-blue-800 hover:bg-blue-900 text-white rounded-xl text-xs font-bold transition-all"
+              >
+                Solicitar Associação Pastoral
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div key="dashboard-page-content" className="w-full">
+            {children}
+          </div>
+        )}
       </main>
 
       <QuickSearchModal
